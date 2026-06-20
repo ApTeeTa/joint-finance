@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: освобождение резерва при удалении</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; max-width: 900px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #334155; margin: 0.25rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Освобождение резерва при удалении обязательств</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      calculateTotalBalance,
+      calculateFreeBalance,
+      calculateReservedBalance
+    } from '../src/modules/financeEngine.js';
+    import {
+      recordObligationPayment,
+      todayIso
+    } from '../src/modules/transactions.js';
+    import { saveState, loadState, clearState } from '../src/modules/storage.js';
+
+    const out = document.getElementById('out');
+    const STORAGE_KEY = 'joint-finance-state-v2';
+
+    function log(line, cls = 'info') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(condition, message) {
+      if (!condition) throw new Error(message);
+    }
+
+    function addDays(iso, days) {
+      const [y, m, d] = iso.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      date.setDate(date.getDate() + days);
+      const yy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    function createState(freeMoney = 100000) {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        activeTab: 'obligations',
+        accounts: [{
+          id: 'acc-rub',
+          name: 'Основной',
+          owner: 'husband',
+          currency: 'RUB',
+          balance: freeMoney
+        }],
+        categories: [],
+        transactions: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+    }
+
+    function createObligation(state, name, accountId = 'acc-rub') {
+      const obligation = {
+        id: crypto.randomUUID(),
+        name,
+        accountId,
+        categoryId: null,
+        reserveAmount: 0,
+        targetAmount: null,
+        paidUntil: addDays(todayIso(), 60),
+        comment: '',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      };
+      state.obligations.push(obligation);
+      return obligation;
+    }
+
+    function reserve(state, obligationId, amount) {
+      const obligation = state.obligations.find((o) => o.id === obligationId);
+      const value = Number(amount);
+      const free = calculateFreeBalance(state);
+      if (value > free) throw new Error(`резерв ${value} > free ${free}`);
+      obligation.reserveAmount = (obligation.reserveAmount ?? 0) + value;
+    }
+
+    function deleteObligation(state, obligationId) {
+      state.obligations = state.obligations.filter((o) => o.id !== obligationId);
+    }
+
+    function snapshotMoney(state) {
+      return {
+        free: calculateFreeBalance(state),
+        reserved: calculateReservedBalance(state),
+        total: calculateTotalBalance(state),
+        account: state.accounts[0].balance,
+        obligations: (state.obligations ?? []).map((o) => ({
+          name: o.name,
+          reserve: o.reserveAmount ?? 0
+        }))
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('ТЕСТ 1. Полное освобождение резерва', () => {
+      const state = createState(100000);
+      const before = snapshotMoney(state);
+      log(`  free до: ${before.free}, reserved: ${before.reserved}`);
+
+      assert(before.free === 100000, `ожидали free 100000, got ${before.free}`);
+
+      const o = createObligation(state, 'Интернет');
+      reserve(state, o.id, 10000);
+
+      const afterReserve = snapshotMoney(state);
+      log(`  после резерва 10000: free=${afterReserve.free}, reserved=${afterReserve.reserved}`);
+      assert(afterReserve.free === 90000, `free должно быть 90000, got ${afterReserve.free}`);
+      assert(afterReserve.reserved === 10000, `reserved должно быть 10000`);
+
+      deleteObligation(state, o.id);
+
+      const afterDelete = snapshotMoney(state);
+      log(`  после удаления: free=${afterDelete.free}, reserved=${afterDelete.reserved}, obligations=${afterDelete.obligations.length}`);
+      assert(afterDelete.free === 100000, `free должно вернуться к 100000, got ${afterDelete.free}`);
+      assert(afterDelete.reserved === 0, 'резерв должен исчезнуть');
+      assert(state.obligations.length === 0, 'обязательство удалено');
+    });
+
+    await run('ТЕСТ 2. После частичной оплаты возвращается только остаток резерва', () => {
+      const state = createState(100000);
+      const accountBefore = state.accounts[0].balance;
+
+      const o = createObligation(state, 'Квартплата');
+      reserve(state, o.id, 10000);
+
+      const pay = recordObligationPayment(
+        state,
+        o.id,
+        4000,
+        'acc-rub',
+        addDays(todayIso(), 90),
+        '',
+        todayIso(),
+        'husband'
+      );
+      assert(pay.ok, pay.error);
+
+      const afterPay = snapshotMoney(state);
+      log(`  после оплаты 4000: free=${afterPay.free}, reserve=${o.reserveAmount}, account=${afterPay.account}`);
+      assert(o.reserveAmount === 6000, `резерв должен быть 6000, got ${o.reserveAmount}`);
+      assert(afterPay.free === 90000, `free=${afterPay.free}`);
+      assert(afterPay.account === accountBefore - 4000, 'счёт -4000');
+
+      deleteObligation(state, o.id);
+
+      const afterDelete = snapshotMoney(state);
+      log(`  после удаления: free=${afterDelete.free}, account=${afterDelete.account}`);
+      assert(afterDelete.free === 96000, `free должно быть 96000 (90000+6000), got ${afterDelete.free}`);
+      assert(afterDelete.account === accountBefore - 4000, 'баланс счёта не откатывается');
+    });
+
+    await run('ТЕСТ 3. Удаление одного из двух обязательств', () => {
+      const state = createState(100000);
+      const internet = createObligation(state, 'Интернет');
+      const rent = createObligation(state, 'Квартплата');
+      reserve(state, internet.id, 5000);
+      reserve(state, rent.id, 7000);
+
+      const before = snapshotMoney(state);
+      log(`  до удаления: free=${before.free}, reserved=${before.reserved}`);
+      assert(before.free === 88000, `free=${before.free}`);
+      assert(before.reserved === 12000, `reserved=${before.reserved}`);
+
+      deleteObligation(state, internet.id);
+
+      const after = snapshotMoney(state);
+      log(`  после удаления Интернет: free=${after.free}, reserved=${after.reserved}, rent.reserve=${rent.reserveAmount}`);
+      assert(after.free === 93000, `free должно быть 93000, got ${after.free}`);
+      assert(rent.reserveAmount === 7000, 'резерв Квартплаты 7000');
+      assert(after.reserved === 7000, `reserved=${after.reserved}`);
+      assert(state.obligations.length === 1, 'осталось одно обязательство');
+    });
+
+    await run('ТЕСТ 4. Освобождение после перезагрузки (localStorage)', () => {
+      clearState();
+
+      const state = createState(100000);
+      const o = createObligation(state, 'Интернет');
+      reserve(state, o.id, 8000);
+
+      saveState(state);
+      const raw = localStorage.getItem(STORAGE_KEY);
+      assert(raw && raw.includes('8000'), 'reserveAmount в localStorage');
+
+      const reloaded = loadState();
+      const freeAfterReload = calculateFreeBalance(reloaded);
+      log(`  после reload: free=${freeAfterReload}, obligations=${reloaded.obligations.length}`);
+      assert(freeAfterReload === 92000, `free после reload=${freeAfterReload}`);
+      assert(reloaded.obligations[0].reserveAmount === 8000, 'reserve сохранён');
+
+      reloaded.obligations = reloaded.obligations.filter((item) => item.id !== o.id);
+      saveState(reloaded);
+
+      const finalState = loadState();
+      const freeFinal = calculateFreeBalance(finalState);
+      log(`  после удаления и reload: free=${freeFinal}, obligations=${finalState.obligations.length}`);
+      assert(freeFinal === 100000, `free=${freeFinal}`);
+      assert(finalState.obligations.length === 0, 'obligations пуст');
+
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      assert(!stored.obligations.length, 'localStorage без обязательств');
+
+      clearState();
+    });
+
+    log('\nГотово.', 'info');
+  </script>
+</body>
+</html>

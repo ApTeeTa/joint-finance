@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: группировка счетов</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Группировка счетов по владельцам</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { calculateOwnerBalance, calculateTotalBalance } from '../src/modules/financeEngine.js';
+    import {
+      recordAccountDeposit,
+      recordAccountTransfer,
+      getAccountTransactions,
+      todayIso
+    } from '../src/modules/transactions.js';
+    import { renderAccounts } from '../src/modules/accounts.js';
+
+    const out = document.getElementById('out');
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('Тест 1. Группа «Муж»: 2 RUB + 1 USD', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 100,
+        accounts: [
+          { id: 'h1', name: 'R1', currency: 'RUB', balance: 50000, owner: 'husband' },
+          { id: 'h2', name: 'R2', currency: 'RUB', balance: 30000, owner: 'husband' },
+          { id: 'h3', name: 'USD', currency: 'USD', balance: 200, owner: 'husband' }
+        ],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      const balance = calculateOwnerBalance(state, 'husband');
+      assert(balance === 80000 + 200 * 100, `balance=${balance}, expected=100000`);
+    });
+
+    await run('Тест 2. Группа «Жена»: 2 счета', () => {
+      const state = {
+        profile: 'wife',
+        exchangeRate: 92,
+        accounts: [
+          { id: 'w1', name: 'W1', currency: 'RUB', balance: 15000, owner: 'wife' },
+          { id: 'w2', name: 'W2', currency: 'RUB', balance: 25000, owner: 'wife' }
+        ],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      assert(calculateOwnerBalance(state, 'wife') === 40000, 'wife balance');
+      assert(calculateOwnerBalance(state, 'husband') === 0, 'husband empty');
+    });
+
+    await run('Тест 3. Пополнение обновляет баланс группы', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'a1', name: 'A', currency: 'RUB', balance: 1000, owner: 'husband' }],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      assert(calculateOwnerBalance(state, 'husband') === 1000, 'before');
+      recordAccountDeposit(state, 'a1', 500, 'test', todayIso(), 'husband');
+      assert(calculateOwnerBalance(state, 'husband') === 1500, 'after deposit');
+      assert(state.accounts[0].balance === 1500, 'card balance');
+    });
+
+    await run('Тест 4. Перевод между счетами', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [
+          { id: 's', name: 'Src', currency: 'RUB', balance: 5000, owner: 'husband' },
+          { id: 'd', name: 'Dst', currency: 'RUB', balance: 1000, owner: 'wife' }
+        ],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      const result = recordAccountTransfer(state, {
+        sourceAccountId: 's',
+        destAccountId: 'd',
+        sourceAmount: 2000,
+        creditAmount: 2000,
+        sourceCurrency: 'RUB',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(result.ok, result.error);
+      assert(calculateOwnerBalance(state, 'husband') === 3000, 'husband after');
+      assert(calculateOwnerBalance(state, 'wife') === 3000, 'wife after');
+      assert(calculateTotalBalance(state) === 6000, 'total unchanged');
+    });
+
+    await run('Тест 5. Последние 3 операции на счёте', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'a1', name: 'A', currency: 'RUB', balance: 10000, owner: 'husband' }],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      recordAccountDeposit(state, 'a1', 100, '', todayIso(), 'husband');
+      recordAccountDeposit(state, 'a1', 200, '', todayIso(), 'husband');
+      recordAccountDeposit(state, 'a1', 300, '', todayIso(), 'husband');
+      const ops = getAccountTransactions(state, 'a1', 3);
+      assert(ops.length === 3, `ops=${ops.length}`);
+      assert(ops.every((tx) => tx.type === 'account_deposit'), 'deposit type');
+    });
+
+    await run('Тест 6. USD в сумме группы', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 95,
+        accounts: [{ id: 'u1', name: 'USD', currency: 'USD', balance: 10, owner: 'husband' }],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      assert(calculateOwnerBalance(state, 'husband') === 950, 'usd converted');
+    });
+
+    await run('Тест 7. Reload + группировка в DOM', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 100,
+        accounts: [
+          { id: 'h1', name: 'H', currency: 'RUB', balance: 1000, owner: 'husband' },
+          { id: 'w1', name: 'W', currency: 'RUB', balance: 2000, owner: 'wife' },
+          { id: 'legacy', name: 'Legacy', currency: 'RUB', balance: 500, owner: undefined }
+        ],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      const reloaded = JSON.parse(JSON.stringify(state));
+      const container = document.createElement('div');
+      renderAccounts(reloaded, container);
+
+      assert(container.querySelector('[data-owner-group="husband"]'), 'husband section');
+      assert(container.querySelector('[data-owner-group="wife"]'), 'wife section');
+      assert(container.querySelectorAll('[data-owner-group="husband"] article[data-account-id]').length === 2, 'legacy in husband');
+      assert(container.querySelectorAll('[data-owner-group="wife"] article[data-account-id]').length === 1, 'wife cards');
+      assert(container.textContent.includes('Баланс:'), 'balance label');
+      assert(container.querySelector('[data-owner-group="husband"]')?.hasAttribute('open'), 'open by default');
+    });
+
+    await run('Тест 7b. DOM: кнопки карточек на месте', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'a1', name: 'A', currency: 'RUB', balance: 100, owner: 'husband' }],
+        transactions: [],
+        categories: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+      const container = document.createElement('div');
+      renderAccounts(state, container);
+      const card = container.querySelector('[data-account-id="a1"]');
+      assert(card.querySelector('[data-action="open-topup"]'), 'topup');
+      assert(card.querySelector('[data-action="open-transfer"]'), 'transfer');
+      assert(card.querySelector('[data-action="delete-account"]'), 'delete');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

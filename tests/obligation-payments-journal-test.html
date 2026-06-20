@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: payments journal обязательств</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Журнал payments для обязательств</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { recordObligationPayment, cancelTransaction, todayIso } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function normalizeLikeObligationsModule(obligation) {
+      return {
+        ...obligation,
+        reserveAmount: obligation.reserveAmount ?? 0,
+        payments: Array.isArray(obligation.payments) ? obligation.payments : []
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('1. Новое obligation → payments: []', () => {
+      const o = normalizeLikeObligationsModule({
+        id: 'o1',
+        name: 'Test',
+        accountId: 'acc',
+        reserveAmount: 0,
+        paidUntil: '2026-12-01',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      });
+      assert(Array.isArray(o.payments), 'payments is array');
+      assert(o.payments.length === 0, 'payments empty');
+    });
+
+    await run('2. Миграция старых данных', () => {
+      const legacy = [{ id: 'old', name: 'Old', accountId: 'acc', reserveAmount: 100, paidUntil: '2026-01-01' }];
+      const migrated = legacy.map((obligation) => ({
+        ...obligation,
+        payments: Array.isArray(obligation.payments) ? obligation.payments : []
+      }));
+      assert(Array.isArray(migrated[0].payments), 'payments added');
+      assert(migrated[0].payments.length === 0, 'payments empty');
+    });
+
+    await run('3. recordObligationPayment создаёт payment автоматически', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        obligations: [{
+          id: 'obl',
+          name: 'Интернет',
+          accountId: 'acc',
+          reserveAmount: 5000,
+          paidUntil: '2026-06-01',
+          status: 'overdue',
+          payments: [],
+          createdAt: new Date().toISOString()
+        }],
+        transactions: [],
+        categories: [],
+        savings: [],
+        debts: []
+      };
+      const pay = recordObligationPayment(state, 'obl', 2000, 'acc', '2026-08-01', '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      assert(state.obligations[0].payments.length === 1, 'one payment');
+      const p = state.obligations[0].payments[0];
+      assert(p.amount === 2000, 'amount');
+      assert(p.paidUntil === '2026-08-01', 'paidUntil');
+      assert(p.accountId === 'acc', 'accountId');
+      assert(p.transactionId === pay.transaction.id, 'transactionId');
+      assert(p.id, 'id');
+      assert(p.paidAt, 'paidAt');
+    });
+
+    await run('4. История транзакций без изменений', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        obligations: [{ id: 'obl', name: 'X', accountId: 'acc', reserveAmount: 1000, paidUntil: '2026-06-01', payments: [], createdAt: new Date().toISOString() }],
+        transactions: [],
+        categories: [],
+        savings: [],
+        debts: []
+      };
+      const pay = recordObligationPayment(state, 'obl', 500, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(state.transactions.length === 1, 'one tx');
+      assert(state.transactions[0].type === 'expense', 'expense');
+      assert(state.transactions[0].obligationId === 'obl', 'obligationId');
+    });
+
+    await run('5. Отмена оплаты работает как раньше', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        obligations: [{ id: 'obl', name: 'X', accountId: 'acc', reserveAmount: 3000, paidUntil: '2026-06-01', status: 'overdue', payments: [], createdAt: new Date().toISOString() }],
+        transactions: [],
+        categories: [],
+        savings: [],
+        debts: []
+      };
+      const pay = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-10-01', '', todayIso(), 'husband');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-10-01', 'paid after pay');
+      assert(state.obligations[0].paidUntil === '2026-06-01', 'legacy snapshot unchanged');
+      assert(state.obligations[0].payments.length === 1, 'payment logged');
+      const cancel = cancelTransaction(state, pay.transaction.id);
+      assert(cancel.ok, cancel.error);
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-06-01', 'paidUntil from fallback');
+      assert(state.obligations[0].paidUntil === '2026-06-01', 'legacy snapshot unchanged');
+      assert(state.obligations[0].reserveAmount === 3000, 'reserve restored');
+      assert(state.obligations[0].payments.length === 0, 'payment removed on cancel');
+    });
+
+    await run('5b. Повторная оплата после отмены создаёт новый payment', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        obligations: [{ id: 'obl', name: 'X', accountId: 'acc', reserveAmount: 3000, paidUntil: '2026-06-01', status: 'overdue', payments: [], createdAt: new Date().toISOString() }],
+        transactions: [],
+        categories: [],
+        savings: [],
+        debts: []
+      };
+      const first = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-10-01', '', todayIso(), 'husband');
+      cancelTransaction(state, first.transaction.id);
+      assert(state.obligations[0].payments.length === 0, 'empty after cancel');
+      const second = recordObligationPayment(state, 'obl', 1500, 'acc', '2026-11-01', '', todayIso(), 'husband');
+      assert(second.ok, second.error);
+      assert(state.obligations[0].payments.length === 1, 'one new payment');
+      assert(state.obligations[0].payments[0].transactionId === second.transaction.id, 'new tx id');
+      assert(state.obligations[0].payments[0].amount === 1500, 'new amount');
+    });
+
+    await run('6. paidUntil логика без изменений', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 50000, owner: 'husband' }],
+        obligations: [{ id: 'obl', name: 'X', accountId: 'acc', reserveAmount: 1000, paidUntil: todayIso(), status: 'active', payments: [], createdAt: new Date().toISOString() }],
+        transactions: [],
+        categories: [],
+        savings: [],
+        debts: []
+      };
+      const future = '2099-12-31';
+      recordObligationPayment(state, 'obl', 500, 'acc', future, '', todayIso(), 'husband');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === future, 'future date from payments');
+      assert(state.obligations[0].status === 'active', 'active');
+    });
+
+    await run('7. payments не дублируются при одном вызове', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 50000, owner: 'husband' }],
+        obligations: [{ id: 'obl', name: 'X', accountId: 'acc', reserveAmount: 2000, paidUntil: '2026-06-01', payments: [], createdAt: new Date().toISOString() }],
+        transactions: [],
+        categories: [],
+        savings: [],
+        debts: []
+      };
+      recordObligationPayment(state, 'obl', 700, 'acc', '2026-12-01', '', todayIso(), 'husband');
+      assert(state.obligations[0].payments.length === 1, 'single payment');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

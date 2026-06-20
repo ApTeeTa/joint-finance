@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: A3.6 Financial Enforcement Lock</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>A3.6 — Financial Enforcement Lock</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { FINANCE_ENFORCEMENT_MODE, LEGACY_SAFE_OPERATIONS } from '../src/modules/financeEnforcement.js';
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+    import { mergeGateAndRulesDecisions } from '../src/modules/financeRulesEngine.js';
+    import {
+      createExpense,
+      reserveCategory,
+      transferAccount
+    } from '../src/modules/financeGate.js';
+    import {
+      recordExpense,
+      recordReserve,
+      todayIso
+    } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [
+          { id: 'acc1', name: 'RUB', currency: 'RUB', balance: 100000, owner: 'husband' },
+          { id: 'acc2', name: 'RUB2', currency: 'RUB', balance: 5000, owner: 'husband' }
+        ],
+        categories: [{ id: 'food', name: 'Еда', limit: 50000, reserved: 5000, spent: 0 }],
+        obligations: [],
+        savings: [],
+        debts: [],
+        transactions: []
+      };
+    }
+
+    async function run(name, key, fn) {
+      try {
+        await fn();
+        results[key] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[key] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    assert(FINANCE_ENFORCEMENT_MODE === true, 'enforcement mode must be enabled');
+
+    await run('TEST 1 — прямой recordExpense → BLOCK', 'test1', () => {
+      const state = baseState();
+      const spentBefore = state.categories[0].spent;
+      const result = recordExpense(state, 'food', 1000, 'acc1', 'direct', todayIso(), 'husband');
+      assert(!result.ok, 'must block');
+      assert(result.error.includes('financeGate'), result.error);
+      assert(state.categories[0].spent === spentBefore, 'no mutation');
+    });
+
+    await run('TEST 2 — recordReserve без gate → BLOCK', 'test2', () => {
+      const state = baseState();
+      const reservedBefore = state.categories[0].reserved;
+      const result = recordReserve(state, 'food', 1000, '', todayIso(), 'husband');
+      assert(!result.ok, 'must block');
+      assert(result.error.includes('financeGate'), result.error);
+      assert(state.categories[0].reserved === reservedBefore, 'no mutation');
+    });
+
+    await run('TEST 3 — BLOCK decision → операция не выполняется', 'test3', () => {
+      const merged = mergeGateAndRulesDecisions(
+        { decision: 'ALLOW', ok: true, warnings: [] },
+        { decision: 'BLOCK', reason: 'test block', ruleTriggered: 'TEST' }
+      );
+      assert(merged.decision === 'BLOCK', 'merged BLOCK');
+      assert(merged.ok === false, 'ok false on BLOCK');
+
+      const state = baseState();
+      const balanceBefore = state.accounts[0].balance;
+      const blocked = recordExpense(state, 'food', 500, 'acc1', 'x', todayIso(), 'husband');
+      assert(!blocked.ok, 'direct call blocked');
+      assert(state.accounts[0].balance === balanceBefore, 'state unchanged');
+    });
+
+    await run('TEST 4 — попытка уйти в минус → ошибка + rollback', 'test4', () => {
+      const state = baseState();
+      state.accounts[0].balance = 1000;
+      const result = transferAccount(state, {
+        sourceAccountId: 'acc1',
+        destAccountId: 'acc2',
+        sourceAmount: 5000,
+        creditAmount: 5000,
+        sourceCurrency: 'RUB',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(!result.ok, result.error);
+      assert(state.accounts[0].balance === 1000, 'source unchanged');
+      assert(state.accounts[1].balance === 5000, 'dest unchanged');
+    });
+
+    await run('TEST 5 — легальные операции через gate (1:1)', 'test5', () => {
+      const state = baseState();
+      const freeBefore = calculateFreeBalance(state);
+      assert(reserveCategory(state, 'food', 3000, '', todayIso(), 'husband').ok, 'reserve');
+      assert(calculateFreeBalance(state) === freeBefore - 3000, 'free after reserve');
+      const expense = createExpense(state, 'food', 2000, 'acc1', 'lunch', todayIso(), 'husband');
+      assert(expense.ok, expense.error);
+      assert(state.categories[0].spent === 2000, 'spent updated');
+    });
+
+    await run('TEST 6 — legacy операции помечены LEGACY_SAFE', 'test6', () => {
+      assert(typeof LEGACY_SAFE_OPERATIONS.ensureObligationPaymentReserve === 'string', 'auto-reserve marked');
+      assert(typeof LEGACY_SAFE_OPERATIONS.reconcileLegacyTransactions === 'string', 'reconcile marked');
+      assert(typeof LEGACY_SAFE_OPERATIONS.recordSavingDelete_service === 'string', 'service delete marked');
+
+      const state = baseState();
+      const result = recordExpense(state, 'food', 100, 'acc1', 'legacy bypass', todayIso(), 'husband');
+      assert(!result.ok, 'legacy direct path blocked');
+    });
+
+    log('\n--- Summary ---', 'info');
+    Object.entries(results).forEach(([key, status]) => {
+      log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
+    });
+    log('\nГотово.');
+  </script>
+</body>
+</html>

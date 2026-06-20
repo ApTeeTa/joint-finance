@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: отмена оплаты обязательства</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Отмена оплаты обязательства</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      recordObligationPayment,
+      recordExpense,
+      recordReserve,
+      cancelTransaction,
+      todayIso
+    } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+
+    const out = document.getElementById('out');
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function addDays(iso, days) {
+      const [y, m, d] = iso.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      date.setDate(date.getDate() + days);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    function createState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        categories: [{ id: 'cat', name: 'Еда', limit: 20000, reserved: 5000, spent: 0 }],
+        obligations: [],
+        transactions: [],
+        savings: [],
+        debts: []
+      };
+    }
+
+    function addObligation(state, data) {
+      const o = {
+        id: crypto.randomUUID(),
+        name: data.name,
+        accountId: 'acc',
+        reserveAmount: data.reserveAmount ?? 0,
+        paidUntil: data.paidUntil,
+        status: data.status ?? 'active',
+        payments: [],
+        createdAt: new Date().toISOString()
+      };
+      state.obligations.push(o);
+      return o;
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('Тест 1. Полный откат оплаты (Интернет)', () => {
+      const state = createState();
+      const yesterday = addDays(todayIso(), -1);
+      const nextMonth = addDays(todayIso(), 30);
+      const o = addObligation(state, {
+        name: 'Интернет',
+        reserveAmount: 500,
+        paidUntil: yesterday,
+        status: 'overdue'
+      });
+
+      const pay = recordObligationPayment(state, o.id, 500, 'acc', nextMonth, '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      assert(o.reserveAmount === 0, `reserve after pay=${o.reserveAmount}`);
+      assert(computePaidUntilFromPayments(o) === nextMonth, `paidUntil after pay=${computePaidUntilFromPayments(o)}`);
+      assert(o.paidUntil === yesterday, 'legacy snapshot unchanged');
+      assert(o.status === 'active', `status after pay=${o.status}`);
+
+      const tx = pay.transaction;
+      assert(tx.obligationReserveBefore === 500, 'snapshot reserve');
+      assert(tx.obligationPaidUntilBefore === yesterday, 'snapshot paidUntil');
+      assert(tx.obligationStatusBefore === 'overdue', 'snapshot status');
+
+      const cancel = cancelTransaction(state, tx.id);
+      assert(cancel.ok, cancel.error);
+      assert(o.reserveAmount === 500, `reserve after cancel=${o.reserveAmount}`);
+      assert(computePaidUntilFromPayments(o) === yesterday, `paidUntil after cancel=${computePaidUntilFromPayments(o)}`);
+      assert(o.paidUntil === yesterday, 'legacy snapshot unchanged');
+      assert(o.status === 'overdue', `status after cancel=${o.status}`);
+      assert(state.accounts[0].balance === 100000, `balance=${state.accounts[0].balance}`);
+    });
+
+    await run('Тест 2. Частичная оплата и откат (Квартплата)', () => {
+      const state = createState();
+      const today = todayIso();
+      const future = addDays(today, 45);
+      const o = addObligation(state, {
+        name: 'Квартплата',
+        reserveAmount: 10000,
+        paidUntil: today,
+        status: 'overdue'
+      });
+
+      const pay = recordObligationPayment(state, o.id, 4000, 'acc', future, '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      assert(o.reserveAmount === 6000, `reserve=${o.reserveAmount}`);
+      assert(computePaidUntilFromPayments(o) === future, 'paidUntil from payments');
+      assert(o.paidUntil === today, 'legacy snapshot unchanged');
+      assert(o.status === 'active', 'status active');
+
+      const cancel = cancelTransaction(state, pay.transaction.id);
+      assert(cancel.ok, cancel.error);
+      assert(o.reserveAmount === 10000, `reserve restored=${o.reserveAmount}`);
+      assert(computePaidUntilFromPayments(o) === today, `paidUntil restored=${computePaidUntilFromPayments(o)}`);
+      assert(o.paidUntil === today, 'legacy snapshot unchanged');
+      assert(o.status === 'active', `status from paidUntil=today=${o.status}`);
+    });
+
+    await run('Тест 3. Snapshot сохраняется после reload', () => {
+      const state = createState();
+      const o = addObligation(state, {
+        name: 'Связь',
+        reserveAmount: 2000,
+        paidUntil: addDays(todayIso(), -3),
+        status: 'overdue'
+      });
+      const oldPaidUntil = o.paidUntil;
+      const pay = recordObligationPayment(state, o.id, 1000, 'acc', addDays(todayIso(), 20), '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+
+      const persisted = JSON.parse(JSON.stringify(state));
+      const reloadedObligation = persisted.obligations.find((item) => item.id === o.id);
+      const reloadedTx = persisted.transactions.find((item) => item.id === pay.transaction.id);
+
+      assert(reloadedTx.obligationReserveBefore === 2000, 'persist reserve snapshot');
+      assert(reloadedTx.obligationPaidUntilBefore === oldPaidUntil, 'persist paidUntil snapshot');
+      assert(reloadedTx.obligationStatusBefore === 'overdue', 'persist status snapshot');
+
+      const cancel = cancelTransaction(persisted, reloadedTx.id);
+      assert(cancel.ok, cancel.error);
+      assert(reloadedObligation.reserveAmount === 2000, 'reload cancel reserve');
+      assert(computePaidUntilFromPayments(reloadedObligation) === oldPaidUntil, 'reload cancel paidUntil');
+      assert(reloadedObligation.paidUntil === oldPaidUntil, 'legacy snapshot unchanged');
+      assert(reloadedObligation.status === 'overdue', 'reload cancel status');
+    });
+
+    await run('Тест 4. Расход категории не затронут', () => {
+      const state = createState();
+      const cat = state.categories[0];
+      recordReserve(state, 'cat', 3000, '', todayIso(), 'husband');
+      assert(cat.reserved === 8000, `reserved=${cat.reserved}`);
+
+      const expense = recordExpense(state, 'cat', 1500, 'acc', 'обед', todayIso(), 'husband');
+      assert(expense.ok, expense.error);
+      assert(cat.reserved === 6500, `reserved after=${cat.reserved}`);
+      assert(cat.spent === 1500, `spent=${cat.spent}`);
+
+      const cancel = cancelTransaction(state, expense.transaction.id);
+      assert(cancel.ok, cancel.error);
+      assert(cat.reserved === 8000, `reserved restored=${cat.reserved}`);
+      assert(cat.spent === 0, `spent restored=${cat.spent}`);
+      assert(!expense.transaction.obligationId, 'no obligation fields');
+    });
+
+    await run('Тест 5. Счёт и баланс после отмены', () => {
+      const state = createState();
+      const startBalance = state.accounts[0].balance;
+      const o = addObligation(state, {
+        name: 'X',
+        reserveAmount: 800,
+        paidUntil: addDays(todayIso(), -1),
+        status: 'overdue'
+      });
+      const pay = recordObligationPayment(state, o.id, 800, 'acc', addDays(todayIso(), 10), '', todayIso(), 'husband');
+      assert(state.accounts[0].balance === startBalance - 800, 'debited');
+      cancelTransaction(state, pay.transaction.id);
+      assert(state.accounts[0].balance === startBalance, 'balance restored');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

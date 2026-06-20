@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: finance-core removal (A1)</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>A1 — единый источник: financeEngine + validateAvailableFunds</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      calculateFreeBalance,
+      calculateReservedBalance
+    } from '../src/modules/financeEngine.js';
+    import { validateAvailableFunds } from '../src/modules/financeValidation.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+      categories: [{ id: 'food', name: 'Еда', limit: 50000, reserved: 10000, spent: 0 }],
+      obligations: [{ id: 'obl', name: 'X', accountId: 'acc', reserveAmount: 5000, paidUntil: '2026-12-01', payments: [] }],
+      savings: [{ id: 's1', name: 'Отпуск', accumulated: 3000 }],
+      debts: [{ id: 'd1', direction: 'we_owe', reserved: 2000, amount: 5000 }],
+      transactions: []
+    };
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('1. financeCore.js удалён из production', async () => {
+      let imported = false;
+      try {
+        await import('../src/modules/financeCore.js');
+        imported = true;
+      } catch (e) {
+        imported = false;
+      }
+      assert(!imported, 'financeCore.js must not be importable');
+    });
+
+    await run('2. engine free === validation.free', () => {
+      const engineFree = calculateFreeBalance(state);
+      const validation = validateAvailableFunds(0, state);
+      assert(validation.free === engineFree, `free mismatch: engine=${engineFree}, validation=${validation.free}`);
+      log(`  free=${engineFree}`, 'info');
+    });
+
+    await run('3. engine blocked === validation.blocked', () => {
+      const engineBlocked = calculateReservedBalance(state);
+      const validation = validateAvailableFunds(0, state);
+      assert(validation.blocked === engineBlocked, `blocked mismatch: engine=${engineBlocked}, validation=${validation.blocked}`);
+      log(`  blocked=${engineBlocked}`, 'info');
+    });
+
+    await run('4. validateAvailableFunds — единая проверка суммы', () => {
+      const ok = validateAvailableFunds(1000, state);
+      const fail = validateAvailableFunds(90000, state);
+      assert(ok.ok && ok.free === calculateFreeBalance(state), 'ok case');
+      assert(!fail.ok && fail.reason === 'Недостаточно свободных средств', 'fail case');
+    });
+
+    await run('5. state не изменяется', () => {
+      const snapshot = JSON.stringify(state);
+      validateAvailableFunds(5000, state);
+      calculateFreeBalance(state);
+      calculateReservedBalance(state);
+      assert(JSON.stringify(state) === snapshot, 'state unchanged');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

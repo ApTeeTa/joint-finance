@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: возврат резерва</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Возврат резерва</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+    import {
+      recordCategoryUnreserve,
+      recordObligationUnreserve,
+      recordReserve,
+      cancelTransaction,
+      canCancelTransaction,
+      UNRESERVE_INSUFFICIENT_FREE_ERROR,
+      todayIso
+    } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function createState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 200000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 50000, reserved: 10000, spent: 8000 }],
+        obligations: [{ id: 'obl', name: 'Интернет', accountId: 'acc', reserveAmount: 5000, paidUntil: '2026-12-01', status: 'active', createdAt: new Date().toISOString() }],
+        transactions: [],
+        savings: [],
+        debts: []
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('Тест 1. Доступно к возврату = текущий резерв', () => {
+      const cases = [
+        { reserved: 40000, spent: 0, expected: 40000, try: 40000 },
+        { reserved: 39000, spent: 1000, expected: 39000, try: 39000 },
+        { reserved: 20000, spent: 20000, expected: 20000, try: 20000 },
+        { reserved: 0, spent: 40000, expected: 0, try: 1000, fail: true }
+      ];
+
+      cases.forEach((item, index) => {
+        const state = {
+          profile: 'husband',
+          exchangeRate: 92,
+          accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+          categories: [{ id: 'food', name: 'Еда', limit: 40000, reserved: item.reserved, spent: item.spent }],
+          obligations: [],
+          transactions: [],
+          savings: [],
+          debts: []
+        };
+        const result = recordCategoryUnreserve(state, 'food', item.try, '', todayIso(), 'husband');
+        if (item.fail) {
+          assert(!result.ok, `case ${index + 1} must fail`);
+          assert(result.error.includes('Доступно к возврату'), result.error);
+        } else {
+          assert(result.ok, `case ${index + 1}: ${result.error}`);
+          assert(state.categories[0].reserved === item.reserved - item.try, `case ${index + 1} reserve`);
+        }
+      });
+    });
+
+    await run('Тест 1b. Расход 1000 не уменьшает доступный возврат повторно', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 40000, reserved: 39000, spent: 1000 }],
+        obligations: [],
+        transactions: [],
+        savings: [],
+        debts: []
+      };
+      const ok39000 = recordCategoryUnreserve(state, 'food', 39000, '', todayIso(), 'husband');
+      assert(ok39000.ok, ok39000.error);
+      assert(state.categories[0].reserved === 0, 'all returned');
+
+      state.categories[0].reserved = 39000;
+      const ok38000 = recordCategoryUnreserve(state, 'food', 38000, '', todayIso(), 'husband');
+      assert(ok38000.ok, '38000 must succeed when reserve is 39000');
+      assert(state.categories[0].reserved === 1000, `reserve=${state.categories[0].reserved}`);
+    });
+
+    await run('Тест 2. Отмена возврата категории без свободных денег', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 15000, owner: 'husband' }],
+        categories: [
+          { id: 'food', name: 'Еда', limit: 50000, reserved: 10000, spent: 0 },
+          { id: 'other', name: 'Другое', limit: 50000, reserved: 0, spent: 0 }
+        ],
+        obligations: [],
+        transactions: [],
+        savings: [],
+        debts: []
+      };
+      assert(calculateFreeBalance(state) === 5000, `start free=${calculateFreeBalance(state)}`);
+      const un = recordCategoryUnreserve(state, 'food', 3000, '', todayIso(), 'husband');
+      assert(un.ok, un.error);
+      assert(calculateFreeBalance(state) === 8000, `after unreserve free=${calculateFreeBalance(state)}`);
+
+      recordReserve(state, 'other', 8000, 'reuse', todayIso(), 'husband');
+      assert(calculateFreeBalance(state) === 0, `free=${calculateFreeBalance(state)}`);
+      assert(!canCancelTransaction(state, un.transaction), 'cancel hidden');
+      const cancel = cancelTransaction(state, un.transaction.id);
+      assert(!cancel.ok, 'cancel blocked');
+      assert(cancel.error === UNRESERVE_INSUFFICIENT_FREE_ERROR, cancel.error);
+    });
+
+    await run('Тест 3. Обязательство: отмена возврата при достаточном free', () => {
+      const state = createState();
+      const obl = state.obligations[0];
+      const un = recordObligationUnreserve(state, 'obl', 3000, '', todayIso(), 'husband');
+      assert(un.ok, un.error);
+      assert(obl.reserveAmount === 2000, `reserve=${obl.reserveAmount}`);
+      assert(canCancelTransaction(state, un.transaction), 'can cancel');
+      const cancel = cancelTransaction(state, un.transaction.id);
+      assert(cancel.ok, cancel.error);
+      assert(obl.reserveAmount === 5000, `restored=${obl.reserveAmount}`);
+    });
+
+    await run('Тест 3b. Категория: отмена возврата восстанавливает резерв', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 50000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 40000, reserved: 39000, spent: 1000 }],
+        obligations: [],
+        transactions: [],
+        savings: [],
+        debts: []
+      };
+      const un = recordCategoryUnreserve(state, 'food', 3000, '', todayIso(), 'husband');
+      assert(un.ok, un.error);
+      assert(state.categories[0].reserved === 36000, `reserved=${state.categories[0].reserved}`);
+      const cancel = cancelTransaction(state, un.transaction.id);
+      assert(cancel.ok, cancel.error);
+      assert(state.categories[0].reserved === 39000, `restored=${state.categories[0].reserved}`);
+    });
+
+    await run('Тест 4. Обязательство: отмена недоступна после распределения', () => {
+      const state = {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 8000, owner: 'husband' }],
+        categories: [{ id: 'other', name: 'Другое', limit: 10000, reserved: 0, spent: 0 }],
+        obligations: [{ id: 'obl', name: 'Интернет', accountId: 'acc', reserveAmount: 5000, paidUntil: '2026-12-01', status: 'active', createdAt: new Date().toISOString() }],
+        transactions: [],
+        savings: [],
+        debts: []
+      };
+      assert(calculateFreeBalance(state) === 3000, `start free=${calculateFreeBalance(state)}`);
+      const un = recordObligationUnreserve(state, 'obl', 3000, '', todayIso(), 'husband');
+      assert(un.ok, un.error);
+      assert(calculateFreeBalance(state) === 6000, `after unreserve free=${calculateFreeBalance(state)}`);
+      recordReserve(state, 'other', 6000, '', todayIso(), 'husband');
+      assert(calculateFreeBalance(state) === 0, 'free=0');
+      assert(!canCancelTransaction(state, un.transaction), 'cannot cancel');
+    });
+
+    await run('Тест 5. Типы транзакций в истории', () => {
+      const state = createState();
+      const cu = recordCategoryUnreserve(state, 'food', 1000, '', todayIso(), 'husband');
+      const ou = recordObligationUnreserve(state, 'obl', 1000, '', todayIso(), 'husband');
+      assert(cu.transaction.type === 'category_unreserve', cu.transaction.type);
+      assert(ou.transaction.type === 'obligation_unreserve', ou.transaction.type);
+      assert(cu.transaction.author === 'husband', 'author');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

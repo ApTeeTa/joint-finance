@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: shadow paidUntil из payments</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>computePaidUntilFromPayments</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { recordObligationPayment, cancelTransaction, todayIso } from '../src/modules/transactions.js';
+    import {
+      computePaidUntilFromPayments,
+      diagnosePaidUntilSnapshotDrift
+    } from '../src/modules/obligationPaidUntil.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function normalizeLikeObligationsModule(obligation) {
+      return {
+        ...obligation,
+        reserveAmount: obligation.reserveAmount ?? 0,
+        payments: Array.isArray(obligation.payments) ? obligation.payments : []
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    const baseState = () => ({
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+      obligations: [{
+        id: 'obl',
+        name: 'X',
+        accountId: 'acc',
+        reserveAmount: 5000,
+        paidUntil: '2026-06-01',
+        status: 'overdue',
+        payments: [],
+        createdAt: new Date().toISOString()
+      }],
+      transactions: [],
+      categories: [],
+      savings: [],
+      debts: []
+    });
+
+    await run('1. Пустой payments → fallback snapshot', () => {
+      const o = normalizeLikeObligationsModule({
+        id: 'o1',
+        name: 'Test',
+        accountId: 'acc',
+        reserveAmount: 0,
+        paidUntil: '2026-12-01',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      });
+      assert(computePaidUntilFromPayments(o) === '2026-12-01', 'fallback snapshot');
+    });
+
+    await run('2. Одна оплата → paidUntil из payment', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', todayIso(), 'husband');
+      const o = state.obligations[0];
+      assert(computePaidUntilFromPayments(o) === '2026-08-01', 'from payment');
+      assert(o.paidUntil === '2026-06-01', 'legacy snapshot not written');
+    });
+
+    await run('3. Две оплаты → последняя по дате', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', '2026-07-01', 'husband');
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-10-01', '', '2026-09-01', 'husband');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-10-01', 'last payment');
+    });
+
+    await run('4. LIFO cancel последней → fallback/payment chain', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', '2026-07-01', 'husband');
+      const second = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-10-01', '', '2026-09-01', 'husband');
+      cancelTransaction(state, second.transaction.id);
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'previous payment');
+    });
+
+    await run('5. LIFO блокирует отмену не последней', () => {
+      const state = baseState();
+      const first = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', '2026-07-01', 'husband');
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-10-01', '', '2026-09-01', 'husband');
+      assert(!cancelTransaction(state, first.transaction.id).ok, 'blocked');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-10-01', 'unchanged');
+    });
+
+    await run('6. Dev drift tool — snapshot отличается при payments', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      const drifts = diagnosePaidUntilSnapshotDrift(state);
+      assert(drifts.length === 1, 'expected drift in dev tool');
+      assert(drifts[0].computedPaidUntil === '2026-09-01', 'computed');
+      assert(drifts[0].snapshotPaidUntil === '2026-06-01', 'legacy snapshot');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

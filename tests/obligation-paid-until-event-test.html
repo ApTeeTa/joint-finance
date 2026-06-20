@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: event-based paidUntil</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Event-based paidUntil (финальный набор)</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { recordObligationPayment, cancelTransaction, todayIso } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+    import { isObligationOverdue } from '../src/modules/obligations.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    const baseState = () => ({
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+      obligations: [{
+        id: 'obl',
+        name: 'X',
+        accountId: 'acc',
+        reserveAmount: 5000,
+        paidUntil: '2026-06-01',
+        status: 'overdue',
+        payments: [],
+        createdAt: new Date().toISOString()
+      }],
+      transactions: [],
+      categories: [],
+      savings: [],
+      debts: []
+    });
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('1. Full event-based consistency', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-11-01', '', '2026-10-01', 'husband');
+      const o = state.obligations[0];
+      assert(computePaidUntilFromPayments(o) === '2026-11-01', 'last payment wins');
+      assert(o.payments.length === 2, 'two events');
+      assert(o.paidUntil === '2026-06-01', 'legacy snapshot untouched');
+      assert(!isObligationOverdue(o), 'UI overdue from payments');
+    });
+
+    await run('2. Legacy fallback без payments', () => {
+      const state = baseState();
+      delete state.obligations[0].payments;
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-06-01', 'fallback snapshot');
+      assert(isObligationOverdue(state.obligations[0]), 'overdue from fallback');
+    });
+
+    await run('3. LIFO cancel chain', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 500, 'acc', '2026-07-01', '', '2026-06-15', 'husband');
+      recordObligationPayment(state, 'obl', 500, 'acc', '2026-08-01', '', '2026-07-15', 'husband');
+      const third = recordObligationPayment(state, 'obl', 500, 'acc', '2026-09-01', '', '2026-08-15', 'husband');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-09-01', 'three payments');
+      cancelTransaction(state, third.transaction.id);
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'after cancel last');
+      assert(state.obligations[0].payments.length === 2, 'two remain');
+    });
+
+    await run('4. Snapshot isolation — правка snapshot не влияет на UI', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-12-01', '', todayIso(), 'husband');
+      state.obligations[0].paidUntil = '2020-01-01';
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-12-01', 'payments define UI');
+      assert(!isObligationOverdue(state.obligations[0]), 'not overdue despite snapshot');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

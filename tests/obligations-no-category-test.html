@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: обязательства без категорий</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Обязательства без категорий</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { getOverdueObligations } from '../src/modules/obligations.js';
+    import { recordObligationPayment, todayIso } from '../src/modules/transactions.js';
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+
+    const out = document.getElementById('out');
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function addDays(iso, days) {
+      const [y, m, d] = iso.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      date.setDate(date.getDate() + days);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    function createState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        obligations: [],
+        transactions: [],
+        categories: [{ id: 'cat-old', name: 'Старое', limit: 10000, reserved: 0, spent: 0 }],
+        savings: [],
+        debts: []
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('Тест 1. Новое обязательство без categoryId', () => {
+      const state = createState();
+      const o = {
+        id: crypto.randomUUID(),
+        name: 'Интернет',
+        accountId: 'acc',
+        reserveAmount: 0,
+        paidUntil: addDays(todayIso(), 30),
+        status: 'active',
+        createdAt: new Date().toISOString()
+      };
+      state.obligations.push(o);
+      assert(!('categoryId' in o), 'нет categoryId');
+      assert(JSON.parse(JSON.stringify(o)).categoryId === undefined, 'persist без categoryId');
+    });
+
+    await run('Тест 2. Старое обязательство с categoryId загружается', () => {
+      const state = createState();
+      state.obligations.push({
+        id: 'old-1',
+        name: 'Квартплата',
+        accountId: 'acc',
+        categoryId: 'cat-old',
+        reserveAmount: 5000,
+        paidUntil: addDays(todayIso(), 10),
+        status: 'active',
+        createdAt: new Date().toISOString()
+      });
+      const reloaded = JSON.parse(JSON.stringify(state));
+      assert(reloaded.obligations[0].categoryId === 'cat-old', 'legacy поле сохранено');
+      assert(reloaded.obligations[0].name === 'Квартплата', 'данные на месте');
+    });
+
+    await run('Тест 3. Резерв и оплата без категории', () => {
+      const state = createState();
+      const o = {
+        id: crypto.randomUUID(),
+        name: 'Связь',
+        accountId: 'acc',
+        reserveAmount: 0,
+        paidUntil: addDays(todayIso(), -2),
+        status: 'overdue',
+        createdAt: new Date().toISOString()
+      };
+      state.obligations.push(o);
+      o.reserveAmount = 3000;
+      const pay = recordObligationPayment(
+        state,
+        o.id,
+        2000,
+        'acc',
+        addDays(todayIso(), 60),
+        '',
+        todayIso(),
+        'husband'
+      );
+      assert(pay.ok, pay.error);
+      assert(o.reserveAmount === 1000, `reserve=${o.reserveAmount}`);
+      assert(state.accounts[0].balance === 98000, `balance=${state.accounts[0].balance}`);
+      const tx = state.transactions[0];
+      assert(tx.type === 'expense', 'expense tx');
+      assert(tx.obligationId === o.id, 'obligationId');
+      assert(!tx.categoryId, 'без categoryId в транзакции');
+      assert(state.categories[0].reserved === 0, 'категории не затронуты');
+    });
+
+    await run('Тест 4. Legacy categoryId не влияет на оплату', () => {
+      const state = createState();
+      const o = {
+        id: crypto.randomUUID(),
+        name: 'Legacy',
+        accountId: 'acc',
+        categoryId: 'cat-old',
+        reserveAmount: 1500,
+        paidUntil: addDays(todayIso(), -1),
+        status: 'overdue',
+        createdAt: new Date().toISOString()
+      };
+      state.obligations.push(o);
+      const pay = recordObligationPayment(state, o.id, 1500, 'acc', addDays(todayIso(), 30), '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      assert(!state.transactions[0].categoryId, 'tx без categoryId');
+    });
+
+    await run('Тест 5. Просрочка во вкладке долгов', () => {
+      const state = createState();
+      state.obligations.push({
+        id: 'ov-1',
+        name: 'Просрочка',
+        accountId: 'acc',
+        categoryId: 'cat-old',
+        reserveAmount: 0,
+        paidUntil: addDays(todayIso(), -5),
+        status: 'overdue',
+        createdAt: new Date().toISOString()
+      });
+      const overdue = getOverdueObligations(state);
+      assert(overdue.length === 1, 'count=1');
+      assert(overdue[0].name === 'Просрочка', 'name');
+      assert(overdue[0].overdueDays === 5, 'days=5');
+    });
+
+    await run('Тест 6. Форма без поля categoryId (DOM)', async () => {
+      const { renderObligations } = await import('../src/modules/obligations.js');
+      const container = document.createElement('div');
+      const state = createState();
+      renderObligations(state, container);
+      assert(!container.querySelector('[name="categoryId"]'), 'нет select categoryId');
+      assert(!container.innerHTML.includes('obligation-category-select'), 'нет класса category select');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: LIFO отмена оплат обязательств</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>LIFO отмена оплат обязательств</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { recordObligationPayment, cancelTransaction, todayIso } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    const baseState = () => ({
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+      obligations: [{
+        id: 'obl',
+        name: 'X',
+        accountId: 'acc',
+        reserveAmount: 5000,
+        paidUntil: '2026-06-01',
+        status: 'overdue',
+        payments: [],
+        createdAt: new Date().toISOString()
+      }],
+      transactions: [],
+      categories: [],
+      savings: [],
+      debts: []
+    });
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('1. Отмена последней оплаты разрешена', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', '2026-07-01', 'husband');
+      const second = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-10-01', '', '2026-09-01', 'husband');
+      const balanceBefore = state.accounts[0].balance;
+      const cancel = cancelTransaction(state, second.transaction.id);
+      assert(cancel.ok, cancel.error);
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'paidUntil from payments');
+      assert(state.obligations[0].payments.length === 1, 'last payment removed');
+      assert(state.accounts[0].balance === balanceBefore + 1000, 'balance restored');
+      assert(state.transactions.find((tx) => tx.id === second.transaction.id).status === 'cancelled', 'tx cancelled');
+    });
+
+    await run('2. Отмена не последней оплаты блокируется', () => {
+      const state = baseState();
+      const first = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', '2026-07-01', 'husband');
+      const second = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-10-01', '', '2026-09-01', 'husband');
+      const balanceBefore = state.accounts[0].balance;
+      const paidUntilBefore = computePaidUntilFromPayments(state.obligations[0]);
+      const cancel = cancelTransaction(state, first.transaction.id);
+      assert(!cancel.ok, 'blocked');
+      assert(cancel.error.includes('последнюю'), cancel.error);
+      assert(computePaidUntilFromPayments(state.obligations[0]) === paidUntilBefore, 'paidUntil unchanged');
+      assert(state.obligations[0].payments.length === 2, 'payments unchanged');
+      assert(state.accounts[0].balance === balanceBefore, 'balance unchanged');
+      assert(state.transactions.every((tx) => tx.status !== 'cancelled'), 'tx not cancelled');
+    });
+
+    await run('3. Единственная оплата отменяется (last in array)', () => {
+      const state = baseState();
+      const pay = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', todayIso(), 'husband');
+      const cancel = cancelTransaction(state, pay.transaction.id);
+      assert(cancel.ok, cancel.error);
+      assert(state.obligations[0].payments.length === 0, 'payment removed');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-06-01', 'fallback after cancel');
+    });
+
+    await run('4. Три оплаты: отмена только третьей', () => {
+      const state = baseState();
+      const first = recordObligationPayment(state, 'obl', 500, 'acc', '2026-07-01', '', '2026-06-15', 'husband');
+      const second = recordObligationPayment(state, 'obl', 500, 'acc', '2026-08-01', '', '2026-07-15', 'husband');
+      const third = recordObligationPayment(state, 'obl', 500, 'acc', '2026-09-01', '', '2026-08-15', 'husband');
+      assert(!cancelTransaction(state, first.transaction.id).ok, 'first blocked');
+      assert(!cancelTransaction(state, second.transaction.id).ok, 'second blocked');
+      assert(cancelTransaction(state, third.transaction.id).ok, 'third allowed');
+      assert(state.obligations[0].payments.length === 2, 'two payments remain');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'paidUntil from second payment');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: P2 Analytics Read Model</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>P2 — Dashboard & Statistics MVP</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      calculateFreeBalance,
+      calculateReservedBalance,
+      calculateTotalBalance
+    } from '../src/modules/financeEngine.js';
+    import {
+      getFinancialSummary,
+      getExpensesByCategory,
+      getSavingsProgress,
+      getObligationsOverview,
+      isAnalyticsTransaction
+    } from '../src/modules/analyticsReadModel.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+    import {
+      TRANSACTION_STATUS,
+      TRANSACTION_TYPES,
+      getSavingAccumulated
+    } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        categories: [
+          { id: 'food', name: 'Еда', limit: 50000, reserved: 5000, spent: 3000 },
+          { id: 'home', name: 'Дом', limit: 30000, reserved: 2000, spent: 1500 }
+        ],
+        obligations: [{
+          id: 'obl',
+          name: 'Интернет',
+          accountId: 'acc',
+          reserveAmount: 1500,
+          paidUntil: '2026-12-01',
+          status: 'active',
+          payments: [
+            { id: 'p1', paidAt: '2026-06-01', paidUntil: '2026-12-01', amount: 2000, accountId: 'acc', transactionId: 'tx-pay' }
+          ],
+          createdAt: new Date().toISOString()
+        }],
+        savings: [
+          { id: 's1', name: 'Отпуск', accumulated: 8000, targetAmount: 10000, savingType: 'recurring' },
+          { id: 's2', name: 'Ремонт', accumulated: 2500, targetAmount: null, savingType: 'recurring' }
+        ],
+        debts: [],
+        transactions: [
+          {
+            id: 'tx1',
+            type: TRANSACTION_TYPES.EXPENSE,
+            status: TRANSACTION_STATUS.ACTIVE,
+            amount: 3000,
+            categoryId: 'food',
+            categoryName: 'Еда',
+            date: '2026-06-01',
+            createdAt: '2026-06-01T10:00:00.000Z',
+            author: 'husband'
+          },
+          {
+            id: 'tx2',
+            type: TRANSACTION_TYPES.EXPENSE,
+            status: TRANSACTION_STATUS.ACTIVE,
+            amount: 1500,
+            categoryId: 'home',
+            categoryName: 'Дом',
+            date: '2026-06-02',
+            createdAt: '2026-06-02T10:00:00.000Z',
+            author: 'husband'
+          },
+          {
+            id: 'tx-cancelled',
+            type: TRANSACTION_TYPES.EXPENSE,
+            status: TRANSACTION_STATUS.CANCELLED,
+            amount: 9999,
+            categoryId: 'food',
+            date: '2026-06-03',
+            createdAt: '2026-06-03T10:00:00.000Z',
+            author: 'husband'
+          },
+          {
+            id: 'tx-service',
+            type: TRANSACTION_TYPES.SAVING_DELETE,
+            status: TRANSACTION_STATUS.ACTIVE,
+            service: true,
+            amount: 500,
+            savingId: 's1',
+            date: '2026-06-04',
+            createdAt: '2026-06-04T10:00:00.000Z',
+            author: 'husband'
+          }
+        ]
+      };
+    }
+
+    async function run(name, key, fn) {
+      try {
+        await fn();
+        results[key] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[key] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('TEST 1 — карточки совпадают с financeEngine', 'test1', () => {
+      const state = baseState();
+      const summary = getFinancialSummary(state);
+
+      assert(summary.freeBalance === calculateFreeBalance(state), 'free');
+      assert(summary.reservedBalance === calculateReservedBalance(state), 'reserved');
+      assert(summary.totalBalance === calculateTotalBalance(state), 'total');
+      assert(summary.savingsTotal === 10500, 'savings total');
+      assert(summary.obligationsTotal === 1500, 'obligations total');
+    });
+
+    await run('TEST 2 — расходы по категориям из transactions', 'test2', () => {
+      const state = baseState();
+      const items = getExpensesByCategory(state);
+
+      assert(items.length === 2, 'two categories');
+      assert(items[0].categoryId === 'food' && items[0].amount === 3000, 'food first');
+      assert(items[1].categoryId === 'home' && items[1].amount === 1500, 'home second');
+      assert(items.every((item) => item.count >= 1), 'counts present');
+    });
+
+    await run('TEST 3 — копилки отражают accumulated', 'test3', () => {
+      const state = baseState();
+      const items = getSavingsProgress(state);
+
+      assert(items.length === 2, 'two savings');
+      const vacation = items.find((item) => item.id === 's1');
+      assert(vacation.accumulated === getSavingAccumulated(state.savings[0]), 's1 accumulated');
+      assert(vacation.progressPercent === 80, 's1 progress');
+      const repair = items.find((item) => item.id === 's2');
+      assert(repair.accumulated === 2500, 's2 accumulated');
+      assert(repair.progressPercent === null, 's2 no target');
+    });
+
+    await run('TEST 4 — обязательства из state + payments', 'test4', () => {
+      const state = baseState();
+      const items = getObligationsOverview(state);
+
+      assert(items.length === 1, 'one obligation');
+      const item = items[0];
+      assert(item.name === 'Интернет', 'name');
+      assert(item.reserveAmount === 1500, 'reserve');
+      assert(item.paymentsCount === 1, 'payments count');
+      assert(item.paymentsTotal === 2000, 'payments total');
+      assert(item.paidUntil === computePaidUntilFromPayments(state.obligations[0]), 'paidUntil');
+      assert(item.status === 'active', 'status active');
+    });
+
+    await run('TEST 5 — отмена не влияет на статистику', 'test5', () => {
+      const state = baseState();
+      const before = getExpensesByCategory(state);
+      const foodBefore = before.find((item) => item.categoryId === 'food')?.amount ?? 0;
+
+      assert(foodBefore === 3000, 'baseline food');
+      assert(!isAnalyticsTransaction(state.transactions[2]), 'cancelled excluded');
+      assert(!isAnalyticsTransaction(state.transactions[3]), 'service excluded');
+
+      state.transactions[0].status = TRANSACTION_STATUS.CANCELLED;
+      const after = getExpensesByCategory(state);
+      const foodAfter = after.find((item) => item.categoryId === 'food');
+
+      assert(!foodAfter, 'food removed after cancel');
+      assert(after[0].amount === 1500, 'only home remains');
+    });
+
+    log('\n--- Summary ---', 'info');
+    Object.entries(results).forEach(([key, status]) => {
+      log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
+    });
+    log('\nГотово.');
+  </script>
+</body>
+</html>

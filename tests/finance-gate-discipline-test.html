@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: Gate Discipline (A2.5)</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>A2.5 — Gate Discipline Layer</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+    import { createExpense, updateSavings, payObligation, undoTransaction } from '../src/modules/financeGate.js';
+    import { runFinanceGate } from '../src/modules/financeGateHelpers.js';
+    import { recordExpense, recordReserve, todayIso } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 50000, reserved: 5000, spent: 0 }],
+        obligations: [{
+          id: 'obl',
+          name: 'Интернет',
+          accountId: 'acc',
+          reserveAmount: 5000,
+          paidUntil: '2026-06-01',
+          status: 'overdue',
+          payments: [],
+          createdAt: new Date().toISOString()
+        }],
+        savings: [{ id: 's1', name: 'Отпуск', accumulated: 0, targetAmount: 10000 }],
+        debts: [],
+        transactions: []
+      };
+    }
+
+    async function run(name, key, fn) {
+      try {
+        await fn();
+        results[key] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[key] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('TEST 1 — Direct bypass blocked in enforcement mode', 'test1', () => {
+      const state = baseState();
+      state.categories[0].reserved = 5000;
+      const spentBefore = state.categories[0].spent;
+      const result = recordExpense(state, 'food', 1000, 'acc', 'direct', todayIso(), 'husband');
+      assert(!result.ok, 'direct call must be blocked');
+      assert(result.error.includes('financeGate'), result.error);
+      assert(state.categories[0].spent === spentBefore, 'no mutation on block');
+    });
+
+    await run('TEST 2 — Gate flow without bypass warnings', 'test2', () => {
+      const warnings = [];
+      const origWarn = console.warn;
+      console.warn = (...args) => {
+        if (String(args[0]).includes('[FINANCE GATE WARNING]')) warnings.push(args);
+        origWarn(...args);
+      };
+
+      try {
+        const state = baseState();
+        const result = createExpense(state, 'food', 500, 'acc', 'gate', todayIso(), 'husband');
+        assert(result.ok, result.error);
+        assert(warnings.length === 0, 'no direct-call warnings through gate');
+      } finally {
+        console.warn = origWarn;
+      }
+    });
+
+    await run('TEST 3 — Savings integrity', 'test3', () => {
+      const state = baseState();
+      state.categories[0].reserved = 10000;
+
+      const deposit = updateSavings(state, {
+        action: 'deposit',
+        savingId: 's1',
+        amount: 2500,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(deposit.ok, deposit.error);
+      assert(state.savings[0].accumulated === 2500, 'deposit ok');
+
+      const withdraw = updateSavings(state, {
+        action: 'withdraw',
+        savingId: 's1',
+        amount: 500,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(withdraw.ok, withdraw.error);
+      assert(state.savings[0].accumulated === 2000, 'withdraw ok');
+    });
+
+    await run('TEST 4 — Obligations + undo LIFO', 'test4', () => {
+      const state = baseState();
+      const first = payObligation(state, 'obl', 1000, 'acc', '2026-08-01', '', '2026-07-01', 'husband');
+      const second = payObligation(state, 'obl', 1000, 'acc', '2026-10-01', '', '2026-09-01', 'husband');
+      assert(first.ok && second.ok, 'payments ok');
+
+      const badUndo = undoTransaction(state, first.transaction.id);
+      assert(!badUndo.ok, 'LIFO preserved');
+
+      const goodUndo = undoTransaction(state, second.transaction.id);
+      assert(goodUndo.ok, goodUndo.error);
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'paidUntil ok');
+    });
+
+    await run('TEST 5 — Decision model', 'test5', () => {
+      const state = baseState();
+      state.categories[0].reserved = 50000;
+
+      const allowDecision = runFinanceGate('createExpense', 1000, state, {
+        categoryId: 'food',
+        accountId: 'acc'
+      });
+      assert(allowDecision.decision === 'ALLOW', 'ALLOW decision');
+      assert(allowDecision.ok === true, 'ok true in soft mode');
+      assert(Array.isArray(allowDecision.warnings), 'warnings array');
+      assert(!('allowed' in allowDecision), 'legacy allowed removed');
+
+      const warnDecision = runFinanceGate('createExpense', 90000, state, {
+        categoryId: 'food',
+        accountId: 'acc'
+      });
+      assert(warnDecision.decision === 'WARN', 'WARN decision');
+      assert(warnDecision.ok === true, 'soft mode ok true');
+      assert(warnDecision.warnings.length > 0, 'warnings populated');
+      assert(warnDecision.reason != null, 'reason present');
+
+      assert(FINANCE_ENTRY_POINTS.EXPENSE === 'createExpense', 'registry intact');
+    });
+
+    log('\n--- Summary ---', 'info');
+    Object.entries(results).forEach(([key, status]) => {
+      log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
+    });
+    log('\nГотово.');
+  </script>
+</body>
+</html>

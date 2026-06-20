@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: financeRulesEngine (A3)</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>A3 — Budget Rules Engine</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      evaluateBudgetRules,
+      mergeGateAndRulesDecisions
+    } from '../src/modules/financeRulesEngine.js';
+    import { withGateContext, runFinanceGate } from '../src/modules/financeGateHelpers.js';
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+    import { createExpense, updateSavings } from '../src/modules/financeGate.js';
+    import { recordReserve, todayIso } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 5000, reserved: 5000, spent: 4500 }],
+        obligations: [],
+        savings: [{ id: 's1', name: 'Отпуск', accumulated: 2500, targetAmount: 10000 }],
+        debts: [],
+        transactions: []
+      };
+    }
+
+    async function run(name, key, fn) {
+      try {
+        await fn();
+        results[key] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[key] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('TEST 1 — Overspend rule', 'test1', () => {
+      const state = baseState();
+      const rule = evaluateBudgetRules({
+        operation: 'createExpense',
+        amount: 1000,
+        state,
+        categoryId: 'food'
+      });
+      assert(rule.decision === 'WARN', `decision=${rule.decision}`);
+      assert(rule.ruleTriggered === 'OVERSPEND', rule.ruleTriggered);
+    });
+
+    await run('TEST 2 — Low balance rule', 'test2', () => {
+      const state = baseState();
+      state.categories[0].reserved = 95000;
+      const rule = evaluateBudgetRules({
+        operation: 'createExpense',
+        amount: 100,
+        state,
+        categoryId: 'food'
+      });
+      assert(rule.decision === 'WARN', `decision=${rule.decision}`);
+      assert(rule.ruleTriggered === 'LOW_BALANCE', rule.ruleTriggered);
+    });
+
+    await run('TEST 3 — Savings protection rule', 'test3', () => {
+      const state = baseState();
+      const rule = evaluateBudgetRules({
+        operation: 'updateSavings',
+        amount: 2000,
+        state,
+        savingId: 's1',
+        action: 'withdraw'
+      });
+      assert(rule.decision === 'WARN', `decision=${rule.decision}`);
+      assert(rule.ruleTriggered === 'SAVINGS_PROTECTION', rule.ruleTriggered);
+    });
+
+    await run('TEST 4 — Obligation safety rule', 'test4', () => {
+      const state = baseState();
+      state.obligations = [{
+        id: 'obl',
+        name: 'X',
+        accountId: 'acc',
+        reserveAmount: 0,
+        paidUntil: '2020-01-01',
+        payments: [],
+        status: 'overdue'
+      }];
+      const rule = evaluateBudgetRules({
+        operation: 'createExpense',
+        amount: 500,
+        state,
+        categoryId: 'food'
+      });
+      assert(rule.decision === 'WARN', `decision=${rule.decision}`);
+      assert(rule.ruleTriggered === 'OBLIGATION_SAFETY', rule.ruleTriggered);
+    });
+
+    await run('TEST 5 — Rule + gate integration', 'test5', () => {
+      const ruleLogs = [];
+      const origLog = console.log;
+      console.log = (...args) => {
+        if (String(args[0]) === '[FINANCE RULES]') ruleLogs.push(args[1]);
+        origLog(...args);
+      };
+
+      try {
+        const merged = mergeGateAndRulesDecisions(
+          { decision: 'ALLOW', ok: true, warnings: [] },
+          { decision: 'WARN', reason: 'test', ruleTriggered: 'OVERSPEND' }
+        );
+        assert(merged.decision === 'WARN', 'merge prefers WARN');
+        assert(merged.warnings.includes('test'), 'warnings merged');
+
+        const state = baseState();
+        state.obligations = [{
+          id: 'obl',
+          name: 'X',
+          accountId: 'acc',
+          reserveAmount: 0,
+          paidUntil: '2020-01-01',
+          payments: [],
+          status: 'overdue'
+        }];
+
+        let gateDecision;
+        withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+          gateDecision = runFinanceGate('createExpense', 1000, state, {
+            categoryId: 'food',
+            accountId: 'acc'
+          });
+        });
+
+        assert(gateDecision.decision === 'WARN', `final=${gateDecision.decision}`);
+        assert(ruleLogs.length >= 1, 'rules logged');
+        assert(gateDecision.rulesDecision === 'WARN' || gateDecision.gateDecision != null, 'gate includes merge meta');
+
+        const expenseResult = createExpense(state, 'food', 100, 'acc', '', todayIso(), 'husband');
+        assert(expenseResult.ok, 'operations still allowed in soft mode');
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    log('\n--- Summary ---', 'info');
+    Object.entries(results).forEach(([key, status]) => {
+      log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
+    });
+    log('\nГотово.');
+  </script>
+</body>
+</html>

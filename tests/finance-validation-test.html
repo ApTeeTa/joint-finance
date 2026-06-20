@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: validateAvailableFunds</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>validateAvailableFunds</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { validateAvailableFunds } from '../src/modules/financeValidation.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+      categories: [{ id: 'food', name: 'Еда', limit: 50000, reserved: 10000, spent: 0 }],
+      obligations: [{ id: 'obl', name: 'X', accountId: 'acc', reserveAmount: 5000, paidUntil: '2026-12-01', payments: [] }],
+      savings: [{ id: 's1', name: 'Отпуск', accumulated: 3000 }],
+      debts: [{ id: 'd1', direction: 'we_owe', reserved: 2000, amount: 5000 }],
+      transactions: []
+    };
+
+    console.log(validateAvailableFunds(1000, state));
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('1. Достаточно свободных средств', () => {
+      const result = validateAvailableFunds(1000, state);
+      log(`  sample: ${JSON.stringify(result)}`, 'info');
+      assert(result.ok, 'ok');
+      assert(result.free === 80000, `free=${result.free}`);
+      assert(result.blocked === 20000, `blocked=${result.blocked}`);
+      assert(result.reason === null, 'no reason');
+    });
+
+    await run('2. Недостаточно свободных средств', () => {
+      const result = validateAvailableFunds(90000, state);
+      assert(!result.ok, 'not ok');
+      assert(result.free === 80000, `free=${result.free}`);
+      assert(result.reason === 'Недостаточно свободных средств', result.reason);
+    });
+
+    await run('3. Некорректная сумма', () => {
+      const result = validateAvailableFunds(-100, state);
+      assert(!result.ok, 'not ok');
+      assert(result.reason.includes('неотрицательным'), result.reason);
+    });
+
+    await run('4. Функция не изменяет state', () => {
+      const snapshot = JSON.stringify(state);
+      validateAvailableFunds(5000, state);
+      assert(JSON.stringify(state) === snapshot, 'state unchanged');
+    });
+
+    log('\nГотово.');
+  </script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: A3.5 Financial Core Hardening</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>A3.5 — Financial Core Hardening</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      calculateFreeBalance,
+      calculateTotalBalance,
+      calculateReservedBalance
+    } from '../src/modules/financeEngine.js';
+    import { checkFinancialInvariants } from '../src/modules/financeCoreInvariants.js';
+    import { withGateContext } from '../src/modules/financeGateHelpers.js';
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+    import {
+      spendSaving,
+      payObligation,
+      undoTransaction,
+      reserveCategory,
+      transferAccount,
+      createExpense
+    } from '../src/modules/financeGate.js';
+    import {
+      recordReserve,
+      recordAccountTransfer,
+      recordExpense,
+      todayIso
+    } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [
+          { id: 'acc1', name: 'RUB', currency: 'RUB', balance: 100000, owner: 'husband' },
+          { id: 'acc2', name: 'RUB2', currency: 'RUB', balance: 5000, owner: 'husband' }
+        ],
+        categories: [{ id: 'food', name: 'Еда', limit: 50000, reserved: 0, spent: 0 }],
+        obligations: [{
+          id: 'obl',
+          name: 'Интернет',
+          accountId: 'acc1',
+          reserveAmount: 0,
+          paidUntil: '2026-06-01',
+          status: 'overdue',
+          payments: [],
+          createdAt: new Date().toISOString()
+        }],
+        savings: [{
+          id: 's1',
+          name: 'Отпуск',
+          accumulated: 10000,
+          targetAmount: 10000,
+          savingType: 'recurring'
+        }],
+        debts: [],
+        transactions: []
+      };
+    }
+
+    async function run(name, key, fn) {
+      try {
+        await fn();
+        results[key] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[key] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('TEST 1 — recordReserve защищает free balance', 'test1', () => {
+      const state = baseState();
+      state.categories[0].reserved = 99000;
+      const fail = withGateContext(FINANCE_ENTRY_POINTS.RESERVE, () =>
+        recordReserve(state, 'food', 2000, '', todayIso(), 'husband')
+      );
+      assert(!fail.ok, 'must fail');
+      assert(fail.error.includes('свобод'), fail.error);
+      assert(calculateFreeBalance(state) === 1000, 'free unchanged');
+    });
+
+    await run('TEST 2 — recordAccountTransfer не уходит в минус', 'test2', () => {
+      const state = baseState();
+      state.accounts[0].balance = 1000;
+      const fail = transferAccount(state, {
+        sourceAccountId: 'acc1',
+        destAccountId: 'acc2',
+        sourceAmount: 5000,
+        creditAmount: 5000,
+        sourceCurrency: 'RUB',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(!fail.ok, 'must fail');
+      assert(state.accounts[0].balance === 1000, 'source unchanged');
+    });
+
+    await run('TEST 3 — recordSavingSpend проходит через gate', 'test3', () => {
+      const gateLogs = [];
+      const origLog = console.log;
+      console.log = (...args) => {
+        if (String(args[0]) === '[FINANCE GATE]') gateLogs.push(args[1]);
+        origLog(...args);
+      };
+
+      try {
+        const state = baseState();
+        const result = spendSaving(state, 's1', 'acc1', '', todayIso(), 'husband');
+        assert(result.ok, result.error);
+        assert(gateLogs.some((entry) => entry.operation === 'spendSaving'), 'gate logged spendSaving');
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    await run('TEST 4 — обязательства работают без UI auto-reserve', 'test4', () => {
+      const state = baseState();
+      const result = payObligation(
+        state,
+        'obl',
+        2000,
+        'acc1',
+        '2026-08-01',
+        '',
+        todayIso(),
+        'husband'
+      );
+      assert(result.ok, result.error);
+      assert(state.obligations[0].payments.length === 1, 'payment recorded');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'paidUntil ok');
+      assert(checkFinancialInvariants(state).ok, 'invariants ok');
+    });
+
+    await run('TEST 5 — LIFO отмена не сломана', 'test5', () => {
+      const state = baseState();
+      state.obligations[0].reserveAmount = 5000;
+      const first = payObligation(state, 'obl', 1000, 'acc1', '2026-08-01', '', '2026-07-01', 'husband');
+      const second = payObligation(state, 'obl', 1000, 'acc1', '2026-10-01', '', '2026-09-01', 'husband');
+      assert(first.ok && second.ok, 'payments ok');
+
+      const badUndo = undoTransaction(state, first.transaction.id);
+      assert(!badUndo.ok, 'LIFO preserved');
+
+      const goodUndo = undoTransaction(state, second.transaction.id);
+      assert(goodUndo.ok, goodUndo.error);
+    });
+
+    await run('TEST 6 — reserved не превышает total', 'test6', () => {
+      const state = baseState();
+      const ok = reserveCategory(state, 'food', 5000, '', todayIso(), 'husband');
+      assert(ok.ok, ok.error);
+      assert(calculateReservedBalance(state) <= calculateTotalBalance(state), 'reserved <= total');
+      assert(checkFinancialInvariants(state).ok, 'invariants ok');
+    });
+
+    await run('TEST 7 — обычный сценарий expense 1:1', 'test7', () => {
+      const state = baseState();
+      reserveCategory(state, 'food', 5000, '', todayIso(), 'husband');
+      const freeBefore = calculateFreeBalance(state);
+      const expense = createExpense(state, 'food', 2000, 'acc1', 'test', todayIso(), 'husband');
+      assert(expense.ok, expense.error);
+      assert(state.categories[0].spent === 2000, 'spent updated');
+      assert(calculateFreeBalance(state) === freeBefore, 'free unchanged after expense from reserve');
+    });
+
+    log('\n--- Summary ---', 'info');
+    Object.entries(results).forEach(([key, status]) => {
+      log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
+    });
+    log('\nГотово.');
+  </script>
+</body>
+</html>

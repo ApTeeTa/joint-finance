@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1e3a5f">
+  <title>Joint Finance</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
+            accent: { 500: '#10b981', 600: '#059669' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto px-4 py-4">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-xl font-bold text-slate-900">Joint Finance</h1>
+        <div class="flex gap-2" id="profile-selector">
+          <button
+            type="button"
+            data-profile="husband"
+            class="profile-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >Муж</button>
+          <button
+            type="button"
+            data-profile="wife"
+            class="profile-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >Жена</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="bg-slate-50 rounded-xl p-3 text-center">
+          <p class="text-xs text-slate-500 mb-1">Общий баланс</p>
+          <p id="total-balance" class="text-lg font-semibold text-slate-900">0 ₽</p>
+        </div>
+        <div class="bg-emerald-50 rounded-xl p-3 text-center">
+          <p class="text-xs text-emerald-600 mb-1">Свободно</p>
+          <p id="free-balance" class="text-lg font-semibold text-emerald-700">0 ₽</p>
+        </div>
+        <div class="bg-amber-50 rounded-xl p-3 text-center">
+          <p class="text-xs text-amber-600 mb-1">Зарезервировано</p>
+          <p id="reserved-balance" class="text-lg font-semibold text-amber-700">0 ₽</p>
+        </div>
+      </div>
+
+      <nav class="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1" id="tab-nav">
+        <button type="button" data-tab="accounts" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Счета</button>
+        <button type="button" data-tab="categories" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Категории</button>
+        <button type="button" data-tab="history" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">История</button>
+        <button type="button" data-tab="obligations" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Обязательства</button>
+        <button type="button" data-tab="savings" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Копилки</button>
+        <button type="button" data-tab="debts" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Долги</button>
+        <button type="button" data-tab="stats" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Статистика</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="tab-content" class="max-w-4xl mx-auto px-4 py-6">
+  </main>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

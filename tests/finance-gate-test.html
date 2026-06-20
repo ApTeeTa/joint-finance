@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: financeGate (A2)</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>A2 — financeGate integration</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+    import { createExpense, updateSavings, payObligation, undoTransaction, reserveCategory } from '../src/modules/financeGate.js';
+    import { recordReserve, todayIso } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+    import { runFinanceGate } from '../src/modules/financeGateHelpers.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 50000, reserved: 0, spent: 0 }],
+        obligations: [{
+          id: 'obl',
+          name: 'Интернет',
+          accountId: 'acc',
+          reserveAmount: 5000,
+          paidUntil: '2026-06-01',
+          status: 'overdue',
+          payments: [],
+          createdAt: new Date().toISOString()
+        }],
+        savings: [{ id: 's1', name: 'Отпуск', accumulated: 0, targetAmount: 10000 }],
+        debts: [],
+        transactions: []
+      };
+    }
+
+    async function run(name, key, fn) {
+      try {
+        await fn();
+        results[key] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[key] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('TEST 1 — Expense flow', 'test1', () => {
+      const gateLogs = [];
+      const origLog = console.log;
+      console.log = (...args) => {
+        if (String(args[0]) === '[FINANCE GATE]') gateLogs.push(args[1]);
+        origLog(...args);
+      };
+
+      try {
+        const state = baseState();
+        reserveCategory(state, 'food', 5000, '', todayIso(), 'husband');
+        const freeBefore = calculateFreeBalance(state);
+        const result = createExpense(state, 'food', 2000, 'acc', 'тест', todayIso(), 'husband');
+        assert(result.ok, result.error);
+        assert(state.categories[0].spent === 2000, 'spent updated');
+        assert(state.categories[0].reserved === 3000, 'reserved reduced');
+        assert(calculateFreeBalance(state) === freeBefore, 'free unchanged after expense from reserve');
+        assert(gateLogs.some((entry) => entry.operation === 'createExpense'), 'gate logged');
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    await run('TEST 2 — Insufficient funds (soft mode)', 'test2', () => {
+      const state = baseState();
+      state.categories[0].reserved = 50000;
+      const free = calculateFreeBalance(state);
+      assert(free === 50000, `free=${free}`);
+
+      const decision = runFinanceGate('createExpense', 90000, state, { categoryId: 'food', accountId: 'acc' });
+      assert(decision.decision === 'WARN', 'soft mode WARN decision');
+      assert(decision.ok === true, 'soft mode ok true');
+      assert(decision.warnings?.length, 'warnings present');
+
+      const result = createExpense(state, 'food', 90000, 'acc', 'big', todayIso(), 'husband');
+      assert(!result.ok, 'business layer may reject');
+    });
+
+    await run('TEST 3 — Savings deposit / withdraw', 'test3', () => {
+      const state = baseState();
+      const deposit = updateSavings(state, {
+        action: 'deposit',
+        savingId: 's1',
+        amount: 3000,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(deposit.ok, deposit.error);
+      assert(state.savings[0].accumulated === 3000, 'accumulated after deposit');
+
+      const withdraw = updateSavings(state, {
+        action: 'withdraw',
+        savingId: 's1',
+        amount: 1000,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(withdraw.ok, withdraw.error);
+      assert(state.savings[0].accumulated === 2000, 'accumulated after withdraw');
+    });
+
+    await run('TEST 4 — Obligations payment', 'test4', () => {
+      const state = baseState();
+      const result = payObligation(
+        state,
+        'obl',
+        2000,
+        'acc',
+        '2026-08-01',
+        '',
+        todayIso(),
+        'husband'
+      );
+      assert(result.ok, result.error);
+      assert(state.obligations[0].payments.length === 1, 'payments[] updated');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'paidUntil from payments');
+    });
+
+    await run('TEST 5 — Undo LIFO', 'test5', () => {
+      const state = baseState();
+      const first = payObligation(state, 'obl', 1000, 'acc', '2026-08-01', '', '2026-07-01', 'husband');
+      const second = payObligation(state, 'obl', 1000, 'acc', '2026-10-01', '', '2026-09-01', 'husband');
+      assert(first.ok && second.ok, 'payments ok');
+
+      const badUndo = undoTransaction(state, first.transaction.id);
+      assert(!badUndo.ok, 'non-LIFO blocked');
+
+      const goodUndo = undoTransaction(state, second.transaction.id);
+      assert(goodUndo.ok, goodUndo.error);
+      assert(state.obligations[0].payments.length === 1, 'one payment left');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-08-01', 'paidUntil rolled back');
+    });
+
+    await run('TEST 6 — Logging', 'test6', () => {
+      const captured = [];
+      const origLog = console.log;
+      console.log = (...args) => {
+        if (String(args[0]) === '[FINANCE GATE]') captured.push(args[1]);
+        origLog(...args);
+      };
+
+      try {
+        const state = baseState();
+        reserveCategory(state, 'food', 1000, '', todayIso(), 'husband');
+        createExpense(state, 'food', 500, 'acc', '', todayIso(), 'husband');
+        assert(captured.length >= 1, 'gate logs present');
+        assert(captured.some((e) => e.operation === 'createExpense'), 'createExpense logged');
+        assert(captured[0].validation != null, 'validation in log');
+        assert(captured[0].decision?.decision === 'ALLOW', 'decision ALLOW');
+      } finally {
+        console.log = origLog;
+      }
+    });
+
+    log('\n--- Summary ---', 'info');
+    Object.entries(results).forEach(([key, status]) => {
+      log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
+    });
+    log('\nГотово.');
+  </script>
+</body>
+</html>

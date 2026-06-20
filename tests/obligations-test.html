@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: Обязательства</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Тесты модуля «Обязательства»</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      calculateTotalBalance,
+      calculateFreeBalance,
+      calculateReservedBalance
+    } from '../src/modules/financeEngine.js';
+    import { payObligation } from '../src/modules/financeGate.js';
+    import {
+      getAccountTransactions,
+      TRANSACTION_TYPES,
+      todayIso
+    } from '../src/modules/transactions.js';
+    import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
+
+    const out = document.getElementById('out');
+    const results = [];
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(condition, message) {
+      if (!condition) throw new Error(message);
+    }
+
+function addDays(iso, days) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+    function daysUntilPaidUntil(paidUntil) {
+      const today = new Date(todayIso() + 'T00:00:00');
+      const until = new Date(paidUntil + 'T00:00:00');
+      return Math.round((until - today) / 86400000);
+    }
+
+    function getUiStatus(paidUntil) {
+      const days = daysUntilPaidUntil(paidUntil);
+      if (days < 0) return 'overdue';
+      if (days <= 30) return 'due';
+      return 'active';
+    }
+
+    function createBaseState(overrides = {}) {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc-rub', name: 'Основной', owner: 'husband', currency: 'RUB', balance: 100000 }],
+        categories: [],
+        transactions: [],
+        obligations: [],
+        savings: [],
+        debts: [],
+        ...overrides
+      };
+    }
+
+    function createObligation(state, data) {
+      const obligation = {
+        id: crypto.randomUUID(),
+        name: data.name,
+        accountId: data.accountId,
+        categoryId: data.categoryId ?? null,
+        reserveAmount: 0,
+        targetAmount: data.targetAmount ?? null,
+        paidUntil: data.paidUntil,
+        comment: '',
+        status: 'active',
+        payments: [],
+        createdAt: new Date().toISOString()
+      };
+      state.obligations.push(obligation);
+      return obligation;
+    }
+
+    function reserveObligation(state, obligationId, amount) {
+      const obligation = state.obligations.find((o) => o.id === obligationId);
+      const value = Number(amount);
+      const free = calculateFreeBalance(state);
+      if (value > free) return { ok: false, error: 'Недостаточно свободных средств' };
+      obligation.reserveAmount = (obligation.reserveAmount ?? 0) + value;
+      return { ok: true };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        results.push({ name, ok: true });
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results.push({ name, ok: false, error: e.message });
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('TEST 1. Создание и сохранение', () => {
+      const state = createBaseState();
+      const paidUntil = addDays(todayIso(), 60);
+      const o = createObligation(state, { name: 'Интернет', accountId: 'acc-rub', targetAmount: 500, paidUntil });
+      assert(state.obligations.length === 1, 'нет карточки');
+      assert(o.targetAmount === 500, 'ориентир');
+      const reloaded = JSON.parse(JSON.stringify(state)).obligations;
+      assert(reloaded[0].name === 'Интернет', 'reload');
+    });
+
+    await run('TEST 2. Резерв 1000', () => {
+      const state = createBaseState();
+      const o = createObligation(state, { name: 'Интернет', accountId: 'acc-rub', paidUntil: addDays(todayIso(), 60) });
+      const freeBefore = calculateFreeBalance(state);
+      const totalBefore = calculateTotalBalance(state);
+      const accBefore = state.accounts[0].balance;
+      reserveObligation(state, o.id, 1000);
+      assert(o.reserveAmount === 1000, 'reserve');
+      assert(calculateFreeBalance(state) === freeBefore - 1000, 'free');
+      assert(calculateTotalBalance(state) === totalBefore, 'total');
+      assert(state.accounts[0].balance === accBefore, 'account');
+    });
+
+    await run('TEST 3. Запрет резерва сверх free', () => {
+      const state = createBaseState({ accounts: [{ id: 'acc-rub', name: 'A', currency: 'RUB', balance: 5000, owner: 'husband' }] });
+      state.categories = [{ id: 'c1', name: 'X', reserved: 4500, spent: 0, limit: 0 }];
+      const o = createObligation(state, { name: 'Интернет', accountId: 'acc-rub', paidUntil: addDays(todayIso(), 60) });
+      const r = reserveObligation(state, o.id, calculateFreeBalance(state) + 1);
+      assert(!r.ok, 'must fail');
+      assert(r.error.includes('свободных'), r.error);
+    });
+
+    await run('TEST 4. Оплата 2000', () => {
+      const state = createBaseState();
+      const o = createObligation(state, { name: 'Интернет', accountId: 'acc-rub', paidUntil: addDays(todayIso(), 10) });
+      reserveObligation(state, o.id, 3000);
+      const accBefore = state.accounts[0].balance;
+      const newUntil = addDays(todayIso(), 40);
+      const pay = payObligation(state, o.id, 2000, 'acc-rub', newUntil, '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      assert(o.reserveAmount === 1000, 'reserve after pay');
+      assert(state.accounts[0].balance === accBefore - 2000, 'account');
+      assert(state.transactions.some((t) => t.type === TRANSACTION_TYPES.EXPENSE), 'expense');
+      assert(computePaidUntilFromPayments(o) === newUntil, 'paidUntil from payments');
+      assert(getAccountTransactions(state, 'acc-rub', 3).some((t) => t.obligationId === o.id), 'account ops');
+    });
+
+    await run('TEST 5. Auto-reserve при оплате сверх резерва (tx layer)', () => {
+      const state = createBaseState();
+      const o = createObligation(state, { name: 'X', accountId: 'acc-rub', paidUntil: addDays(todayIso(), 10) });
+      reserveObligation(state, o.id, 1000);
+      const freeBefore = calculateFreeBalance(state);
+      const pay = payObligation(state, o.id, 2000, 'acc-rub', addDays(todayIso(), 40), '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      assert(o.reserveAmount === 0, 'reserve consumed');
+      assert(calculateFreeBalance(state) === freeBefore - 1000, 'only delta auto-reserved from free');
+    });
+
+    await run('TEST 6. Запрет при нехватке на счёте', () => {
+      const state = createBaseState({
+        accounts: [
+          { id: 'acc-rub', name: 'Основной', currency: 'RUB', balance: 100000, owner: 'husband' },
+          { id: 'acc-low', name: 'Малый', currency: 'RUB', balance: 500, owner: 'husband' }
+        ]
+      });
+      const o = createObligation(state, { name: 'X', accountId: 'acc-rub', paidUntil: addDays(todayIso(), 10) });
+      const reserve = reserveObligation(state, o.id, 3000);
+      assert(reserve.ok, 'резерв должен пройти');
+      const n = state.transactions.length;
+      const pay = payObligation(state, o.id, 1000, 'acc-low', addDays(todayIso(), 40), '', todayIso(), 'husband');
+      assert(!pay.ok, 'fail');
+      assert(pay.error.includes('счете'), pay.error);
+      assert(o.reserveAmount === 3000, 'резерв не изменился');
+      assert(state.transactions.length === n, 'no tx');
+    });
+
+    await run('TEST 7. USD счёт', () => {
+      const state = createBaseState({ accounts: [{ id: 'acc-usd', name: 'USD', currency: 'USD', balance: 100, owner: 'husband' }] });
+      const o = createObligation(state, { name: 'X', accountId: 'acc-usd', paidUntil: addDays(todayIso(), 10) });
+      reserveObligation(state, o.id, 9200);
+      const before = state.accounts[0].balance;
+      const pay = payObligation(state, o.id, 920, 'acc-usd', addDays(todayIso(), 40), '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      const debit = Math.round((920 / 92) * 100) / 100;
+      assert(Math.abs(state.accounts[0].balance - (before - debit)) < 0.01, 'usd balance');
+    });
+
+    await run('TEST 8. overdue', () => {
+      assert(getUiStatus(addDays(todayIso(), -5)) === 'overdue', 'overdue');
+      assert(daysUntilPaidUntil(addDays(todayIso(), -5)) === -5, 'days');
+    });
+
+    await run('TEST 9. due', () => {
+      assert(getUiStatus(addDays(todayIso(), 20)) === 'due', 'due');
+    });
+
+    await run('TEST 10. удаление', () => {
+      const state = createBaseState();
+      const o = createObligation(state, { name: 'X', accountId: 'acc-rub', paidUntil: addDays(todayIso(), 60) });
+      reserveObligation(state, o.id, 1500);
+      const freeAfterReserve = calculateFreeBalance(state);
+      state.obligations = [];
+      assert(calculateFreeBalance(state) === freeAfterReserve + 1500, 'free restored');
+    });
+
+    const passed = results.filter((r) => r.ok).length;
+    log(`\nИтого: ${passed}/${results.length}`, passed === results.length ? 'pass' : 'fail');
+  </script>
+</body>
+</html>
