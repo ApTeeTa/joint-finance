@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1e3a5f">
   <title>Joint Finance</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -18,55 +18,118 @@
       }
     }
   </script>
-</head>
-<body class="min-h-screen bg-slate-50 text-slate-800">
+  <style>
+    html {
+      overflow-x: hidden;
+      max-width: 100%;
+    }
 
-  <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
-    <div class="max-w-4xl mx-auto px-4 py-4">
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="text-xl font-bold text-slate-900">Joint Finance</h1>
-        <div class="flex gap-2" id="profile-selector">
+    body {
+      overflow-x: hidden;
+      overflow-y: auto;
+      max-width: 100%;
+      min-height: 100dvh;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #app-header,
+    #tab-content {
+      min-width: 0;
+    }
+
+    #tab-nav {
+      pointer-events: auto;
+    }
+
+    #tab-nav .tab-btn {
+      pointer-events: auto;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    @media (max-width: 767px) {
+      #tab-nav {
+        overflow-x: visible;
+        overflow-y: visible;
+        touch-action: manipulation;
+      }
+    }
+
+    @media (min-width: 768px) {
+      #tab-nav {
+        overflow-x: auto;
+        touch-action: pan-x;
+        scrollbar-width: thin;
+      }
+    }
+
+    #tab-content {
+      padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+    }
+
+    [data-modal].hidden {
+      display: none !important;
+      pointer-events: none !important;
+    }
+
+    .overflow-x-auto {
+      touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800 overflow-x-hidden">
+
+  <header id="app-header" class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-20">
+    <div class="max-w-4xl mx-auto px-4 py-4 min-w-0">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <h1 class="text-xl font-bold text-slate-900 shrink-0">Joint Finance</h1>
+        <div class="flex gap-2 shrink-0" id="profile-selector">
           <button
             type="button"
             data-profile="husband"
-            class="profile-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            class="profile-btn px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors"
           >Муж</button>
           <button
             type="button"
             data-profile="wife"
-            class="profile-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            class="profile-btn px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors"
           >Жена</button>
         </div>
       </div>
 
-      <div class="grid grid-cols-3 gap-3 mb-4">
-        <div class="bg-slate-50 rounded-xl p-3 text-center">
-          <p class="text-xs text-slate-500 mb-1">Общий баланс</p>
-          <p id="total-balance" class="text-lg font-semibold text-slate-900">0 ₽</p>
+      <div class="grid grid-cols-3 gap-2 sm:gap-3 mb-4 min-w-0">
+        <div class="bg-slate-50 rounded-xl p-2 sm:p-3 text-center min-w-0">
+          <p class="text-xs text-slate-500 mb-1 truncate">Общий баланс</p>
+          <p id="total-balance" class="text-base sm:text-lg font-semibold text-slate-900 truncate">0 ₽</p>
         </div>
-        <div class="bg-emerald-50 rounded-xl p-3 text-center">
-          <p class="text-xs text-emerald-600 mb-1">Свободно</p>
-          <p id="free-balance" class="text-lg font-semibold text-emerald-700">0 ₽</p>
+        <div class="bg-emerald-50 rounded-xl p-2 sm:p-3 text-center min-w-0">
+          <p class="text-xs text-emerald-600 mb-1 truncate">Свободно</p>
+          <p id="free-balance" class="text-base sm:text-lg font-semibold text-emerald-700 truncate">0 ₽</p>
         </div>
-        <div class="bg-amber-50 rounded-xl p-3 text-center">
-          <p class="text-xs text-amber-600 mb-1">Зарезервировано</p>
-          <p id="reserved-balance" class="text-lg font-semibold text-amber-700">0 ₽</p>
+        <div class="bg-amber-50 rounded-xl p-2 sm:p-3 text-center min-w-0">
+          <p class="text-xs text-amber-600 mb-1 truncate">Зарезервировано</p>
+          <p id="reserved-balance" class="text-base sm:text-lg font-semibold text-amber-700 truncate">0 ₽</p>
         </div>
       </div>
 
-      <nav class="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1" id="tab-nav">
-        <button type="button" data-tab="accounts" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Счета</button>
-        <button type="button" data-tab="categories" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Категории</button>
-        <button type="button" data-tab="history" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">История</button>
-        <button type="button" data-tab="obligations" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Обязательства</button>
-        <button type="button" data-tab="savings" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Копилки</button>
-        <button type="button" data-tab="debts" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Долги</button>
-        <button type="button" data-tab="stats" class="tab-btn whitespace-nowrap px-3 py-2 rounded-lg text-sm font-medium transition-colors">Статистика</button>
+      <nav
+        class="grid grid-cols-3 gap-1 sm:grid-cols-4 md:flex md:flex-nowrap md:overflow-x-auto md:pb-1 -mx-1 px-1"
+        id="tab-nav"
+        aria-label="Навигация"
+      >
+        <button type="button" data-tab="accounts" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Счета</button>
+        <button type="button" data-tab="categories" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Категории</button>
+        <button type="button" data-tab="history" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">История</button>
+        <button type="button" data-tab="obligations" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Обязательства</button>
+        <button type="button" data-tab="savings" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Копилки</button>
+        <button type="button" data-tab="debts" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Долги</button>
+        <button type="button" data-tab="stats" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center col-span-3 sm:col-span-4 md:col-span-1">Статистика</button>
       </nav>
     </div>
   </header>
 
-  <main id="tab-content" class="max-w-4xl mx-auto px-4 py-6">
+  <main id="tab-content" class="relative z-0 max-w-4xl mx-auto px-4 py-6 min-w-0 overflow-x-hidden">
   </main>
 
   <script type="module" src="src/app.js"></script>
