@@ -43,10 +43,6 @@ function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function findCategory(state, categoryId) {
   return (state.categories ?? []).find((category) => category.id === categoryId);
 }
