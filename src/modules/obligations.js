@@ -11,6 +11,7 @@ import {
   diagnosePaidUntilShadow,
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
+import { openModal, closeModal, isWithinAppUi, relocateModals } from './modalLayer.js';
 
 export {
   computePaidUntilFromPayments,
@@ -432,16 +433,6 @@ function refreshSelects(state, container) {
   });
 }
 
-function openModal(container, modalKey) {
-  const modal = container.querySelector(`[data-modal="${modalKey}"]`);
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeModal(container, modalKey) {
-  const modal = container.querySelector(`[data-modal="${modalKey}"]`);
-  if (modal) modal.classList.add('hidden');
-}
-
 function readFormData(form) {
   const formData = new FormData(form);
   return {
@@ -468,10 +459,11 @@ export function initObligationsHandlers(state, container, onStateChange) {
   }
   container.dataset.obligationsHandlersBound = 'true';
 
-  container.addEventListener('click', (event) => {
+  document.addEventListener('click', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const closeBtn = event.target.closest('[data-action="close-modal"]');
     if (closeBtn) {
-      closeModal(container, closeBtn.dataset.modal);
+      closeModal(closeBtn.dataset.modal);
       return;
     }
 
@@ -481,7 +473,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
     if (action === 'open-add-obligation') {
       const form = container.querySelector('[data-form="add-obligation"]');
       if (form) form.reset();
-      openModal(container, 'add-obligation');
+      openModal('add-obligation');
       refreshSelects(state, container);
       return;
     }
@@ -496,7 +488,8 @@ export function initObligationsHandlers(state, container, onStateChange) {
 
       const modal = container.querySelector('[data-modal="edit-obligation"]');
       modal.outerHTML = renderFormModal('edit-obligation', 'Редактирование', 'Сохранить', obligation);
-      openModal(container, 'edit-obligation');
+      relocateModals(container);
+      openModal('edit-obligation');
       refreshSelects(state, container);
       return;
     }
@@ -519,7 +512,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
       form.comment.value = '';
       container.querySelector('[data-pay-obligation-title]').textContent = obligation.name;
 
-      openModal(container, 'pay-obligation');
+      openModal('pay-obligation');
       refreshSelects(state, container);
       return;
     }
@@ -562,7 +555,8 @@ export function initObligationsHandlers(state, container, onStateChange) {
     }
   });
 
-  container.addEventListener('submit', (event) => {
+  document.addEventListener('submit', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const form = event.target.closest('[data-form]');
     if (!form) return;
     event.preventDefault();
@@ -572,7 +566,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
 
     if (formKey === 'add-obligation') {
       if (createObligation(state, data)) {
-        closeModal(container, 'add-obligation');
+        closeModal('add-obligation');
         refresh();
       }
       return;
@@ -580,7 +574,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
 
     if (formKey === 'edit-obligation') {
       if (updateObligation(state, data.obligationId, data)) {
-        closeModal(container, 'edit-obligation');
+        closeModal('edit-obligation');
         refresh();
       }
       return;
@@ -603,7 +597,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
         return;
       }
 
-      closeModal(container, 'pay-obligation');
+      closeModal('pay-obligation');
       refresh();
     }
   });

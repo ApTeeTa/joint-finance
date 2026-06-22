@@ -8,6 +8,7 @@ import {
   todayIso
 } from './transactions.js';
 import { undoTransaction } from './financeGate.js';
+import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -206,16 +207,6 @@ export function renderHistory(state, container) {
   `;
 }
 
-function openModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.add('hidden');
-}
-
 function refresh(state, container, onUpdate) {
   renderHistory(state, container);
   if (typeof onUpdate === 'function') {
@@ -227,12 +218,13 @@ export function initHistoryHandlers(state, container, onUpdate) {
   if (container.dataset.historyHandlersBound === 'true') return;
   container.dataset.historyHandlersBound = 'true';
 
-  container.addEventListener('click', (event) => {
+  document.addEventListener('click', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
     if (target.closest('[data-action="close-modal"]')) {
       const btn = target.closest('[data-action="close-modal"]');
-      closeModal(container, btn.dataset.modal);
+      closeModal(btn.dataset.modal);
       return;
     }
 
@@ -258,11 +250,12 @@ export function initHistoryHandlers(state, container, onUpdate) {
         form.comment.value = tx.comment ?? '';
         form.date.value = tx.date || todayIso();
       }
-      openModal(container, 'edit-transaction');
+      openModal('edit-transaction');
     }
   });
 
-  container.addEventListener('submit', (event) => {
+  document.addEventListener('submit', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
     const form = event.target.closest('[data-form="edit-transaction"]');
@@ -278,7 +271,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
       return;
     }
 
-    closeModal(container, 'edit-transaction');
+    closeModal('edit-transaction');
     refresh(state, container, onUpdate);
   });
 }

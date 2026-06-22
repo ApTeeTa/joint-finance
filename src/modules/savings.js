@@ -10,6 +10,7 @@ import {
   getSavingAccumulated,
   todayIso
 } from './transactions.js';
+import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
 
 const DEADLINE_LABELS = {
   none: 'Без срока',
@@ -565,16 +566,6 @@ export function renderSavings(state, container) {
   `;
 }
 
-function openModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.add('hidden');
-}
-
 function toggleDeadlineDateField(container, prefix, deadlineType) {
   const wrap = container.querySelector(`[data-deadline-date-wrap="${prefix}"]`);
   if (wrap) {
@@ -609,33 +600,35 @@ export function initSavingsHandlers(state, container, onUpdate) {
   if (container.dataset.savingsHandlersBound === 'true') return;
   container.dataset.savingsHandlersBound = 'true';
 
-  container.addEventListener('change', (event) => {
+  document.addEventListener('change', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const select = event.target.closest('[data-deadline-type]');
     if (!select) return;
     toggleDeadlineDateField(container, select.dataset.deadlineType, select.value);
   });
 
-  container.addEventListener('click', (event) => {
+  document.addEventListener('click', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
     if (target.closest('[data-action="open-add-saving"]')) {
       const form = container.querySelector('[data-form="add-saving"]');
       if (form) form.reset();
       toggleDeadlineDateField(container, 'add', 'none');
-      openModal(container, 'add-saving');
+      openModal('add-saving');
       return;
     }
 
     if (target.closest('[data-action="close-modal"]')) {
       const btn = target.closest('[data-action="close-modal"]');
-      closeModal(container, btn.dataset.modal);
+      closeModal(btn.dataset.modal);
       return;
     }
 
     if (target.closest('[data-action="open-edit-saving"]')) {
       const btn = target.closest('[data-action="open-edit-saving"]');
       fillEditSavingForm(state, container, btn.dataset.savingId);
-      openModal(container, 'edit-saving');
+      openModal('edit-saving');
       return;
     }
 
@@ -647,7 +640,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
         form.amount.value = '';
         form.comment.value = '';
       }
-      openModal(container, 'deposit-saving');
+      openModal('deposit-saving');
       return;
     }
 
@@ -659,7 +652,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
         form.amount.value = '';
         form.comment.value = '';
       }
-      openModal(container, 'withdraw-saving');
+      openModal('withdraw-saving');
       return;
     }
 
@@ -673,7 +666,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
           form.accountId.selectedIndex = 0;
         }
       }
-      openModal(container, 'spend-saving');
+      openModal('spend-saving');
       return;
     }
 
@@ -690,7 +683,8 @@ export function initSavingsHandlers(state, container, onUpdate) {
     }
   });
 
-  container.addEventListener('submit', (event) => {
+  document.addEventListener('submit', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
     const addForm = event.target.closest('[data-form="add-saving"]');
@@ -709,7 +703,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
         deadline.deadlineDate,
         addForm.savingType.value
       )) {
-        closeModal(container, 'add-saving');
+        closeModal('add-saving');
         addForm.reset();
         refresh(state, container, onUpdate);
       }
@@ -733,7 +727,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
         deadline.deadlineDate,
         editForm.savingType.value
       )) {
-        closeModal(container, 'edit-saving');
+        closeModal('edit-saving');
         refresh(state, container, onUpdate);
       }
       return;
@@ -754,7 +748,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
         alert(result.error);
         return;
       }
-      closeModal(container, 'deposit-saving');
+      closeModal('deposit-saving');
       refresh(state, container, onUpdate);
       return;
     }
@@ -773,7 +767,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
         alert(result.error);
         return;
       }
-      closeModal(container, 'withdraw-saving');
+      closeModal('withdraw-saving');
       refresh(state, container, onUpdate);
       return;
     }
@@ -793,7 +787,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
         alert(result.error);
         return;
       }
-      closeModal(container, 'spend-saving');
+      closeModal('spend-saving');
       refresh(state, container, onUpdate);
     }
   });
