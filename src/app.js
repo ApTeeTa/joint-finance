@@ -12,6 +12,7 @@ import { renderObligations, initObligationsHandlers } from './modules/obligation
 import { renderStats, initStatsHandlers } from './modules/stats.js';
 import { reconcileLegacyTransactions } from './modules/transactions.js';
 import { saveState, loadState, clearState } from './modules/storage.js';
+import { relocateModals, closeAllModals } from './modules/modalLayer.js';
 
 const TAB_LABELS = {
   accounts: 'Счета',
@@ -120,6 +121,12 @@ function resetAllData() {
   location.reload();
 }
 
+function finishTabRender() {
+  closeAllModals();
+  relocateModals(tabContent);
+  onStateChange();
+}
+
 function renderTab(tab) {
   if (!tabContent || !TAB_MESSAGES[tab]) return;
 
@@ -136,49 +143,49 @@ function renderTab(tab) {
   if (tab === 'accounts') {
     renderAccounts(state, tabContent);
     initAccountsHandlers(state, tabContent, onStateChange, resetAllData);
-    onStateChange();
+    finishTabRender();
     return;
   }
 
   if (tab === 'categories') {
     renderCategories(state, tabContent);
     initCategoriesHandlers(state, tabContent, onStateChange);
-    onStateChange();
+    finishTabRender();
     return;
   }
 
   if (tab === 'history') {
     renderHistory(state, tabContent);
     initHistoryHandlers(state, tabContent, onStateChange);
-    onStateChange();
+    finishTabRender();
     return;
   }
 
   if (tab === 'savings') {
     renderSavings(state, tabContent);
     initSavingsHandlers(state, tabContent, onStateChange);
-    onStateChange();
+    finishTabRender();
     return;
   }
 
   if (tab === 'debts') {
     renderDebts(state, tabContent);
     initDebtsHandlers(state, tabContent, onStateChange, (nextTab) => renderTab(nextTab));
-    onStateChange();
+    finishTabRender();
     return;
   }
 
   if (tab === 'obligations') {
     renderObligations(state, tabContent);
     initObligationsHandlers(state, tabContent, onStateChange);
-    onStateChange();
+    finishTabRender();
     return;
   }
 
   if (tab === 'stats') {
     renderStats(state, tabContent);
     initStatsHandlers(state, tabContent, onStateChange);
-    onStateChange();
+    finishTabRender();
     return;
   }
 

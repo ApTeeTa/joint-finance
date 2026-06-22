@@ -12,6 +12,7 @@ import {
   getOverdueObligations,
   formatOverdueDaysLabel
 } from './obligations.js';
+import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
@@ -276,16 +277,6 @@ export function renderDebts(state, container) {
   });
 }
 
-function openModal(container, modalKey) {
-  const modal = container.querySelector(`[data-modal="${modalKey}"]`);
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeModal(container, modalKey) {
-  const modal = container.querySelector(`[data-modal="${modalKey}"]`);
-  if (modal) modal.classList.add('hidden');
-}
-
 function findDebt(state, debtId) {
   return (state.debts ?? []).map(normalizeDebt).find((debt) => debt.id === debtId);
 }
@@ -311,10 +302,11 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
   }
   container.dataset.debtsHandlersBound = 'true';
 
-  container.addEventListener('click', (event) => {
+  document.addEventListener('click', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const closeBtn = event.target.closest('[data-action="close-modal"]');
     if (closeBtn) {
-      closeModal(container, closeBtn.dataset.modal);
+      closeModal(closeBtn.dataset.modal);
       return;
     }
 
@@ -322,7 +314,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
     if (!action) return;
 
     if (action === 'open-add-debt-owed') {
-      openModal(container, 'add-debt-owed');
+      openModal('add-debt-owed');
       refreshAccountSelects(state, container);
       return;
     }
@@ -335,7 +327,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
     }
 
     if (action === 'open-add-debt-we-owe') {
-      openModal(container, 'add-debt-we-owe');
+      openModal('add-debt-we-owe');
       refreshAccountSelects(state, container);
       return;
     }
@@ -360,7 +352,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
       container.querySelector('[data-repay-debt-remaining]').textContent =
         `Максимум: ${formatMoney(debt.remainingAmount)}`;
 
-      openModal(container, 'repay-debt');
+      openModal('repay-debt');
       refreshAccountSelects(state, container);
       return;
     }
@@ -380,11 +372,12 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
       container.querySelector('[data-write-off-debt-title]').textContent =
         `${debt.title} · остаток ${formatMoney(debt.remainingAmount)}`;
 
-      openModal(container, 'write-off-debt');
+      openModal('write-off-debt');
     }
   });
 
-  container.addEventListener('submit', (event) => {
+  document.addEventListener('submit', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const form = event.target.closest('[data-form]');
     if (!form) return;
     event.preventDefault();
@@ -407,7 +400,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      closeModal(container, 'add-debt-owed');
+      closeModal('add-debt-owed');
       form.reset();
       refresh();
       return;
@@ -428,7 +421,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      closeModal(container, 'add-debt-we-owe');
+      closeModal('add-debt-we-owe');
       form.reset();
       refresh();
       return;
@@ -450,7 +443,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      closeModal(container, 'repay-debt');
+      closeModal('repay-debt');
       refresh();
       return;
     }
@@ -473,7 +466,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      closeModal(container, 'write-off-debt');
+      closeModal('write-off-debt');
       refresh();
     }
   });

@@ -11,6 +11,7 @@ import {
   TYPE_LABELS
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
+import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -1001,16 +1002,6 @@ function updateTransferFormUI(state, container, sourceAccountId) {
   }
 }
 
-function openModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.add('hidden');
-}
-
 function refresh(state, container, onUpdate) {
   renderAccounts(state, container);
   if (typeof onUpdate === 'function') {
@@ -1022,7 +1013,8 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
   if (container.dataset.accountsHandlersBound === 'true') return;
   container.dataset.accountsHandlersBound = 'true';
 
-  container.addEventListener('click', (event) => {
+  document.addEventListener('click', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
     if (target.closest('[data-action="reset-all-data"]')) {
@@ -1035,13 +1027,13 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     if (target.closest('[data-action="open-add-modal"]')) {
       const form = container.querySelector('[data-form="add-account"]');
       if (form) form.reset();
-      openModal(container, 'add-account');
+      openModal('add-account');
       return;
     }
 
     if (target.closest('[data-action="close-modal"]')) {
       const btn = target.closest('[data-action="close-modal"]');
-      closeModal(container, btn.dataset.modal);
+      closeModal(btn.dataset.modal);
       return;
     }
 
@@ -1054,14 +1046,14 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
         form.comment.value = '';
         form.date.value = todayIso();
       }
-      openModal(container, 'topup');
+      openModal('topup');
       return;
     }
 
     if (target.closest('[data-action="open-transfer"]')) {
       const btn = target.closest('[data-action="open-transfer"]');
       populateTransferForm(state, container, btn.dataset.accountId);
-      openModal(container, 'transfer');
+      openModal('transfer');
       return;
     }
 
@@ -1074,7 +1066,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
         form.name.value = account.name;
         form.balance.value = account.balance ?? 0;
       }
-      openModal(container, 'edit-account');
+      openModal('edit-account');
       return;
     }
 
@@ -1088,13 +1080,15 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     }
   });
 
-  container.addEventListener('input', (event) => {
+  document.addEventListener('input', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const form = event.target.closest('[data-form="transfer"]');
     if (!form || event.target.name !== 'amount') return;
     updateTransferFormUI(state, container, form.sourceAccountId.value);
   });
 
-  container.addEventListener('change', (event) => {
+  document.addEventListener('change', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const input = event.target.closest('[data-action="exchange-rate"]');
     if (input) {
       const error = validateExchangeRate(input.value);
@@ -1117,7 +1111,8 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     }
   });
 
-  container.addEventListener('submit', (event) => {
+  document.addEventListener('submit', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
     const addForm = event.target.closest('[data-form="add-account"]');
@@ -1127,7 +1122,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const initialBalance = addForm.initialBalance.value;
       const comment = addForm.comment.value;
       if (createAccount(state, name, currency, initialBalance, comment)) {
-        closeModal(container, 'add-account');
+        closeModal('add-account');
         addForm.reset();
         refresh(state, container, onUpdate);
       }
@@ -1140,7 +1135,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const name = editForm.name.value;
       const balance = editForm.balance.value;
       if (updateAccount(state, accountId, name, balance)) {
-        closeModal(container, 'edit-account');
+        closeModal('edit-account');
         refresh(state, container, onUpdate);
       }
       return;
@@ -1153,7 +1148,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const comment = topUpForm.comment.value;
       const date = topUpForm.date.value;
       if (depositToAccount(state, accountId, amount, comment, date)) {
-        closeModal(container, 'topup');
+        closeModal('topup');
         topUpForm.reset();
         refresh(state, container, onUpdate);
       }
@@ -1173,7 +1168,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       }
 
       if (transferBetweenAccounts(state, sourceAccountId, destAccountId, amount, inputMode)) {
-        closeModal(container, 'transfer');
+        closeModal('transfer');
         transferForm.reset();
         refresh(state, container, onUpdate);
       }

@@ -6,6 +6,7 @@ import {
   deleteCategory as recordCategoryDeletion
 } from './financeGate.js';
 import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LABELS, isMiscCategory, MISC_CATEGORY_NAME } from './transactions.js';
+import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -693,16 +694,6 @@ export function renderCategories(state, container) {
   `;
 }
 
-function openModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeModal(container, modalName) {
-  const modal = container.querySelector(`[data-modal="${modalName}"]`);
-  if (modal) modal.classList.add('hidden');
-}
-
 function closeAllMenus(container) {
   container.querySelectorAll('[data-menu]').forEach((menu) => {
     menu.classList.add('hidden');
@@ -720,7 +711,8 @@ export function initCategoriesHandlers(state, container, onUpdate) {
   if (container.dataset.categoriesHandlersBound === 'true') return;
   container.dataset.categoriesHandlersBound = 'true';
 
-  container.addEventListener('click', (event) => {
+  document.addEventListener('click', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
     if (!target.closest('[data-action="toggle-menu"]') && !target.closest('[data-menu]')) {
@@ -730,13 +722,13 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     if (target.closest('[data-action="open-add-modal"]')) {
       const form = container.querySelector('[data-form="add-category"]');
       if (form) form.reset();
-      openModal(container, 'add-category');
+      openModal('add-category');
       return;
     }
 
     if (target.closest('[data-action="close-modal"]')) {
       const btn = target.closest('[data-action="close-modal"]');
-      closeModal(container, btn.dataset.modal);
+      closeModal(btn.dataset.modal);
       return;
     }
 
@@ -758,7 +750,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
         form.categoryId.value = btn.dataset.categoryId;
         form.amount.value = '';
       }
-      openModal(container, 'reserve');
+      openModal('reserve');
       return;
     }
 
@@ -775,7 +767,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
           hint.textContent = `Можно вернуть: ${formatMoney(available)}`;
         }
       }
-      openModal(container, 'unreserve');
+      openModal('unreserve');
       return;
     }
 
@@ -798,7 +790,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
           form.accountId.selectedIndex = 0;
         }
       }
-      openModal(container, 'expense');
+      openModal('expense');
       return;
     }
 
@@ -814,7 +806,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
         form.name.value = category.name;
         form.limit.value = category.limit ?? 0;
       }
-      openModal(container, 'edit-category');
+      openModal('edit-category');
       return;
     }
 
@@ -829,13 +821,14 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     }
   });
 
-  container.addEventListener('submit', (event) => {
+  document.addEventListener('submit', (event) => {
+    if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
     const addForm = event.target.closest('[data-form="add-category"]');
     if (addForm) {
       if (createCategory(state, addForm.name.value, addForm.limit.value)) {
-        closeModal(container, 'add-category');
+        closeModal('add-category');
         addForm.reset();
         refresh(state, container, onUpdate);
       }
@@ -845,7 +838,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     const editForm = event.target.closest('[data-form="edit-category"]');
     if (editForm) {
       if (updateCategory(state, editForm.categoryId.value, editForm.name.value, editForm.limit.value)) {
-        closeModal(container, 'edit-category');
+        closeModal('edit-category');
         refresh(state, container, onUpdate);
       }
       return;
@@ -854,7 +847,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     const reserveForm = event.target.closest('[data-form="reserve"]');
     if (reserveForm) {
       if (reserveFunds(state, reserveForm.categoryId.value, reserveForm.amount.value)) {
-        closeModal(container, 'reserve');
+        closeModal('reserve');
         reserveForm.reset();
         refresh(state, container, onUpdate);
       }
@@ -864,7 +857,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     const unreserveForm = event.target.closest('[data-form="unreserve"]');
     if (unreserveForm) {
       if (unreserveFunds(state, unreserveForm.categoryId.value, unreserveForm.amount.value)) {
-        closeModal(container, 'unreserve');
+        closeModal('unreserve');
         unreserveForm.reset();
         refresh(state, container, onUpdate);
       }
@@ -881,7 +874,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
         expenseForm.accountId.value,
         expenseForm.comment.value
       )) {
-        closeModal(container, 'expense');
+        closeModal('expense');
         expenseForm.reset();
         refresh(state, container, onUpdate);
         const category = findCategory(state, categoryId);
