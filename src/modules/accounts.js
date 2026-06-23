@@ -12,6 +12,7 @@ import {
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
+import { supabase } from '../lib/supabase.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -28,6 +29,7 @@ const ICONS = {
 };
 
 const DEFAULT_EXCHANGE_RATE = 92;
+const DEFAULT_HOUSEHOLD_ID = null;
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -168,6 +170,34 @@ function createAccount(state, name, currency, initialBalance, comment) {
   recordAccountCreation(state, account, balance, state.profile);
 
   return true;
+}
+
+async function persistAccountToSupabase(name, currency, initialBalance) {
+  console.log('🔥 SUPABASE INSERT FUNCTION CALLED');
+  console.log('🔥 SUPABASE CLIENT:', supabase);
+
+  const balance = Number(initialBalance) || 0;
+  const payload = {
+    name: String(name).trim(),
+    balance,
+    currency,
+    household_id: DEFAULT_HOUSEHOLD_ID
+  };
+
+  try {
+    const { data, error } = await supabase.from('accounts').insert(payload).select();
+    console.log('🔥 SUPABASE RESPONSE:', { data, error });
+
+    if (error) {
+      console.error('Supabase accounts insert failed:', error);
+      return { ok: false, error };
+    }
+
+    return { ok: true, data };
+  } catch (error) {
+    console.error('Supabase accounts insert threw:', error);
+    return { ok: false, error };
+  }
 }
 
 function updateAccount(state, accountId, name, balance) {
@@ -1111,16 +1141,27 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     }
   });
 
-  document.addEventListener('submit', (event) => {
-    if (!isWithinAppUi(event.target, container)) return;
+  document.addEventListener('submit', async (event) => {
+    const submitRoot = event.target.closest?.('form') ?? event.target;
+    if (!isWithinAppUi(submitRoot, container)) return;
     event.preventDefault();
 
-    const addForm = event.target.closest('[data-form="add-account"]');
+    const addForm = submitRoot.matches?.('[data-form="add-account"]')
+      ? submitRoot
+      : submitRoot.closest?.('[data-form="add-account"]');
     if (addForm) {
+      console.log('🔥 ADD ACCOUNT SUBMIT HANDLER');
+
       const name = addForm.name.value;
       const currency = addForm.currency.value;
       const initialBalance = addForm.initialBalance.value;
       const comment = addForm.comment.value;
+
+      const supabaseResult = await persistAccountToSupabase(name, currency, initialBalance);
+      if (!supabaseResult.ok) {
+        console.error('🔥 SUPABASE INSERT FAILED — continuing with local fallback:', supabaseResult.error);
+      }
+
       if (createAccount(state, name, currency, initialBalance, comment)) {
         closeModal('add-account');
         addForm.reset();

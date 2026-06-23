@@ -13,6 +13,7 @@ import { renderStats, initStatsHandlers } from './modules/stats.js';
 import { reconcileLegacyTransactions } from './modules/transactions.js';
 import { saveState, loadState, clearState } from './modules/storage.js';
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
+import './lib/supabase.js';
 
 const TAB_LABELS = {
   accounts: 'Счета',
