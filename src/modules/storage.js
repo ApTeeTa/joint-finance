@@ -16,18 +16,48 @@ function getDefaultState() {
   };
 }
 
-function pickPersistedFields(state) {
+function pickSharedFields(state) {
   return {
-    profile: state.profile === 'wife' ? 'wife' : 'husband',
     accounts: Array.isArray(state.accounts) ? state.accounts : [],
     categories: Array.isArray(state.categories) ? state.categories : [],
     transactions: Array.isArray(state.transactions) ? state.transactions : [],
     obligations: Array.isArray(state.obligations) ? state.obligations : [],
     savings: Array.isArray(state.savings) ? state.savings : [],
     debts: Array.isArray(state.debts) ? state.debts : [],
-    exchangeRate: typeof state.exchangeRate === 'number' ? state.exchangeRate : 92,
+    exchangeRate: typeof state.exchangeRate === 'number' ? state.exchangeRate : 92
+  };
+}
+
+function pickPersistedFields(state) {
+  return {
+    profile: state.profile === 'wife' ? 'wife' : 'husband',
+    ...pickSharedFields(state),
     activeTab: VALID_TABS.includes(state.activeTab) ? state.activeTab : 'accounts'
   };
+}
+
+export function exportSharedSnapshot(state) {
+  return pickSharedFields(state);
+}
+
+export function applySharedSnapshot(state, snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return;
+  }
+
+  const merged = mergeWithDefaults({
+    ...snapshot,
+    profile: state.profile,
+    activeTab: state.activeTab
+  });
+
+  state.accounts = merged.accounts;
+  state.categories = merged.categories;
+  state.transactions = merged.transactions;
+  state.obligations = merged.obligations;
+  state.savings = merged.savings;
+  state.debts = merged.debts;
+  state.exchangeRate = merged.exchangeRate;
 }
 
 function normalizeObligationRecord(obligation) {
@@ -71,10 +101,15 @@ function mergeWithDefaults(loaded) {
   };
 }
 
-export function saveState(state) {
+export function saveState(state, options = {}) {
   try {
     const payload = pickPersistedFields(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    if (!options.skipRemote) {
+      import('../lib/stateRemote.js').then((remote) => {
+        remote.schedulePushSharedState(state);
+      });
+    }
     return true;
   } catch {
     return false;

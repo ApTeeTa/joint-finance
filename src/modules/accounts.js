@@ -116,7 +116,7 @@ function validateCurrency(currency) {
   return null;
 }
 
-function createAccount(state, name, currency, initialBalance, comment) {
+function createAccount(state, name, currency, initialBalance, comment, options = {}) {
   const nameError = validateAccountName(name);
   if (nameError) {
     alert(nameError);
@@ -141,7 +141,7 @@ function createAccount(state, name, currency, initialBalance, comment) {
 
   const balance = Number(initialBalance) || 0;
   const account = {
-    id: createId('account'),
+    id: options.remoteId ?? createId('account'),
     name: String(name).trim(),
     currency,
     balance: 0,
@@ -1180,7 +1180,8 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
         console.error('🔥 SUPABASE INSERT FAILED — continuing with local fallback:', supabaseResult.error);
       }
 
-      if (createAccount(state, name, currency, initialBalance, comment)) {
+      const remoteId = supabaseResult.ok ? supabaseResult.data?.[0]?.id : undefined;
+      if (createAccount(state, name, currency, initialBalance, comment, { remoteId })) {
         closeModal('add-account');
         addForm.reset();
         refresh(state, container, onUpdate);
