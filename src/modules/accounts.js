@@ -184,18 +184,36 @@ async function persistAccountToSupabase(name, currency, initialBalance) {
     household_id: DEFAULT_HOUSEHOLD_ID
   };
 
+  console.log('BEFORE_INSERT', JSON.stringify({ payload }));
+
   try {
-    const { data, error } = await supabase.from('accounts').insert(payload).select();
-    console.log('🔥 SUPABASE RESPONSE:', { data, error });
+    const response = await supabase.from('accounts').insert(payload).select();
+    const { data, error, status, statusText } = response;
+
+    console.log('SUPABASE_RESPONSE', JSON.stringify({
+      data,
+      error: error
+        ? {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          }
+        : null,
+      status,
+      statusText
+    }));
+    console.log('AFTER_INSERT', JSON.stringify({ ok: !error, rowCount: data?.length ?? 0 }));
 
     if (error) {
       console.error('Supabase accounts insert failed:', error);
-      return { ok: false, error };
+      return { ok: false, error, status, statusText, data };
     }
 
-    return { ok: true, data };
+    return { ok: true, data, status, statusText };
   } catch (error) {
     console.error('Supabase accounts insert threw:', error);
+    console.log('AFTER_INSERT', JSON.stringify({ ok: false, thrown: String(error) }));
     return { ok: false, error };
   }
 }
