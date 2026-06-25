@@ -659,7 +659,7 @@ function renderEmptyState() {
   return `
     <div class="text-center py-10">
       <p class="text-slate-500 mb-4">Категорий пока нет</p>
-      <button type="button" data-action="open-add-modal" class="px-6 py-3 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Создать первую категорию</button>
+      <button type="button" data-action="open-add-category-modal" class="px-6 py-3 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Создать первую категорию</button>
     </div>
   `;
 }
@@ -681,7 +681,7 @@ export function renderCategories(state, container) {
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-lg font-semibold text-slate-900">Категории</h2>
-          ${categories.length ? `<button type="button" data-action="open-add-modal" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить категорию</button>` : ''}
+          ${categories.length ? `<button type="button" data-action="open-add-category-modal" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить категорию</button>` : ''}
         </div>
         ${categoriesList}
       </div>
@@ -719,9 +719,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
       closeAllMenus(container);
     }
 
-    if (target.closest('[data-action="open-add-modal"]')) {
-      const btn = target.closest('[data-action="open-add-modal"]');
-      if (!btn || !container.contains(btn)) return;
+    if (target.closest('[data-action="open-add-category-modal"]')) {
       const form = findAppForm('add-category', container);
       if (form) form.reset();
       openModal('add-category');

@@ -710,13 +710,13 @@ export function recordObligationPayment(state, obligationId, amount, accountId, 
   );
   if (gateBlock) return gateBlock;
 
-  const reserveBeforeAuto = obligation.reserveAmount ?? 0;
-  const reserveCheck = ensureObligationPaymentReserve(state, obligation, rubAmount);
-  if (!reserveCheck.ok) {
-    return reserveCheck;
-  }
-
   const reserveAmount = obligation.reserveAmount ?? 0;
+  if (rubAmount > reserveAmount) {
+    return {
+      ok: false,
+      error: 'Недостаточно средств в резерве обязательства. Сначала зарезервируйте деньги.'
+    };
+  }
 
   const accountCurrency = account.currency ?? 'RUB';
   const exchangeRate = getExchangeRate(state);
@@ -726,7 +726,6 @@ export function recordObligationPayment(state, obligationId, amount, accountId, 
   const accountBalance = account.balance ?? 0;
 
   if (accountDebitAmount > accountBalance) {
-    obligation.reserveAmount = reserveBeforeAuto;
     return { ok: false, error: 'Недостаточно средств на выбранном счете.' };
   }
 

@@ -11,7 +11,7 @@ import {
   TYPE_LABELS
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
-import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { supabase } from '../lib/supabase.js';
 
 const OWNER_LABELS = {
@@ -825,7 +825,7 @@ function renderEmptyState() {
       <p class="text-slate-500 mb-4">Счетов пока нет</p>
       <button
         type="button"
-        data-action="open-add-modal"
+        data-action="open-add-account-modal"
         class="px-6 py-3 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
       >Создать первый счет</button>
     </div>
@@ -899,7 +899,7 @@ export function renderAccounts(state, container) {
           ${accounts.length ? `
             <button
               type="button"
-              data-action="open-add-modal"
+              data-action="open-add-account-modal"
               class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0"
             >Добавить счет</button>
           ` : ''}
@@ -965,7 +965,7 @@ function populateTransferForm(state, container, sourceAccountId) {
     ${renderTransferAccountOptions(state, sourceAccountId)}
   `;
 
-  const sourceLabel = container.querySelector('[data-transfer-source-label]');
+  const sourceLabel = findInAppUi('[data-transfer-source-label]', container);
   if (sourceLabel) {
     sourceLabel.textContent = `Со счета «${sourceAccount.name}» · ${formatMoney(sourceAccount.balance, currency)}`;
   }
@@ -975,10 +975,10 @@ function populateTransferForm(state, container, sourceAccountId) {
 
 function updateTransferFormUI(state, container, sourceAccountId) {
   const form = findAppForm('transfer', container);
-  const rateHint = container.querySelector('[data-transfer-rate-hint]');
-  const preview = container.querySelector('[data-transfer-preview]');
-  const amountLabel = container.querySelector('[data-transfer-amount-label]');
-  const modeBlock = container.querySelector('[data-transfer-input-mode]');
+  const rateHint = findInAppUi('[data-transfer-rate-hint]', container);
+  const preview = findInAppUi('[data-transfer-preview]', container);
+  const amountLabel = findInAppUi('[data-transfer-amount-label]', container);
+  const modeBlock = findInAppUi('[data-transfer-input-mode]', container);
 
   if (!form) return;
 
@@ -1072,9 +1072,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       return;
     }
 
-    if (target.closest('[data-action="open-add-modal"]')) {
-      const btn = target.closest('[data-action="open-add-modal"]');
-      if (!btn || !container.contains(btn)) return;
+    if (target.closest('[data-action="open-add-account-modal"]')) {
       const form = findAppForm('add-account', container);
       if (form) form.reset();
       openModal('add-account');

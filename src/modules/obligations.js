@@ -1,8 +1,7 @@
 import { calculateFreeBalance } from './financeEngine.js';
-import { payObligation, undoTransaction, unreserveObligation, reserveObligation } from './financeGate.js';
+import { payObligation, unreserveObligation, reserveObligation } from './financeGate.js';
 import {
   renderAccountSelectOptions,
-  canCancelTransaction,
   todayIso
 } from './transactions.js';
 import {
@@ -28,6 +27,11 @@ const STATUS_CARD_CLASS = {
 const STATUS_BADGE_CLASS = {
   current: 'text-emerald-700 bg-emerald-100',
   overdue: 'text-red-700 bg-red-100'
+};
+
+const ICONS = {
+  pencil: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="m2.695 14.763-1.262 3.154a.5.5 0 0 0 .65.65l3.155-1.262a4 4 0 0 0 1.343-.885L17.5 5.5a2.121 2.121 0 0 0-3-3L3.58 13.42a4 4 0 0 0-.885 1.343Z"/></svg>`,
+  trash: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 0 0-.584.788 48.065 48.065 0 0 0 .522 7.403.75.75 0 0 0 .43.375A48.112 48.112 0 0 0 8 14.25c0 1.246.124 2.503.38 3.75a.75.75 0 0 0 .75.568h7.5a.75.75 0 0 0 .75-.568c.256-1.247.38-2.504.38-3.75a48.112 48.112 0 0 0-3.439-.908.75.75 0 0 0-.43-.375 48.65 48.65 0 0 0-2.365-.298V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM9.5 3.75V5h1V3.75a.25.25 0 0 0-.25-.25h-.5a.25.25 0 0 0-.25.25ZM4.5 6.75v8.5c0 .414.336.75.75.75h9.5a.75.75 0 0 0 .75-.75v-8.5h-11Z" clip-rule="evenodd"/></svg>`
 };
 
 function formatMoney(amount) {
@@ -83,22 +87,6 @@ function getUiStatus(obligation) {
   }
 
   return { ui: 'overdue', label: 'Просрочено' };
-}
-
-function findTransaction(state, transactionId) {
-  return (state.transactions ?? []).find((tx) => tx.id === transactionId);
-}
-
-function getLastObligationPayment(obligation) {
-  const payments = obligation.payments ?? [];
-  return payments.length ? payments[payments.length - 1] : null;
-}
-
-function canCancelLastObligationPayment(state, obligation) {
-  const lastPayment = getLastObligationPayment(obligation);
-  if (!lastPayment?.transactionId) return false;
-  const tx = findTransaction(state, lastPayment.transactionId);
-  return !!(tx && canCancelTransaction(state, tx));
 }
 
 export function getOverdueDays(paidUntil) {
@@ -295,17 +283,20 @@ function renderObligationCard(state, obligation) {
     ? formatMoney(item.targetAmount)
     : '—';
   const reservedAmount = item.reserveAmount ?? 0;
-  const showCancelPayment = canCancelLastObligationPayment(state, item);
 
   return `
     <article class="border rounded-xl p-4 ${cardClass}" data-obligation-id="${item.id}">
       <div class="flex items-start justify-between gap-3 mb-3">
-        <div class="min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0 flex-1">
           <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(item.name)}</h3>
+          <button type="button" data-action="open-edit-obligation" data-obligation-id="${item.id}" title="Редактировать" class="p-1 rounded text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors shrink-0">${ICONS.pencil}</button>
         </div>
-        <span class="shrink-0 px-2 py-1 rounded-full text-xs font-medium ${badgeClass}">
-          ${escapeHtml(uiStatus.label)}
-        </span>
+        <div class="flex items-center gap-1 shrink-0">
+          <span class="px-2 py-1 rounded-full text-xs font-medium ${badgeClass}">
+            ${escapeHtml(uiStatus.label)}
+          </span>
+          <button type="button" data-action="delete-obligation" data-obligation-id="${item.id}" title="Удалить" class="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
+        </div>
       </div>
 
       <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-4">
@@ -323,11 +314,6 @@ function renderObligationCard(state, obligation) {
 
       <div class="flex flex-wrap gap-2">
         <button type="button" data-action="open-pay-obligation" data-obligation-id="${item.id}" class="flex-1 min-w-[110px] px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Оплатить</button>
-        ${showCancelPayment ? `
-          <button type="button" data-action="cancel-obligation-payment" data-obligation-id="${item.id}" class="flex-1 min-w-[110px] px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">Отменить оплату</button>
-        ` : ''}
-        <button type="button" data-action="open-edit-obligation" data-obligation-id="${item.id}" class="flex-1 min-w-[110px] px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">Редактировать</button>
-        <button type="button" data-action="delete-obligation" data-obligation-id="${item.id}" class="flex-1 min-w-[110px] px-3 py-2 text-sm font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors">Удалить</button>
       </div>
     </article>
   `;
@@ -593,33 +579,6 @@ export function initObligationsHandlers(state, container, onStateChange) {
         }
       }
       openModal('unreserve-obligation');
-      return;
-    }
-
-    if (action === 'cancel-obligation-payment') {
-      const obligationId = event.target.closest('[data-action]').dataset.obligationId;
-      const obligation = findObligation(state, obligationId);
-      if (!obligation) {
-        alert('Обязательство не найдено');
-        return;
-      }
-
-      const lastPayment = getLastObligationPayment(obligation);
-      if (!lastPayment?.transactionId) {
-        return;
-      }
-
-      if (!confirm('Отменить последнюю оплату?')) {
-        return;
-      }
-
-      const result = undoTransaction(state, lastPayment.transactionId);
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-
-      refresh();
       return;
     }
 
