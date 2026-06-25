@@ -60,6 +60,109 @@ export function applySharedSnapshot(state, snapshot) {
   state.exchangeRate = merged.exchangeRate;
 }
 
+function getRecordTimestamp(record) {
+  if (!record || typeof record !== 'object') {
+    return 0;
+  }
+
+  const raw = record.updatedAt || record.createdAt || record.date;
+  const parsed = Date.parse(raw ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function pickRecordOnConflict(localRecord, remoteRecord, preferLocalOnConflict) {
+  if (!remoteRecord) {
+    return localRecord;
+  }
+  if (!localRecord) {
+    return remoteRecord;
+  }
+  if (preferLocalOnConflict) {
+    return localRecord;
+  }
+
+  return getRecordTimestamp(localRecord) >= getRecordTimestamp(remoteRecord)
+    ? localRecord
+    : remoteRecord;
+}
+
+function mergeEntityArrays(localItems, remoteItems, preferLocalOnConflict) {
+  const byId = new Map();
+
+  (remoteItems ?? []).forEach((item) => {
+    if (item?.id) {
+      byId.set(item.id, item);
+    }
+  });
+
+  (localItems ?? []).forEach((localItem) => {
+    if (!localItem?.id) {
+      return;
+    }
+
+    byId.set(
+      localItem.id,
+      pickRecordOnConflict(localItem, byId.get(localItem.id), preferLocalOnConflict)
+    );
+  });
+
+  return Array.from(byId.values());
+}
+
+function mergeObligationRecords(localItems, remoteItems, preferLocalOnConflict) {
+  const localById = new Map((localItems ?? []).filter((item) => item?.id).map((item) => [item.id, item]));
+  const remoteById = new Map((remoteItems ?? []).filter((item) => item?.id).map((item) => [item.id, item]));
+  const ids = new Set([...localById.keys(), ...remoteById.keys()]);
+
+  return Array.from(ids).map((id) => {
+    const localItem = localById.get(id);
+    const remoteItem = remoteById.get(id);
+    const winner = pickRecordOnConflict(localItem, remoteItem, preferLocalOnConflict);
+    const other = winner === localItem ? remoteItem : localItem;
+
+    return normalizeObligationRecord({
+      ...(other ?? {}),
+      ...winner,
+      payments: mergeEntityArrays(
+        localItem?.payments,
+        remoteItem?.payments,
+        preferLocalOnConflict
+      )
+    });
+  });
+}
+
+function mergeTransactions(localItems, remoteItems, preferLocalOnConflict) {
+  const merged = mergeEntityArrays(localItems, remoteItems, preferLocalOnConflict);
+
+  return merged.sort((left, right) => {
+    const leftTs = getRecordTimestamp(left);
+    const rightTs = getRecordTimestamp(right);
+    if (rightTs !== leftTs) {
+      return rightTs - leftTs;
+    }
+    return String(right.id ?? '').localeCompare(String(left.id ?? ''));
+  });
+}
+
+export function mergeSharedSnapshots(localSnapshot, remoteSnapshot, options = {}) {
+  const preferLocalOnConflict = options.preferLocalOnConflict === true;
+  const local = mergeWithDefaults(localSnapshot);
+  const remote = mergeWithDefaults(remoteSnapshot);
+
+  return {
+    accounts: mergeEntityArrays(local.accounts, remote.accounts, preferLocalOnConflict),
+    categories: mergeEntityArrays(local.categories, remote.categories, preferLocalOnConflict),
+    transactions: mergeTransactions(local.transactions, remote.transactions, preferLocalOnConflict),
+    obligations: mergeObligationRecords(local.obligations, remote.obligations, preferLocalOnConflict),
+    savings: mergeEntityArrays(local.savings, remote.savings, preferLocalOnConflict),
+    debts: mergeEntityArrays(local.debts, remote.debts, preferLocalOnConflict),
+    exchangeRate: preferLocalOnConflict
+      ? local.exchangeRate
+      : (remote.exchangeRate ?? local.exchangeRate)
+  };
+}
+
 function normalizeObligationRecord(obligation) {
   if (!obligation || typeof obligation !== 'object') {
     return obligation;

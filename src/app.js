@@ -15,7 +15,7 @@ import { renderStats, initStatsHandlers } from './modules/stats.js';
 import { reconcileLegacyTransactions } from './modules/transactions.js';
 import { saveState, loadState, clearState } from './modules/storage.js';
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
-import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState } from './lib/stateRemote.js';
+import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState, markInitialSyncDone } from './lib/stateRemote.js';
 
 console.log('APP ENTRY LOADED');
 
@@ -232,6 +232,23 @@ function refreshFromRemote() {
   renderTab(state.activeTab || 'accounts');
 }
 
+function onRemoteStateMerged() {
+  reconcileLegacyTransactions(state);
+  saveState(state);
+  refreshFromRemote();
+}
+
+async function syncFromRemote() {
+  try {
+    const result = await pullSharedStateInto(state);
+    if (result?.ok && result.hasData && !result.skipped) {
+      onRemoteStateMerged();
+    }
+  } finally {
+    markInitialSyncDone();
+  }
+}
+
 async function init() {
   tabContent = document.getElementById('tab-content');
   totalBalanceEl = document.getElementById('total-balance');
@@ -241,32 +258,20 @@ async function init() {
   if (!tabContent) return;
 
   applyLoadedState(loadState());
-  const pullResult = await pullSharedStateInto(state);
-  if (pullResult.ok && pullResult.hasData) {
-    reconcileLegacyTransactions(state);
-    saveState(state, { skipRemote: true });
-  }
   renderProfile();
   updateCounters();
   initProfileHandlers();
   initTabHandlers();
   renderTab(state.activeTab || 'accounts');
 
-  subscribeSharedState(state, () => {
-    reconcileLegacyTransactions(state);
-    saveState(state, { skipRemote: true });
-    refreshFromRemote();
-  });
+  subscribeSharedState(state, onRemoteStateMerged);
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    pullSharedStateInto(state).then((result) => {
-      if (!result.ok || !result.hasData || result.skipped) return;
-      reconcileLegacyTransactions(state);
-      saveState(state, { skipRemote: true });
-      refreshFromRemote();
-    });
+    syncFromRemote();
   });
+
+  syncFromRemote();
 }
 
 if (document.readyState === 'loading') {

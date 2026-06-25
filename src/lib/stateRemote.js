@@ -1,5 +1,5 @@
 import { supabase } from './supabase.js';
-import { exportSharedSnapshot, applySharedSnapshot } from '../modules/storage.js';
+import { exportSharedSnapshot, applySharedSnapshot, mergeSharedSnapshots } from '../modules/storage.js';
 
 const SNAPSHOT_ID = 'shared';
 const PUSH_DELAY_MS = 400;
@@ -8,6 +8,11 @@ let pushTimer = null;
 let applyingRemote = false;
 let lastRemoteUpdatedAt = null;
 let lastPushedAt = 0;
+let initialSyncDone = false;
+
+export function markInitialSyncDone() {
+  initialSyncDone = true;
+}
 
 function hasSharedData(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') {
@@ -20,7 +25,7 @@ function hasSharedData(snapshot) {
 }
 
 export function schedulePushSharedState(state) {
-  if (applyingRemote) {
+  if (applyingRemote || !initialSyncDone) {
     return;
   }
 
@@ -55,6 +60,8 @@ export async function pushSharedState(state) {
 }
 
 export async function pullSharedStateInto(state) {
+  const localBeforeFetch = exportSharedSnapshot(state);
+
   const { data, error } = await supabase
     .from('household_snapshots')
     .select('payload, updated_at')
@@ -74,11 +81,20 @@ export async function pullSharedStateInto(state) {
     return { ok: true, hasData: true, skipped: true };
   }
 
+  const localNow = exportSharedSnapshot(state);
+  const preferLocalOnConflict = JSON.stringify(localBeforeFetch) !== JSON.stringify(localNow);
+
   applyingRemote = true;
-  applySharedSnapshot(state, data.payload);
+  const mergedSnapshot = mergeSharedSnapshots(localNow, data.payload, { preferLocalOnConflict });
+  applySharedSnapshot(state, mergedSnapshot);
   applyingRemote = false;
   lastRemoteUpdatedAt = data.updated_at;
-  return { ok: true, hasData: true, updatedAt: data.updated_at };
+  return {
+    ok: true,
+    hasData: true,
+    updatedAt: data.updated_at,
+    mergedLocalChanges: preferLocalOnConflict
+  };
 }
 
 export async function clearRemoteSharedState() {
