@@ -1,5 +1,5 @@
 import { calculateFreeBalance } from './financeEngine.js';
-import { payObligation, undoTransaction, unreserveObligation } from './financeGate.js';
+import { payObligation, undoTransaction, unreserveObligation, reserveObligation } from './financeGate.js';
 import {
   renderAccountSelectOptions,
   canCancelTransaction,
@@ -11,7 +11,7 @@ import {
   diagnosePaidUntilShadow,
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
-import { openModal, closeModal, isWithinAppUi, relocateModals } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, relocateModals, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
 
 export {
   computePaidUntilFromPayments,
@@ -152,16 +152,15 @@ function normalizeObligation(obligation) {
 }
 
 function reserveFunds(state, obligationId, amount) {
-  // LEGACY_SAFE: dead UI helper — не используется; резерв через payObligation / unreserveObligation
-  const obligation = findObligation(state, obligationId);
-  if (!obligation) {
-    alert('Обязательство не найдено');
-    return false;
-  }
-
   const value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) {
     alert('Сумма должна быть больше 0');
+    return false;
+  }
+
+  const obligation = findObligation(state, obligationId);
+  if (!obligation) {
+    alert('Обязательство не найдено');
     return false;
   }
 
@@ -171,8 +170,20 @@ function reserveFunds(state, obligationId, amount) {
     return false;
   }
 
-  obligation.reserveAmount = (obligation.reserveAmount ?? 0) + value;
-  syncStoredStatus(obligation);
+  const result = reserveObligation(
+    state,
+    obligationId,
+    value,
+    `Резерв: ${obligation.name}`,
+    todayIso(),
+    state.profile
+  );
+
+  if (!result.ok) {
+    alert(result.error);
+    return false;
+  }
+
   return true;
 }
 
@@ -211,10 +222,6 @@ function createObligation(state, data) {
     alert('Введите название обязательства');
     return false;
   }
-  if (!data.accountId) {
-    alert('Выберите счёт');
-    return false;
-  }
   if (!data.paidUntil) {
     alert('Укажите срок оплаты');
     return false;
@@ -227,7 +234,6 @@ function createObligation(state, data) {
   const obligation = normalizeObligation({
     id: createId('obligation'),
     name: String(data.name).trim(),
-    accountId: data.accountId,
     reserveAmount: 0,
     targetAmount: data.targetAmount != null && data.targetAmount !== ''
       ? Number(data.targetAmount)
@@ -253,17 +259,12 @@ function updateObligation(state, obligationId, data) {
     alert('Введите название обязательства');
     return false;
   }
-  if (!data.accountId) {
-    alert('Выберите счёт');
-    return false;
-  }
   if (!data.paidUntil) {
     alert('Укажите срок оплаты');
     return false;
   }
 
   obligation.name = String(data.name).trim();
-  obligation.accountId = data.accountId;
   obligation.targetAmount = data.targetAmount != null && data.targetAmount !== ''
     ? Number(data.targetAmount)
     : null;
@@ -293,6 +294,7 @@ function renderObligationCard(state, obligation) {
   const amountLabel = item.targetAmount != null && item.targetAmount > 0
     ? formatMoney(item.targetAmount)
     : '—';
+  const reservedAmount = item.reserveAmount ?? 0;
   const showCancelPayment = canCancelLastObligationPayment(state, item);
 
   return `
@@ -311,6 +313,12 @@ function renderObligationCard(state, obligation) {
         <span class="text-slate-900 font-medium text-right">${amountLabel}</span>
         <span class="text-slate-500">Срок:</span>
         <span class="text-slate-900 font-medium text-right">${paidUntilLabel}</span>
+        <span class="text-slate-500">Зарезервировано:</span>
+        <span class="text-slate-900 font-medium text-right flex items-center justify-end gap-1">
+          ${formatMoney(reservedAmount)}
+          <button type="button" data-action="open-reserve-obligation" data-obligation-id="${item.id}" title="Зарезервировать" class="p-0.5 rounded text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none">+</button>
+          <button type="button" data-action="open-unreserve-obligation" data-obligation-id="${item.id}" title="Снять резерв" class="p-0.5 rounded text-slate-500 hover:bg-slate-200 transition-colors text-base leading-none">−</button>
+        </span>
       </div>
 
       <div class="flex flex-wrap gap-2">
@@ -340,12 +348,6 @@ function renderFormModal(key, title, submitLabel, obligation = null) {
             <input type="text" name="name" required maxlength="80" value="${escapeHtml(obligation?.name ?? '')}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Например, Интернет">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Счёт по умолчанию</label>
-            <select name="accountId" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 obligation-account-select">
-              ${renderAccountSelectOptions({ accounts: [] }, obligation?.accountId ?? '')}
-            </select>
-          </div>
-          <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
             <input type="number" name="targetAmount" min="0" step="1" value="${targetAmount}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
           </div>
@@ -360,6 +362,50 @@ function renderFormModal(key, title, submitLabel, obligation = null) {
           <div class="flex gap-2 pt-2">
             <button type="button" data-action="close-modal" data-modal="${key}" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">${submitLabel}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderReserveObligationModal(freeBalance) {
+  return `
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="reserve-obligation">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-4">Зарезервировать</h3>
+        <p class="text-sm text-emerald-700 mb-4">Можно зарезервировать: <strong>${formatMoney(freeBalance)}</strong></p>
+        <form data-form="reserve-obligation" class="space-y-4">
+          <input type="hidden" name="obligationId" value="">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
+            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button type="button" data-action="close-modal" data-modal="reserve-obligation" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Зарезервировать</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderUnreserveObligationModal() {
+  return `
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="unreserve-obligation">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-4">Снять резерв</h3>
+        <form data-form="unreserve-obligation" class="space-y-4">
+          <input type="hidden" name="obligationId" value="">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
+            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+          </div>
+          <p class="text-xs text-slate-400" data-unreserve-obligation-hint></p>
+          <div class="flex gap-2 pt-2">
+            <button type="button" data-action="close-modal" data-modal="unreserve-obligation" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-600 text-white hover:bg-slate-700">Снять резерв</button>
           </div>
         </form>
       </div>
@@ -405,6 +451,7 @@ function renderPayModal() {
 
 export function renderObligations(state, container) {
   const obligations = (state.obligations ?? []).map(normalizeObligation);
+  const freeBalance = calculateFreeBalance(state);
 
   const list = obligations.length
     ? `<div class="grid gap-4 sm:grid-cols-2">${obligations.map((item) => renderObligationCard(state, item)).join('')}</div>`
@@ -421,13 +468,16 @@ export function renderObligations(state, container) {
     ${renderFormModal('add-obligation', 'Новое обязательство', 'Создать')}
     ${renderFormModal('edit-obligation', 'Редактирование', 'Сохранить')}
     ${renderPayModal()}
+    ${renderReserveObligationModal(freeBalance)}
+    ${renderUnreserveObligationModal()}
   `;
 
   refreshSelects(state, container);
+  relocateModals(container);
 }
 
 function refreshSelects(state, container) {
-  container.querySelectorAll('.obligation-account-select').forEach((select) => {
+  queryAllInAppUi('.obligation-account-select', container).forEach((select) => {
     const selected = select.value;
     select.innerHTML = renderAccountSelectOptions(state, selected);
   });
@@ -471,7 +521,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
     if (!action) return;
 
     if (action === 'open-add-obligation') {
-      const form = container.querySelector('[data-form="add-obligation"]');
+      const form = findAppForm('add-obligation', container);
       if (form) form.reset();
       openModal('add-obligation');
       refreshSelects(state, container);
@@ -486,11 +536,11 @@ export function initObligationsHandlers(state, container, onStateChange) {
         return;
       }
 
-      const modal = container.querySelector('[data-modal="edit-obligation"]');
+      const modal = findAppModal('edit-obligation', container);
+      if (!modal) return;
       modal.outerHTML = renderFormModal('edit-obligation', 'Редактирование', 'Сохранить', obligation);
       relocateModals(container);
       openModal('edit-obligation');
-      refreshSelects(state, container);
       return;
     }
 
@@ -502,18 +552,47 @@ export function initObligationsHandlers(state, container, onStateChange) {
         return;
       }
 
-      const form = container.querySelector('[data-form="pay-obligation"]');
+      const form = findAppForm('pay-obligation', container);
+      if (!form) return;
       form.obligationId.value = obligation.id;
       form.amount.value = obligation.targetAmount != null && obligation.targetAmount > 0
         ? String(obligation.targetAmount)
         : '';
-      form.accountId.value = obligation.accountId;
+      form.accountId.value = '';
       form.paidUntil.value = computePaidUntilFromPayments(obligation) || todayIso();
       form.comment.value = '';
-      container.querySelector('[data-pay-obligation-title]').textContent = obligation.name;
+      const titleEl = findInAppUi('[data-pay-obligation-title]', container);
+      if (titleEl) titleEl.textContent = obligation.name;
 
       openModal('pay-obligation');
       refreshSelects(state, container);
+      return;
+    }
+
+    if (action === 'open-reserve-obligation') {
+      const obligationId = event.target.closest('[data-action]').dataset.obligationId;
+      const form = findAppForm('reserve-obligation', container);
+      if (form) {
+        form.obligationId.value = obligationId;
+        form.amount.value = '';
+      }
+      openModal('reserve-obligation');
+      return;
+    }
+
+    if (action === 'open-unreserve-obligation') {
+      const obligationId = event.target.closest('[data-action]').dataset.obligationId;
+      const obligation = findObligation(state, obligationId);
+      const form = findAppForm('unreserve-obligation', container);
+      if (form && obligation) {
+        form.obligationId.value = obligationId;
+        form.amount.value = '';
+        const hint = findInAppUi('[data-unreserve-obligation-hint]', container);
+        if (hint) {
+          hint.textContent = `Доступно к снятию: ${formatMoney(obligation.reserveAmount ?? 0)}`;
+        }
+      }
+      openModal('unreserve-obligation');
       return;
     }
 
@@ -599,6 +678,22 @@ export function initObligationsHandlers(state, container, onStateChange) {
 
       closeModal('pay-obligation');
       refresh();
+      return;
+    }
+
+    if (formKey === 'reserve-obligation') {
+      if (reserveFunds(state, data.obligationId, data.amount)) {
+        closeModal('reserve-obligation');
+        refresh();
+      }
+      return;
+    }
+
+    if (formKey === 'unreserve-obligation') {
+      if (unreserveFunds(state, data.obligationId, data.amount)) {
+        closeModal('unreserve-obligation');
+        refresh();
+      }
     }
   });
 }

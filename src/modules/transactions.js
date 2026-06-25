@@ -19,6 +19,7 @@ export const TRANSACTION_TYPES = {
   DEBT_REPAY_OWED: 'debt_repay_owed',
   DEBT_REPAY_WE_OWE: 'debt_repay_we_owe',
   DEBT_WRITE_OFF: 'debt_write_off',
+  OBLIGATION_RESERVE: 'obligation_reserve',
   OBLIGATION_UNRESERVE: 'obligation_unreserve'
 };
 
@@ -42,6 +43,7 @@ export const CANCELLABLE_TYPES = new Set([
   TRANSACTION_TYPES.DEBT_REPAY_OWED,
   TRANSACTION_TYPES.DEBT_REPAY_WE_OWE,
   TRANSACTION_TYPES.DEBT_WRITE_OFF,
+  TRANSACTION_TYPES.OBLIGATION_RESERVE,
   TRANSACTION_TYPES.OBLIGATION_UNRESERVE
 ]);
 
@@ -66,6 +68,7 @@ export const TYPE_LABELS = {
   debt_repay_owed: 'Возврат долга',
   debt_repay_we_owe: 'Погашение долга',
   debt_write_off: 'Списание долга',
+  obligation_reserve: 'Резерв обязательства',
   obligation_unreserve: 'Возврат резерва обязательства'
 };
 export const AUTHOR_LABELS = {
@@ -511,6 +514,48 @@ export function recordCategoryUnreserve(state, categoryId, amount, comment, date
   });
 
   enforceFinancialInvariants(state, { operation: 'recordCategoryUnreserve', categoryId });
+
+  return { ok: true, transaction: tx };
+}
+
+export function recordObligationReserve(state, obligationId, amount, comment, date, author) {
+  const blocked = guardFinanceEntry('reserveObligation');
+  if (blocked) return blocked;
+
+  const obligation = findObligation(state, obligationId);
+  if (!obligation) return { ok: false, error: 'Обязательство не найдено' };
+
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) {
+    return { ok: false, error: 'Сумма резервирования должна быть больше 0' };
+  }
+
+  const freeBalance = calculateFreeBalance(state);
+  if (value > freeBalance) {
+    return { ok: false, error: 'Недостаточно свободных средств.' };
+  }
+
+  const previousReserved = obligation.reserveAmount ?? 0;
+  obligation.reserveAmount = previousReserved + value;
+
+  const tx = addTransaction(state, {
+    type: TRANSACTION_TYPES.OBLIGATION_RESERVE,
+    amount: value,
+    obligationId: obligation.id,
+    obligationName: obligation.name,
+    currency: 'RUB',
+    comment: comment || `Резерв: ${obligation.name}`,
+    date,
+    author
+  });
+
+  try {
+    enforceFinancialInvariants(state, { operation: 'recordObligationReserve', obligationId });
+  } catch (e) {
+    obligation.reserveAmount = previousReserved;
+    state.transactions = (state.transactions ?? []).filter((item) => item.id !== tx.id);
+    throw e;
+  }
 
   return { ok: true, transaction: tx };
 }
@@ -1748,6 +1793,19 @@ function assertObligationPaymentLifoCancel(obligation, tx) {
   return { ok: true };
 }
 
+function reverseObligationReserve(state, tx) {
+  const obligation = findObligation(state, tx.obligationId);
+  if (!obligation) return { ok: false, error: 'Обязательство не найдено' };
+
+  const reserved = obligation.reserveAmount ?? 0;
+  if (reserved < tx.amount) {
+    return { ok: false, error: 'Недостаточно зарезервированных средств для отмены' };
+  }
+
+  obligation.reserveAmount = reserved - tx.amount;
+  return { ok: true };
+}
+
 function reverseObligationUnreserve(state, tx) {
   const obligation = findObligation(state, tx.obligationId);
   if (!obligation) return { ok: false, error: 'Обязательство не найдено' };
@@ -1850,6 +1908,12 @@ function canReverseCategoryUnreserve(state, tx) {
   return calculateFreeBalance(state) >= tx.amount;
 }
 
+function canReverseObligationReserve(state, tx) {
+  const obligation = findObligation(state, tx.obligationId);
+  if (!obligation) return false;
+  return (obligation.reserveAmount ?? 0) >= tx.amount;
+}
+
 function canReverseObligationUnreserve(state, tx) {
   const obligation = findObligation(state, tx.obligationId);
   if (!obligation) return false;
@@ -1946,6 +2010,8 @@ export function canCancelTransaction(state, tx) {
       return canReverseDebtRepay(state, tx);
     case TRANSACTION_TYPES.DEBT_WRITE_OFF:
       return canReverseDebtWriteOff(state, tx);
+    case TRANSACTION_TYPES.OBLIGATION_RESERVE:
+      return canReverseObligationReserve(state, tx);
     case TRANSACTION_TYPES.OBLIGATION_UNRESERVE:
       return canReverseObligationUnreserve(state, tx);
     default:
@@ -2015,6 +2081,9 @@ export function cancelTransaction(state, transactionId) {
       break;
     case TRANSACTION_TYPES.DEBT_WRITE_OFF:
       result = reverseDebtWriteOff(state, tx);
+      break;
+    case TRANSACTION_TYPES.OBLIGATION_RESERVE:
+      result = reverseObligationReserve(state, tx);
       break;
     case TRANSACTION_TYPES.OBLIGATION_UNRESERVE:
       result = reverseObligationUnreserve(state, tx);

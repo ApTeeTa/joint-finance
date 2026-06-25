@@ -32,12 +32,33 @@ function findModal(modalName) {
   return getModalRoot()?.querySelector(selector) ?? document.querySelector(selector);
 }
 
-/** Forms live in #modal-root after relocateModals; fall back to tab container. */
-export function findAppForm(formName, container) {
-  const selector = `[data-form="${formName}"]`;
+/** Query modal-root first, then tab container (after relocateModals). */
+export function findInAppUi(selector, container) {
   return getModalRoot()?.querySelector(selector)
     ?? container?.querySelector(selector)
     ?? document.querySelector(selector);
+}
+
+export function queryAllInAppUi(selector, container) {
+  const root = getModalRoot();
+  if (root) {
+    const inRoot = root.querySelectorAll(selector);
+    if (inRoot.length) return inRoot;
+  }
+  if (container) {
+    const inContainer = container.querySelectorAll(selector);
+    if (inContainer.length) return inContainer;
+  }
+  return document.querySelectorAll(selector);
+}
+
+/** Forms live in #modal-root after relocateModals; fall back to tab container. */
+export function findAppForm(formName, container) {
+  return findInAppUi(`[data-form="${formName}"]`, container);
+}
+
+export function findAppModal(modalName, container) {
+  return findInAppUi(`${MODAL_OVERLAY_SELECTOR}[data-modal="${modalName}"]`, container);
 }
 
 function syncBodyModalState() {

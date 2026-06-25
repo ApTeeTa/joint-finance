@@ -12,7 +12,7 @@ import {
   getOverdueObligations,
   formatOverdueDaysLabel
 } from './obligations.js';
-import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAllInAppUi } from './modalLayer.js';
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
@@ -272,7 +272,7 @@ export function renderDebts(state, container) {
     ${renderWriteOffDebtModal()}
   `;
 
-  container.querySelectorAll('select[name="accountId"]').forEach((select) => {
+  queryAllInAppUi('select[name="accountId"]', container).forEach((select) => {
     select.innerHTML = renderAccountSelectOptions(state);
   });
 }
@@ -282,7 +282,7 @@ function findDebt(state, debtId) {
 }
 
 function refreshAccountSelects(state, container) {
-  container.querySelectorAll('select[name="accountId"]').forEach((select) => {
+  queryAllInAppUi('select[name="accountId"]', container).forEach((select) => {
     const selected = select.value;
     select.innerHTML = renderAccountSelectOptions(state, selected);
   });
@@ -340,17 +340,22 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      const form = container.querySelector('[data-form="repay-debt"]');
+      const form = findAppForm('repay-debt', container);
+      if (!form) return;
       form.querySelector('[name="debtId"]').value = debt.id;
       form.querySelector('[name="amount"]').value = '';
       form.querySelector('[name="amount"]').max = debt.remainingAmount;
       form.querySelector('[name="comment"]').value = '';
       form.querySelector('[name="date"]').value = todayIso();
 
-      container.querySelector('[data-repay-debt-title]').textContent =
-        `${debt.title} · остаток ${formatMoney(debt.remainingAmount)}`;
-      container.querySelector('[data-repay-debt-remaining]').textContent =
-        `Максимум: ${formatMoney(debt.remainingAmount)}`;
+      const titleEl = findInAppUi('[data-repay-debt-title]', container);
+      const remainingEl = findInAppUi('[data-repay-debt-remaining]', container);
+      if (titleEl) {
+        titleEl.textContent = `${debt.title} · остаток ${formatMoney(debt.remainingAmount)}`;
+      }
+      if (remainingEl) {
+        remainingEl.textContent = `Максимум: ${formatMoney(debt.remainingAmount)}`;
+      }
 
       openModal('repay-debt');
       refreshAccountSelects(state, container);
@@ -365,12 +370,15 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      const form = container.querySelector('[data-form="write-off-debt"]');
+      const form = findAppForm('write-off-debt', container);
+      if (!form) return;
       form.querySelector('[name="debtId"]').value = debt.id;
       form.querySelector('[name="comment"]').value = '';
       form.querySelector('[name="date"]').value = todayIso();
-      container.querySelector('[data-write-off-debt-title]').textContent =
-        `${debt.title} · остаток ${formatMoney(debt.remainingAmount)}`;
+      const titleEl = findInAppUi('[data-write-off-debt-title]', container);
+      if (titleEl) {
+        titleEl.textContent = `${debt.title} · остаток ${formatMoney(debt.remainingAmount)}`;
+      }
 
       openModal('write-off-debt');
     }

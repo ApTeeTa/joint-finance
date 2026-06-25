@@ -7,6 +7,7 @@ import {
   recordCategoryUnreserve,
   recordCategoryDeleted,
   recordObligationUnreserve,
+  recordObligationReserve,
   recordObligationPayment,
   recordAccountDeposit,
   recordAccountTransfer,
@@ -121,6 +122,12 @@ export function payObligation(state, obligationId, amount, accountId, paidUntil,
 export function unreserveObligation(state, obligationId, amount, comment, date, author) {
   return runProtected(FINANCE_ENTRY_POINTS.OBLIGATION_UNRESERVE, () =>
     recordObligationUnreserve(state, obligationId, amount, comment, date, author)
+  );
+}
+
+export function reserveObligation(state, obligationId, amount, comment, date, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.OBLIGATION_RESERVE, () =>
+    recordObligationReserve(state, obligationId, amount, comment, date, author)
   );
 }
 

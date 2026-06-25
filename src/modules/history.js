@@ -8,7 +8,7 @@ import {
   todayIso
 } from './transactions.js';
 import { undoTransaction } from './financeGate.js';
-import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -244,7 +244,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
     if (target.closest('[data-action="edit-transaction"]')) {
       const btn = target.closest('[data-action="edit-transaction"]');
       const tx = getUserTransactions(state).find((item) => item.id === btn.dataset.transactionId);
-      const form = container.querySelector('[data-form="edit-transaction"]');
+      const form = findAppForm('edit-transaction', container);
       if (tx && form) {
         form.transactionId.value = tx.id;
         form.comment.value = tx.comment ?? '';

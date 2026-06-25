@@ -8,6 +8,7 @@ export const FINANCE_ENTRY_POINTS = {
   UNRESERVE: 'unreserveCategory',
   CATEGORY_DELETE: 'deleteCategory',
   OBLIGATION_UNRESERVE: 'unreserveObligation',
+  OBLIGATION_RESERVE: 'reserveObligation',
   SAVING_ADMIN: 'manageSaving',
   ACCOUNT: 'manageAccount',
   DEBT: 'manageDebt'
@@ -25,6 +26,7 @@ export const OPERATION_TO_ENTRY_POINT = {
   unreserveCategory: FINANCE_ENTRY_POINTS.UNRESERVE,
   deleteCategory: FINANCE_ENTRY_POINTS.CATEGORY_DELETE,
   unreserveObligation: FINANCE_ENTRY_POINTS.OBLIGATION_UNRESERVE,
+  reserveObligation: FINANCE_ENTRY_POINTS.OBLIGATION_RESERVE,
   manageSaving: FINANCE_ENTRY_POINTS.SAVING_ADMIN,
   depositAccount: FINANCE_ENTRY_POINTS.ACCOUNT,
   transferAccount: FINANCE_ENTRY_POINTS.ACCOUNT,

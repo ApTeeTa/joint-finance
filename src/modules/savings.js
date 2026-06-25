@@ -10,7 +10,7 @@ import {
   getSavingAccumulated,
   todayIso
 } from './transactions.js';
-import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 
 const DEADLINE_LABELS = {
   none: 'Без срока',
@@ -567,7 +567,7 @@ export function renderSavings(state, container) {
 }
 
 function toggleDeadlineDateField(container, prefix, deadlineType) {
-  const wrap = container.querySelector(`[data-deadline-date-wrap="${prefix}"]`);
+  const wrap = findInAppUi(`[data-deadline-date-wrap="${prefix}"]`, container);
   if (wrap) {
     wrap.classList.toggle('hidden', deadlineType !== 'date');
   }
@@ -575,7 +575,7 @@ function toggleDeadlineDateField(container, prefix, deadlineType) {
 
 function fillEditSavingForm(state, container, savingId) {
   const saving = findSaving(state, savingId);
-  const form = container.querySelector('[data-form="edit-saving"]');
+  const form = findAppForm('edit-saving', container);
   if (!saving || !form) return;
 
   form.savingId.value = saving.id;
@@ -612,7 +612,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
     const target = event.target;
 
     if (target.closest('[data-action="open-add-saving"]')) {
-      const form = container.querySelector('[data-form="add-saving"]');
+      const form = findAppForm('add-saving', container);
       if (form) form.reset();
       toggleDeadlineDateField(container, 'add', 'none');
       openModal('add-saving');
@@ -634,7 +634,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-deposit-saving"]')) {
       const btn = target.closest('[data-action="open-deposit-saving"]');
-      const form = container.querySelector('[data-form="deposit-saving"]');
+      const form = findAppForm('deposit-saving', container);
       if (form) {
         form.savingId.value = btn.dataset.savingId;
         form.amount.value = '';
@@ -646,7 +646,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-withdraw-saving"]')) {
       const btn = target.closest('[data-action="open-withdraw-saving"]');
-      const form = container.querySelector('[data-form="withdraw-saving"]');
+      const form = findAppForm('withdraw-saving', container);
       if (form) {
         form.savingId.value = btn.dataset.savingId;
         form.amount.value = '';
@@ -658,7 +658,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-spend-saving"]')) {
       const btn = target.closest('[data-action="open-spend-saving"]');
-      const form = container.querySelector('[data-form="spend-saving"]');
+      const form = findAppForm('spend-saving', container);
       if (form) {
         form.savingId.value = btn.dataset.savingId;
         form.comment.value = '';
