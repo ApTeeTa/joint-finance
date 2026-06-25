@@ -10,28 +10,46 @@ export function isWithinAppUi(target, container) {
   return container.contains(target) || Boolean(root?.contains(target));
 }
 
+const MODAL_OVERLAY_SELECTOR = 'div[data-modal].fixed.inset-0';
+
 export function relocateModals(fromContainer) {
   const root = getModalRoot();
   if (!root || !fromContainer) return;
 
-  fromContainer.querySelectorAll('[data-modal]').forEach((modal) => {
+  fromContainer.querySelectorAll(MODAL_OVERLAY_SELECTOR).forEach((modal) => {
+    const name = modal.dataset.modal;
+    if (name) {
+      root.querySelectorAll(`${MODAL_OVERLAY_SELECTOR}[data-modal="${name}"]`).forEach((existing) => {
+        if (existing !== modal) existing.remove();
+      });
+    }
     root.appendChild(modal);
   });
 }
 
 function findModal(modalName) {
-  const selector = `[data-modal="${modalName}"]`;
+  const selector = `${MODAL_OVERLAY_SELECTOR}[data-modal="${modalName}"]`;
   return getModalRoot()?.querySelector(selector) ?? document.querySelector(selector);
 }
 
+/** Forms live in #modal-root after relocateModals; fall back to tab container. */
+export function findAppForm(formName, container) {
+  const selector = `[data-form="${formName}"]`;
+  return getModalRoot()?.querySelector(selector)
+    ?? container?.querySelector(selector)
+    ?? document.querySelector(selector);
+}
+
 function syncBodyModalState() {
-  const hasOpen = Boolean(getModalRoot()?.querySelector('[data-modal]:not(.hidden)'));
+  const hasOpen = Boolean(getModalRoot()?.querySelector(`${MODAL_OVERLAY_SELECTOR}:not(.hidden)`));
   document.body.classList.toggle('modal-open', hasOpen);
 }
 
 export function openModal(modalName) {
   const modal = findModal(modalName);
   if (!modal) return;
+
+  closeAllModals();
 
   const root = getModalRoot();
   if (root && modal.parentElement !== root) {
@@ -49,7 +67,7 @@ export function closeModal(modalName) {
 }
 
 export function closeAllModals() {
-  getModalRoot()?.querySelectorAll('[data-modal]').forEach((modal) => {
+  getModalRoot()?.querySelectorAll(MODAL_OVERLAY_SELECTOR).forEach((modal) => {
     modal.classList.add('hidden');
   });
   syncBodyModalState();

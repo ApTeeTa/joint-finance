@@ -6,7 +6,7 @@ import {
   deleteCategory as recordCategoryDeletion
 } from './financeGate.js';
 import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LABELS, isMiscCategory, MISC_CATEGORY_NAME } from './transactions.js';
-import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -720,7 +720,9 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     }
 
     if (target.closest('[data-action="open-add-modal"]')) {
-      const form = container.querySelector('[data-form="add-category"]');
+      const btn = target.closest('[data-action="open-add-modal"]');
+      if (!btn || !container.contains(btn)) return;
+      const form = findAppForm('add-category', container);
       if (form) form.reset();
       openModal('add-category');
       return;
@@ -745,7 +747,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-reserve"]')) {
       const btn = target.closest('[data-action="open-reserve"]');
-      const form = container.querySelector('[data-form="reserve"]');
+      const form = findAppForm('reserve', container);
       if (form) {
         form.categoryId.value = btn.dataset.categoryId;
         form.amount.value = '';
@@ -757,7 +759,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     if (target.closest('[data-action="open-unreserve"]')) {
       const btn = target.closest('[data-action="open-unreserve"]');
       const category = findCategory(state, btn.dataset.categoryId);
-      const form = container.querySelector('[data-form="unreserve"]');
+      const form = findAppForm('unreserve', container);
       const hint = container.querySelector('[data-unreserve-hint]');
       if (form && category) {
         form.categoryId.value = category.id;
@@ -781,7 +783,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-expense"]')) {
       const btn = target.closest('[data-action="open-expense"]');
-      const form = container.querySelector('[data-form="expense"]');
+      const form = findAppForm('expense', container);
       if (form) {
         form.categoryId.value = btn.dataset.categoryId;
         form.amount.value = '';
@@ -800,7 +802,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
       if (category && isMiscCategory(category)) {
         return;
       }
-      const form = container.querySelector('[data-form="edit-category"]');
+      const form = findAppForm('edit-category', container);
       if (category && form) {
         form.categoryId.value = category.id;
         form.name.value = category.name;

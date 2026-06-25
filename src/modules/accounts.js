@@ -11,7 +11,7 @@ import {
   TYPE_LABELS
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
-import { openModal, closeModal, isWithinAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { supabase } from '../lib/supabase.js';
 
 const OWNER_LABELS = {
@@ -943,7 +943,7 @@ function getTransferInputMode(form) {
 }
 
 function populateTransferForm(state, container, sourceAccountId) {
-  const form = container.querySelector('[data-form="transfer"]');
+  const form = findAppForm('transfer', container);
   if (!form) return;
 
   const sourceAccount = findAccount(state, sourceAccountId);
@@ -974,7 +974,7 @@ function populateTransferForm(state, container, sourceAccountId) {
 }
 
 function updateTransferFormUI(state, container, sourceAccountId) {
-  const form = container.querySelector('[data-form="transfer"]');
+  const form = findAppForm('transfer', container);
   const rateHint = container.querySelector('[data-transfer-rate-hint]');
   const preview = container.querySelector('[data-transfer-preview]');
   const amountLabel = container.querySelector('[data-transfer-amount-label]');
@@ -1073,7 +1073,9 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     }
 
     if (target.closest('[data-action="open-add-modal"]')) {
-      const form = container.querySelector('[data-form="add-account"]');
+      const btn = target.closest('[data-action="open-add-modal"]');
+      if (!btn || !container.contains(btn)) return;
+      const form = findAppForm('add-account', container);
       if (form) form.reset();
       openModal('add-account');
       return;
@@ -1087,7 +1089,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
 
     if (target.closest('[data-action="open-topup"]')) {
       const btn = target.closest('[data-action="open-topup"]');
-      const form = container.querySelector('[data-form="topup"]');
+      const form = findAppForm('topup', container);
       if (form) {
         form.accountId.value = btn.dataset.accountId;
         form.amount.value = '';
@@ -1108,7 +1110,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     if (target.closest('[data-action="open-edit"]')) {
       const btn = target.closest('[data-action="open-edit"]');
       const account = findAccount(state, btn.dataset.accountId);
-      const form = container.querySelector('[data-form="edit-account"]');
+      const form = findAppForm('edit-account', container);
       if (account && form) {
         form.accountId.value = account.id;
         form.name.value = account.name;
