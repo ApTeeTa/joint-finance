@@ -574,6 +574,8 @@ function renderAccountCard(state, account) {
     itemClass: 'bg-slate-50/50'
   });
 }
+
+function renderAddAccountModal() {
   return `
     <div
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
