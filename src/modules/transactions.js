@@ -874,30 +874,77 @@ function ensureMiscCategory(state) {
     state.categories = [];
   }
 
-  let category = state.categories.find((item) => isMiscCategory(item));
-  if (!category) {
-    category = state.categories.find((item) => item.name === MISC_CATEGORY_NAME);
-  }
-  if (!category) {
-    category = {
-      id: createId('category'),
-      name: MISC_CATEGORY_NAME,
-      isSystem: true,
-      limit: 0,
-      reserved: 0,
-      spent: 0,
-      createdAt: new Date().toISOString()
-    };
-    state.categories.push(category);
-  } else {
-    category.name = MISC_CATEGORY_NAME;
-    category.isSystem = true;
+  const category = consolidateMiscCategories(state);
+  if (category) {
+    return category;
   }
 
-  return category;
+  const created = {
+    id: createId('category'),
+    name: MISC_CATEGORY_NAME,
+    isSystem: true,
+    limit: 0,
+    reserved: 0,
+    spent: 0,
+    createdAt: new Date().toISOString()
+  };
+  state.categories.push(created);
+  return created;
 }
 
-export { ensureMiscCategory };
+function consolidateMiscCategories(state) {
+  if (!Array.isArray(state.categories)) {
+    state.categories = [];
+    return null;
+  }
+
+  const miscCategories = state.categories.filter((item) => isMiscCategory(item));
+  if (!miscCategories.length) {
+    return null;
+  }
+
+  miscCategories.sort((left, right) => {
+    if (left.isSystem && !right.isSystem) return -1;
+    if (!left.isSystem && right.isSystem) return 1;
+    return getRecordTimestamp(left) - getRecordTimestamp(right);
+  });
+
+  const canonical = miscCategories[0];
+  canonical.name = MISC_CATEGORY_NAME;
+  canonical.isSystem = true;
+
+  if (miscCategories.length === 1) {
+    return canonical;
+  }
+
+  const duplicateIds = new Set(miscCategories.slice(1).map((item) => item.id));
+
+  for (const duplicate of miscCategories.slice(1)) {
+    canonical.limit = Math.max(canonical.limit ?? 0, duplicate.limit ?? 0);
+    canonical.reserved = (canonical.reserved ?? 0) + (duplicate.reserved ?? 0);
+    canonical.spent = (canonical.spent ?? 0) + (duplicate.spent ?? 0);
+  }
+
+  for (const tx of state.transactions ?? []) {
+    if (duplicateIds.has(tx.categoryId)) {
+      tx.categoryId = canonical.id;
+      if (tx.categoryName && tx.categoryName !== MISC_CATEGORY_NAME) {
+        tx.categoryName = MISC_CATEGORY_NAME;
+      }
+    }
+  }
+
+  state.categories = state.categories.filter((item) => !duplicateIds.has(item.id));
+  return canonical;
+}
+
+function getRecordTimestamp(record) {
+  const raw = record?.updatedAt || record?.createdAt;
+  const parsed = Date.parse(raw ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export { ensureMiscCategory, consolidateMiscCategories };
 
 export function recordCategoryDeleted(state, category, author) {
   const blocked = guardFinanceEntry('deleteCategory');
