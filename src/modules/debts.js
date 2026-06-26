@@ -14,6 +14,13 @@ import {
   formatOverdueDaysLabel
 } from './obligations.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAllInAppUi } from './modalLayer.js';
+import {
+  DISPLAY_MODULE_KEYS,
+  renderCompactLine,
+  renderDisplayModeList,
+  renderDisplayModeRoot,
+  renderModuleToolbar
+} from './displayMode.js';
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
@@ -75,7 +82,13 @@ function renderDebtCard(debt) {
     : '';
 
   return `
-    <article class="border border-slate-200 rounded-xl p-4 bg-slate-50/50" data-debt-id="${item.id}">
+    <article class="display-item border border-slate-200 rounded-xl p-4 bg-slate-50/50" data-debt-id="${item.id}">
+      ${renderCompactLine({
+        title: escapeHtml(item.title),
+        meta: isManual && categoryLabel ? categoryLabel : `Погашено ${formatMoney(item.paidAmount)}`,
+        value: formatMoney(item.remainingAmount)
+      })}
+      <div class="display-expanded-only">
       <div class="flex items-start justify-between gap-3 mb-3">
         <div class="min-w-0">
           <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(item.title)}</h3>
@@ -109,13 +122,14 @@ function renderDebtCard(debt) {
           >Списать долг</button>
         ` : ''}
       </div>
+      </div>
     </article>
   `;
 }
 
 function renderDebtSection(title, type, debts, options = {}) {
   const cards = debts.length
-    ? `<div class="grid gap-3 sm:grid-cols-2">${debts.map(renderDebtCard).join('')}</div>`
+    ? renderDisplayModeList(debts.map(renderDebtCard).join(''))
     : '<p class="text-sm text-slate-400">Активных долгов нет</p>';
 
   const addAction = options.addAction
@@ -323,8 +337,12 @@ export function renderDebts(state, container) {
   const manualDebts = getActiveDebts(state, 'manual_debt_event');
 
   container.innerHTML = `
+    ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.DEBTS, `
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <h2 class="text-lg font-semibold text-slate-900 mb-6">Долги</h2>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h2 class="text-lg font-semibold text-slate-900">Долги</h2>
+        ${renderModuleToolbar(DISPLAY_MODULE_KEYS.DEBTS)}
+      </div>
       ${renderOverdueObligationsSection(state)}
       ${renderDebtSection(TYPE_LABELS.manual_debt_event, 'manual_debt_event', manualDebts, {
         addAction: 'open-add-manual-debt',
@@ -333,6 +351,7 @@ export function renderDebts(state, container) {
       ${renderDebtSection(TYPE_LABELS.owed_to_us, 'owed_to_us', owedToUs)}
       ${renderDebtSection(TYPE_LABELS.we_owe, 'we_owe', weOwe)}
     </div>
+    `)}
     ${renderCreateManualDebtModal()}
     ${renderCreateDebtModal('owed_to_us')}
     ${renderCreateDebtModal('we_owe')}

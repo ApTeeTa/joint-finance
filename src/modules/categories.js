@@ -7,6 +7,13 @@ import {
 } from './financeGate.js';
 import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LABELS, isMiscCategory, MISC_CATEGORY_NAME } from './transactions.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
+import {
+  DISPLAY_MODULE_KEYS,
+  renderCompactLine,
+  renderDisplayModeList,
+  renderDisplayModeRoot,
+  renderModuleToolbar
+} from './displayMode.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -408,7 +415,13 @@ function renderCategoryCard(state, category) {
     : 'border-slate-200 bg-slate-50/50';
 
   return `
-    <article class="border rounded-xl p-4 relative ${cardClass}" data-category-id="${category.id}">
+    <article class="display-item border rounded-xl p-4 relative ${cardClass}" data-category-id="${category.id}">
+      ${renderCompactLine({
+        title: escapeHtml(category.name),
+        meta: overLimit ? `Превышен лимит · потрачено ${formatMoney(spent)}` : `Доступно ${formatMoney(available)}`,
+        value: formatMoney(limit)
+      })}
+      <div class="display-expanded-only">
       <div class="flex items-start justify-between gap-2 mb-3">
         <div class="flex items-center gap-1.5 min-w-0 flex-1">
           <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(category.name)}</h3>
@@ -493,6 +506,7 @@ function renderCategoryCard(state, category) {
         <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
         ${renderExpenses(state, category)}
       </div>
+      </div>
     </article>
   `;
 }
@@ -501,7 +515,13 @@ function renderMiscCategoryCard(state, category) {
   const spent = category.spent ?? 0;
 
   return `
-    <article class="border border-slate-200 rounded-xl p-4 relative bg-slate-50/50" data-category-id="${category.id}">
+    <article class="display-item border border-slate-200 rounded-xl p-4 relative bg-slate-50/50" data-category-id="${category.id}">
+      ${renderCompactLine({
+        title: escapeHtml(category.name),
+        meta: 'Системная категория',
+        value: formatMoney(spent)
+      })}
+      <div class="display-expanded-only">
       <div class="flex items-start justify-between gap-2 mb-3">
         <div class="min-w-0 flex-1">
           <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(category.name)}</h3>
@@ -524,6 +544,7 @@ function renderMiscCategoryCard(state, category) {
       <div>
         <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
         ${renderExpenses(state, category)}
+      </div>
       </div>
     </article>
   `;
@@ -673,18 +694,20 @@ export function renderCategories(state, container) {
   const freeBalance = getFreeBalance(state);
 
   const categoriesList = categories.length
-    ? `<div class="grid gap-4">${categories.map((c) => renderCategoryCard(state, c)).join('')}</div>`
+    ? renderDisplayModeList(categories.map((c) => renderCategoryCard(state, c)).join(''))
     : renderEmptyState();
 
   container.innerHTML = `
     <div class="space-y-4">
+      ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.CATEGORIES, `
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-lg font-semibold text-slate-900">Категории</h2>
-          ${categories.length ? `<button type="button" data-action="open-add-category-modal" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить категорию</button>` : ''}
+          ${renderModuleToolbar(DISPLAY_MODULE_KEYS.CATEGORIES, categories.length ? `<button type="button" data-action="open-add-category-modal" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить категорию</button>` : '')}
         </div>
         ${categoriesList}
       </div>
+      `)}
     </div>
     ${renderAddCategoryModal()}
     ${renderEditCategoryModal()}

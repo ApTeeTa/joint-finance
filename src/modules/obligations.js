@@ -11,6 +11,13 @@ import {
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
 import { openModal, closeModal, isWithinAppUi, relocateModals, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
+import {
+  DISPLAY_MODULE_KEYS,
+  renderCompactLine,
+  renderDisplayModeList,
+  renderDisplayModeRoot,
+  renderModuleToolbar
+} from './displayMode.js';
 
 export {
   computePaidUntilFromPayments,
@@ -285,7 +292,13 @@ function renderObligationCard(state, obligation) {
   const reservedAmount = item.reserveAmount ?? 0;
 
   return `
-    <article class="border rounded-xl p-4 ${cardClass}" data-obligation-id="${item.id}">
+    <article class="display-item border rounded-xl p-4 ${cardClass}" data-obligation-id="${item.id}">
+      ${renderCompactLine({
+        title: escapeHtml(item.name),
+        meta: `${uiStatus.label} · до ${paidUntilLabel}`,
+        value: amountLabel
+      })}
+      <div class="display-expanded-only">
       <div class="flex items-start justify-between gap-3 mb-3">
         <div class="flex items-center gap-1.5 min-w-0 flex-1">
           <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(item.name)}</h3>
@@ -314,6 +327,7 @@ function renderObligationCard(state, obligation) {
 
       <div class="flex flex-wrap gap-2">
         <button type="button" data-action="open-pay-obligation" data-obligation-id="${item.id}" class="flex-1 min-w-[110px] px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Оплатить</button>
+      </div>
       </div>
     </article>
   `;
@@ -440,17 +454,19 @@ export function renderObligations(state, container) {
   const freeBalance = calculateFreeBalance(state);
 
   const list = obligations.length
-    ? `<div class="grid gap-4 sm:grid-cols-2">${obligations.map((item) => renderObligationCard(state, item)).join('')}</div>`
+    ? renderDisplayModeList(obligations.map((item) => renderObligationCard(state, item)).join(''))
     : '<p class="text-sm text-slate-400">Обязательств пока нет</p>';
 
   container.innerHTML = `
+    ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.OBLIGATIONS, `
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 class="text-lg font-semibold text-slate-900">Обязательства</h2>
-        <button type="button" data-action="open-add-obligation" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить</button>
+        ${renderModuleToolbar(DISPLAY_MODULE_KEYS.OBLIGATIONS, `<button type="button" data-action="open-add-obligation" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить</button>`)}
       </div>
       ${list}
     </div>
+    `)}
     ${renderFormModal('add-obligation', 'Новое обязательство', 'Создать')}
     ${renderFormModal('edit-obligation', 'Редактирование', 'Сохранить')}
     ${renderPayModal()}

@@ -12,6 +12,12 @@ import {
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import {
+  DISPLAY_MODULE_KEYS,
+  renderCompactLine,
+  renderDisplayModeRoot,
+  renderModuleToolbar
+} from './displayMode.js';
 import { supabase } from '../lib/supabase.js';
 
 const OWNER_LABELS = {
@@ -507,7 +513,13 @@ function renderAccountCard(state, account) {
   const currency = account.currency ?? 'RUB';
 
   return `
-    <article class="border border-slate-200 rounded-xl p-4 bg-slate-50/50 relative" data-account-id="${account.id}">
+    <article class="display-item border border-slate-200 rounded-xl p-4 bg-slate-50/50 relative" data-account-id="${account.id}">
+      ${renderCompactLine({
+        title: escapeHtml(account.name),
+        meta: `${currency} · ${ownerIcon} ${ownerLabel}`,
+        value: formatMoney(account.balance, currency)
+      })}
+      <div class="display-expanded-only">
       <button
         type="button"
         data-action="delete-account"
@@ -554,6 +566,7 @@ function renderAccountCard(state, account) {
       <div class="mt-2">
         <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">История</p>
         ${renderOperations(state, account.id, currency)}
+      </div>
       </div>
     </article>
   `;
@@ -864,7 +877,7 @@ function renderOwnerGroupSection(state, ownerKey, label, accounts) {
           <span class="text-slate-400 text-sm shrink-0 group-open:rotate-180 transition-transform mt-1">▼</span>
         </div>
       </summary>
-      <div class="px-4 pb-4 grid gap-4">${cards}</div>
+      <div class="px-4 pb-4 display-mode-list">${cards}</div>
     </details>
   `;
 }
@@ -893,16 +906,17 @@ export function renderAccounts(state, container) {
 
   container.innerHTML = `
     <div class="space-y-4">
+      ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.ACCOUNTS, `
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-lg font-semibold text-slate-900">Счета</h2>
-          ${accounts.length ? `
+          ${renderModuleToolbar(DISPLAY_MODULE_KEYS.ACCOUNTS, accounts.length ? `
             <button
               type="button"
               data-action="open-add-account-modal"
               class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0"
             >Добавить счет</button>
-          ` : ''}
+          ` : '')}
         </div>
 
         <div class="flex items-center gap-3 mb-6 p-3 bg-slate-50 rounded-xl">
@@ -929,6 +943,7 @@ export function renderAccounts(state, container) {
           >Сбросить все данные</button>
         </div>
       </div>
+      `)}
     </div>
     ${renderAddAccountModal()}
     ${renderEditAccountModal()}

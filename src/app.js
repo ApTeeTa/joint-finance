@@ -15,6 +15,7 @@ import { renderStats, initStatsHandlers } from './modules/stats.js';
 import { reconcileLegacyTransactions } from './modules/transactions.js';
 import { saveState, loadState, clearState } from './modules/storage.js';
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
+import { initDisplayModeSystem } from './modules/displayMode.js';
 import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState, markInitialSyncDone } from './lib/stateRemote.js';
 
 console.log('APP ENTRY LOADED');
@@ -257,6 +258,7 @@ async function init() {
 
   if (!tabContent) return;
 
+  initDisplayModeSystem();
   applyLoadedState(loadState());
   renderProfile();
   updateCounters();

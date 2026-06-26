@@ -11,6 +11,13 @@ import {
   todayIso
 } from './transactions.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import {
+  DISPLAY_MODULE_KEYS,
+  renderCompactLine,
+  renderDisplayModeList,
+  renderDisplayModeRoot,
+  renderModuleToolbar
+} from './displayMode.js';
 
 const DEADLINE_LABELS = {
   none: 'Без срока',
@@ -400,7 +407,13 @@ function renderSavingCard(state, saving) {
     : '';
 
   return `
-    <article class="border border-slate-200 rounded-xl p-4 bg-slate-50/50 relative" data-saving-id="${item.id}">
+    <article class="display-item border border-slate-200 rounded-xl p-4 bg-slate-50/50 relative" data-saving-id="${item.id}">
+      ${renderCompactLine({
+        title: escapeHtml(item.name),
+        meta: percent != null ? `Прогресс ${percent}%` : (goalReached ? 'Цель достигнута' : ''),
+        value: formatMoney(accumulated)
+      })}
+      <div class="display-expanded-only">
       <button type="button" data-action="delete-saving" data-saving-id="${item.id}" title="Удалить" class="absolute top-3 right-3 p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
       <div class="flex items-start justify-between gap-3 mb-3 pr-8">
         <div class="min-w-0">
@@ -437,6 +450,7 @@ function renderSavingCard(state, saving) {
         ${goalReached && accumulated > 0 ? `
           <button type="button" data-action="open-spend-saving" data-saving-id="${item.id}" class="flex-1 min-w-[120px] px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Потратить</button>
         ` : ''}
+      </div>
       </div>
     </article>
   `;
@@ -585,18 +599,20 @@ export function renderSavings(state, container) {
   const savings = (state.savings ?? []).map(normalizeSaving);
 
   const list = savings.length
-    ? `<div class="grid gap-4">${savings.map((item) => renderSavingCard(state, item)).join('')}</div>`
+    ? renderDisplayModeList(savings.map((item) => renderSavingCard(state, item)).join(''))
     : renderEmptyState();
 
   container.innerHTML = `
     <div class="space-y-4">
+      ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.SAVINGS, `
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-lg font-semibold text-slate-900">Копилки</h2>
-          ${savings.length ? `<button type="button" data-action="open-add-saving" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить копилку</button>` : ''}
+          ${renderModuleToolbar(DISPLAY_MODULE_KEYS.SAVINGS, savings.length ? `<button type="button" data-action="open-add-saving" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить копилку</button>` : '')}
         </div>
         ${list}
       </div>
+      `)}
     </div>
     ${renderAddSavingModal()}
     ${renderEditSavingModal()}

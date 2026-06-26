@@ -91,6 +91,64 @@
       touch-action: pan-x;
       -webkit-overflow-scrolling: touch;
     }
+
+    .display-mode-root,
+    .display-mode-list,
+    .display-item,
+    .display-compact-only,
+    .display-expanded-only {
+      transition: gap 180ms ease, padding 180ms ease, opacity 150ms ease;
+    }
+
+    .display-compact-only {
+      display: none;
+    }
+
+    .display-expanded-only {
+      display: block;
+    }
+
+    [data-display-mode="compact"] .display-mode-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    [data-display-mode="medium"] .display-mode-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
+    @media (min-width: 640px) {
+      [data-display-mode="medium"] .display-mode-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    [data-display-mode="large"] .display-mode-list {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+
+    [data-display-mode="compact"] .display-compact-only {
+      display: flex;
+    }
+
+    [data-display-mode="compact"] .display-expanded-only {
+      display: none;
+    }
+
+    [data-display-mode="compact"] .display-item {
+      border: none;
+      padding: 0;
+      background: transparent;
+    }
+
+    [data-display-mode="large"] .display-item {
+      padding: 1.5rem;
+    }
   </style>
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-800 overflow-x-hidden">
