@@ -1,7 +1,6 @@
 import { supabase } from './supabase.js';
 import { exportSharedSnapshot, applySharedSnapshot, mergeSharedSnapshots } from '../modules/storage.js';
-
-const SNAPSHOT_ID = 'shared';
+import { SNAPSHOT_ID } from '../config/environment.js';
 const PUSH_DELAY_MS = 400;
 
 let pushTimer = null;
@@ -125,11 +124,21 @@ export async function clearRemoteSharedState() {
 
 export function subscribeSharedState(state, onChange) {
   const channel = supabase
-    .channel('joint-finance-shared-state')
+    .channel(`joint-finance-shared-state-${SNAPSHOT_ID}`)
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'household_snapshots' },
+      {
+        event: '*',
+        schema: 'public',
+        table: 'household_snapshots',
+        filter: `id=eq.${SNAPSHOT_ID}`
+      },
       async (payload) => {
+        const rowId = payload.new?.id ?? payload.old?.id;
+        if (rowId !== SNAPSHOT_ID) {
+          return;
+        }
+
         const updatedAt = payload.new?.updated_at;
         if (updatedAt && Date.now() - lastPushedAt < 1500) {
           return;

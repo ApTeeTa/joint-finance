@@ -16,7 +16,8 @@ import {
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAllInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderCompactLine,
+  renderDisplayItem,
+  renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar
@@ -81,50 +82,50 @@ function renderDebtCard(debt) {
     ? MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other
     : '';
 
-  return `
-    <article class="display-item border border-slate-200 rounded-xl p-4 bg-slate-50/50" data-debt-id="${item.id}">
-      ${renderCompactLine({
-        title: escapeHtml(item.title),
-        meta: isManual && categoryLabel ? categoryLabel : `Погашено ${formatMoney(item.paidAmount)}`,
-        value: formatMoney(item.remainingAmount)
-      })}
-      <div class="display-expanded-only">
-      <div class="flex items-start justify-between gap-3 mb-3">
-        <div class="min-w-0">
-          <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(item.title)}</h3>
-          ${isManual && categoryLabel ? `<p class="text-xs text-amber-700 mt-0.5">${escapeHtml(categoryLabel)}</p>` : ''}
-          ${item.comment ? `<p class="text-sm text-slate-500 mt-0.5">${escapeHtml(item.comment)}</p>` : ''}
-          ${isManual && item.eventDate ? `<p class="text-xs text-slate-400 mt-0.5">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
-        </div>
-        <div class="text-right shrink-0">
-          <p class="text-lg font-bold text-slate-900">${formatMoney(item.remainingAmount)}</p>
-          <p class="text-xs text-slate-400 mt-0.5">из ${formatMoney(item.amount)}</p>
-        </div>
-      </div>
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(item.title),
+    meta: isManual && categoryLabel ? categoryLabel : `Погашено ${formatMoney(item.paidAmount)}`,
+    value: formatMoney(item.remainingAmount),
+    statsHtml: `
+      <span class="text-slate-500">Остаток:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(item.remainingAmount)}</span>
+      <span class="text-slate-500">Из суммы:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(item.amount)}</span>
+      <span class="text-slate-500">Погашено:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(item.paidAmount)}</span>
+    `
+  });
 
-      <div class="text-sm text-slate-600 mb-4">
-        <p><span class="text-slate-400">Погашено:</span> ${formatMoney(item.paidAmount)}</p>
-      </div>
-
-      <div class="flex flex-wrap gap-2">
+  const detailHtml = `
+    ${item.comment ? `<p class="text-sm text-slate-500 mb-2">${escapeHtml(item.comment)}</p>` : ''}
+    ${isManual && item.eventDate ? `<p class="text-xs text-slate-400 mb-3">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
+    <div class="display-item-detail-actions">
+      <button
+        type="button"
+        data-action="open-repay-debt"
+        data-debt-id="${item.id}"
+        class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+      >Погасить</button>
+      ${isOwedToUs ? `
         <button
           type="button"
-          data-action="open-repay-debt"
+          data-action="open-write-off-debt"
           data-debt-id="${item.id}"
-          class="flex-1 min-w-[120px] px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-        >Погасить</button>
-        ${isOwedToUs ? `
-          <button
-            type="button"
-            data-action="open-write-off-debt"
-            data-debt-id="${item.id}"
-            class="flex-1 min-w-[120px] px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-          >Списать долг</button>
-        ` : ''}
-      </div>
-      </div>
-    </article>
+          class="px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+        >Списать долг</button>
+      ` : ''}
+    </div>
   `;
+
+  return renderDisplayItem({
+    moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
+    itemId: item.id,
+    dataAttr: 'data-debt-id',
+    dataValue: item.id,
+    summaryHtml,
+    detailHtml,
+    itemClass: 'bg-slate-50/50'
+  });
 }
 
 function renderDebtSection(title, type, debts, options = {}) {

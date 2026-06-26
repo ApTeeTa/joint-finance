@@ -13,7 +13,8 @@ import {
 import { openModal, closeModal, isWithinAppUi, relocateModals, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderCompactLine,
+  renderDisplayItem,
+  renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar
@@ -291,46 +292,44 @@ function renderObligationCard(state, obligation) {
     : '—';
   const reservedAmount = item.reserveAmount ?? 0;
 
-  return `
-    <article class="display-item border rounded-xl p-4 ${cardClass}" data-obligation-id="${item.id}">
-      ${renderCompactLine({
-        title: escapeHtml(item.name),
-        meta: `${uiStatus.label} · до ${paidUntilLabel}`,
-        value: amountLabel
-      })}
-      <div class="display-expanded-only">
-      <div class="flex items-start justify-between gap-3 mb-3">
-        <div class="flex items-center gap-1.5 min-w-0 flex-1">
-          <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(item.name)}</h3>
-          <button type="button" data-action="open-edit-obligation" data-obligation-id="${item.id}" title="Редактировать" class="p-1 rounded text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors shrink-0">${ICONS.pencil}</button>
-        </div>
-        <div class="flex items-center gap-1 shrink-0">
-          <span class="px-2 py-1 rounded-full text-xs font-medium ${badgeClass}">
-            ${escapeHtml(uiStatus.label)}
-          </span>
-          <button type="button" data-action="delete-obligation" data-obligation-id="${item.id}" title="Удалить" class="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
-        </div>
-      </div>
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(item.name),
+    meta: `${uiStatus.label} · до ${paidUntilLabel}`,
+    value: amountLabel,
+    badgesHtml: `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass}">${escapeHtml(uiStatus.label)}</span>`,
+    statsHtml: `
+      <span class="text-slate-500">Сумма:</span>
+      <span class="text-slate-900 font-medium text-right">${amountLabel}</span>
+      <span class="text-slate-500">Срок:</span>
+      <span class="text-slate-900 font-medium text-right">${paidUntilLabel}</span>
+      <span class="text-slate-500">Зарезервировано:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(reservedAmount)}</span>
+    `
+  });
 
-      <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-4">
-        <span class="text-slate-500">Сумма:</span>
-        <span class="text-slate-900 font-medium text-right">${amountLabel}</span>
-        <span class="text-slate-500">Срок:</span>
-        <span class="text-slate-900 font-medium text-right">${paidUntilLabel}</span>
-        <span class="text-slate-500">Зарезервировано:</span>
-        <span class="text-slate-900 font-medium text-right flex items-center justify-end gap-1">
-          ${formatMoney(reservedAmount)}
-          <button type="button" data-action="open-reserve-obligation" data-obligation-id="${item.id}" title="Зарезервировать" class="p-0.5 rounded text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none">+</button>
-          <button type="button" data-action="open-unreserve-obligation" data-obligation-id="${item.id}" title="Снять резерв" class="p-0.5 rounded text-slate-500 hover:bg-slate-200 transition-colors text-base leading-none">−</button>
-        </span>
-      </div>
-
-      <div class="flex flex-wrap gap-2">
-        <button type="button" data-action="open-pay-obligation" data-obligation-id="${item.id}" class="flex-1 min-w-[110px] px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Оплатить</button>
-      </div>
-      </div>
-    </article>
+  const actionsHtml = `
+    <button type="button" data-action="open-reserve-obligation" data-obligation-id="${item.id}" title="Зарезервировать" class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none">+</button>
+    <button type="button" data-action="open-unreserve-obligation" data-obligation-id="${item.id}" title="Снять резерв" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 transition-colors text-base leading-none">−</button>
+    <button type="button" data-action="open-edit-obligation" data-obligation-id="${item.id}" title="Редактировать" class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors">${ICONS.pencil}</button>
+    <button type="button" data-action="delete-obligation" data-obligation-id="${item.id}" title="Удалить" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
   `;
+
+  const detailHtml = `
+    <div class="display-item-detail-actions">
+      <button type="button" data-action="open-pay-obligation" data-obligation-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Оплатить</button>
+    </div>
+  `;
+
+  return renderDisplayItem({
+    moduleKey: DISPLAY_MODULE_KEYS.OBLIGATIONS,
+    itemId: item.id,
+    dataAttr: 'data-obligation-id',
+    dataValue: item.id,
+    summaryHtml,
+    actionsHtml,
+    detailHtml,
+    itemClass: cardClass
+  });
 }
 
 function renderFormModal(key, title, submitLabel, obligation = null) {

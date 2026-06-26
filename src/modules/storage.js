@@ -1,4 +1,8 @@
-const STORAGE_KEY = 'joint-finance-state-v2';
+import { SNAPSHOT_ID } from '../config/environment.js';
+
+const STORAGE_KEY = SNAPSHOT_ID === 'shared'
+  ? 'joint-finance-state-v2'
+  : `joint-finance-state-v2-${SNAPSHOT_ID}`;
 
 const VALID_TABS = ['accounts', 'categories', 'history', 'obligations', 'savings', 'debts', 'stats'];
 

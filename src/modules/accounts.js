@@ -14,7 +14,8 @@ import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderCompactLine,
+  renderDisplayItem,
+  renderDisplaySummary,
   renderDisplayModeRoot,
   renderModuleToolbar
 } from './displayMode.js';
@@ -512,67 +513,67 @@ function renderAccountCard(state, account) {
   const ownerIcon = OWNER_ICONS[owner] ?? '👤';
   const currency = account.currency ?? 'RUB';
 
-  return `
-    <article class="display-item border border-slate-200 rounded-xl p-4 bg-slate-50/50 relative" data-account-id="${account.id}">
-      ${renderCompactLine({
-        title: escapeHtml(account.name),
-        meta: `${currency} · ${ownerIcon} ${ownerLabel}`,
-        value: formatMoney(account.balance, currency)
-      })}
-      <div class="display-expanded-only">
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(account.name),
+    meta: `${currency} · ${ownerIcon} ${ownerLabel}`,
+    value: formatMoney(account.balance, currency),
+    statsHtml: `
+      <span class="text-slate-500">Валюта:</span>
+      <span class="text-slate-900 font-medium text-right">${currency}</span>
+      <span class="text-slate-500">Владелец:</span>
+      <span class="text-slate-900 font-medium text-right">${ownerIcon} ${ownerLabel}</span>
+    `
+  });
+
+  const actionsHtml = `
+    <button
+      type="button"
+      data-action="open-edit"
+      data-account-id="${account.id}"
+      title="Редактировать"
+      class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+    >${ICONS.pencil}</button>
+    <button
+      type="button"
+      data-action="delete-account"
+      data-account-id="${account.id}"
+      title="Удалить"
+      class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+    >${ICONS.trash}</button>
+  `;
+
+  const detailHtml = `
+    <div class="display-item-detail-actions mb-3">
       <button
         type="button"
-        data-action="delete-account"
+        data-action="open-topup"
         data-account-id="${account.id}"
-        title="Удалить"
-        class="absolute top-3 right-3 p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-      >${ICONS.trash}</button>
-      <div class="flex items-start justify-between gap-3 mb-3 pr-8">
-        <div class="min-w-0">
-          <div class="flex items-center gap-1.5">
-            <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(account.name)}</h3>
-            <button
-              type="button"
-              data-action="open-edit"
-              data-account-id="${account.id}"
-              title="Редактировать"
-              class="p-1 rounded text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors shrink-0"
-            >${ICONS.pencil}</button>
-          </div>
-          <p class="text-sm text-slate-500 mt-0.5">${currency}</p>
-        </div>
-        <div class="text-right shrink-0">
-          <p class="text-lg font-bold text-slate-900">${formatMoney(account.balance, currency)}</p>
-          <p class="text-xs text-slate-500 mt-1 flex items-center justify-end gap-1">
-            <span>${ownerIcon}</span>
-            <span>${ownerLabel}</span>
-          </p>
-        </div>
-      </div>
-      <div class="flex gap-2 mb-2">
-        <button
-          type="button"
-          data-action="open-topup"
-          data-account-id="${account.id}"
-          class="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-        >Пополнить</button>
-        <button
-          type="button"
-          data-action="open-transfer"
-          data-account-id="${account.id}"
-          class="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-        >Перевести</button>
-      </div>
-      <div class="mt-2">
-        <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">История</p>
-        ${renderOperations(state, account.id, currency)}
-      </div>
-      </div>
-    </article>
+        class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+      >Пополнить</button>
+      <button
+        type="button"
+        data-action="open-transfer"
+        data-account-id="${account.id}"
+        class="px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+      >Перевести</button>
+    </div>
+    <div class="min-w-0">
+      <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">История</p>
+      ${renderOperations(state, account.id, currency)}
+    </div>
   `;
-}
 
-function renderAddAccountModal() {
+  return renderDisplayItem({
+    moduleKey: DISPLAY_MODULE_KEYS.ACCOUNTS,
+    itemId: account.id,
+    dataAttr: 'data-account-id',
+    dataValue: account.id,
+    summaryHtml,
+    actionsHtml,
+    detailHtml,
+    itemClass: 'bg-slate-50/50'
+  });
+}
   return `
     <div
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"

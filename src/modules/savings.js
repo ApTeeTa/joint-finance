@@ -13,7 +13,8 @@ import {
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderCompactLine,
+  renderDisplayItem,
+  renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar
@@ -406,54 +407,56 @@ function renderSavingCard(state, saving) {
     `
     : '';
 
-  return `
-    <article class="display-item border border-slate-200 rounded-xl p-4 bg-slate-50/50 relative" data-saving-id="${item.id}">
-      ${renderCompactLine({
-        title: escapeHtml(item.name),
-        meta: percent != null ? `Прогресс ${percent}%` : (goalReached ? 'Цель достигнута' : ''),
-        value: formatMoney(accumulated)
-      })}
-      <div class="display-expanded-only">
-      <button type="button" data-action="delete-saving" data-saving-id="${item.id}" title="Удалить" class="absolute top-3 right-3 p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
-      <div class="flex items-start justify-between gap-3 mb-3 pr-8">
-        <div class="min-w-0">
-          <div class="flex items-center gap-1.5">
-            <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(item.name)}</h3>
-            <button type="button" data-action="open-edit-saving" data-saving-id="${item.id}" title="Редактировать" class="p-1 rounded text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors shrink-0">${ICONS.pencil}</button>
-          </div>
-        </div>
-        ${goalReached ? '<p class="text-xs text-emerald-600 shrink-0">Цель достигнута</p>' : ''}
-      </div>
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(item.name),
+    meta: percent != null ? `Прогресс ${percent}%` : (goalReached ? 'Цель достигнута' : ''),
+    value: formatMoney(accumulated),
+    badgesHtml: goalReached ? '<span class="text-xs text-emerald-600">Цель достигнута</span>' : '',
+    statsHtml: `
+      ${targetAmount != null && targetAmount > 0 ? `
+        <span class="text-slate-500">Цель:</span>
+        <span class="text-slate-900 font-medium text-right">${formatMoney(targetAmount)}</span>
+      ` : ''}
+      <span class="text-slate-500">Накоплено:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(accumulated)}</span>
+      ${percent != null ? `
+        <span class="text-slate-500">Прогресс:</span>
+        <span class="text-primary-700 font-medium text-right">${percent}%</span>
+      ` : ''}
+      ${renderRecommendedMonthlyPaymentRow(item)}
+    `
+  });
 
-      <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-4">
-        ${targetAmount != null && targetAmount > 0 ? `
-          <span class="text-slate-500">Цель:</span>
-          <span class="text-slate-900 font-medium text-right">${formatMoney(targetAmount)}</span>
-        ` : ''}
-        <span class="text-slate-500">Накоплено:</span>
-        <span class="text-slate-900 font-medium text-right">${formatMoney(accumulated)}</span>
-        ${percent != null ? `
-          <span class="text-slate-500">Прогресс:</span>
-          <span class="text-primary-700 font-medium text-right">${percent}%</span>
-        ` : ''}
-        ${renderRecommendedMonthlyPaymentRow(item)}
-      </div>
-      ${progressBar}
-
-      <div class="flex flex-wrap gap-2">
-        ${!goalReached ? `
-          <button type="button" data-action="open-deposit-saving" data-saving-id="${item.id}" class="flex-1 min-w-[120px] px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Пополнить</button>
-        ` : ''}
-        ${accumulated > 0 ? `
-          <button type="button" data-action="open-withdraw-saving" data-saving-id="${item.id}" class="flex-1 min-w-[120px] px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">Вернуть</button>
-        ` : ''}
-        ${goalReached && accumulated > 0 ? `
-          <button type="button" data-action="open-spend-saving" data-saving-id="${item.id}" class="flex-1 min-w-[120px] px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Потратить</button>
-        ` : ''}
-      </div>
-      </div>
-    </article>
+  const actionsHtml = `
+    <button type="button" data-action="open-edit-saving" data-saving-id="${item.id}" title="Редактировать" class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors">${ICONS.pencil}</button>
+    <button type="button" data-action="delete-saving" data-saving-id="${item.id}" title="Удалить" class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
   `;
+
+  const detailHtml = `
+    ${progressBar}
+    <div class="display-item-detail-actions mt-3">
+      ${!goalReached ? `
+        <button type="button" data-action="open-deposit-saving" data-saving-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Пополнить</button>
+      ` : ''}
+      ${accumulated > 0 ? `
+        <button type="button" data-action="open-withdraw-saving" data-saving-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">Вернуть</button>
+      ` : ''}
+      ${goalReached && accumulated > 0 ? `
+        <button type="button" data-action="open-spend-saving" data-saving-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Потратить</button>
+      ` : ''}
+    </div>
+  `;
+
+  return renderDisplayItem({
+    moduleKey: DISPLAY_MODULE_KEYS.SAVINGS,
+    itemId: item.id,
+    dataAttr: 'data-saving-id',
+    dataValue: item.id,
+    summaryHtml,
+    actionsHtml,
+    detailHtml,
+    itemClass: 'bg-slate-50/50'
+  });
 }
 
 function renderAddSavingModal() {

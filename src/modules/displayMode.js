@@ -111,16 +111,74 @@ export function renderDisplayModeList(innerHtml) {
   return `<div class="display-mode-list">${innerHtml}</div>`;
 }
 
-export function renderCompactLine({ title, meta = '', value = '' }) {
+/** Layout layer: single summary source styled per display mode via CSS. */
+export function renderDisplaySummary({ title, meta = '', value = '', statsHtml = '', badgesHtml = '' }) {
   return `
-    <div class="display-compact-only flex items-center justify-between gap-2 py-2.5 px-3 rounded-lg border border-slate-200 bg-white min-h-[44px]">
-      <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium text-slate-900 truncate">${title}</p>
-        ${meta ? `<p class="text-xs text-slate-500 truncate">${meta}</p>` : ''}
+    <div class="display-item-summary">
+      <div class="display-item-head min-w-0">
+        ${badgesHtml ? `<div class="display-item-badges">${badgesHtml}</div>` : ''}
+        <h3 class="display-item-title">${title}</h3>
+        ${meta ? `<p class="display-item-meta">${meta}</p>` : ''}
       </div>
-      ${value ? `<span class="text-sm font-semibold text-slate-900 shrink-0 whitespace-nowrap">${value}</span>` : ''}
+      ${statsHtml ? `<div class="display-item-stats">${statsHtml}</div>` : ''}
+      ${value ? `<div class="display-item-value-wrap"><span class="display-item-value">${value}</span></div>` : ''}
     </div>
   `;
+}
+
+/**
+ * Three-layer item shell:
+ * - layout: summary inside .display-item-body
+ * - actions: .display-item-actions (always visible)
+ * - interaction: .display-item-detail (toggle on body click)
+ */
+export function renderDisplayItem({
+  moduleKey,
+  itemId,
+  dataAttr,
+  dataValue,
+  summaryHtml,
+  actionsHtml = '',
+  detailHtml = '',
+  itemClass = ''
+}) {
+  return `
+    <article
+      class="display-item ${itemClass}"
+      ${dataAttr}="${escapeAttr(dataValue)}"
+      data-display-item
+      data-display-item-id="${escapeAttr(itemId)}"
+    >
+      <div class="display-item-shell">
+        <button
+          type="button"
+          class="display-item-body"
+          data-action="toggle-display-detail"
+          data-display-module="${moduleKey}"
+          data-display-item-id="${escapeAttr(itemId)}"
+          aria-expanded="false"
+        >
+          ${summaryHtml}
+        </button>
+        ${actionsHtml ? `<div class="display-item-actions">${actionsHtml}</div>` : ''}
+      </div>
+      ${detailHtml ? `
+        <div
+          class="display-item-detail"
+          data-display-detail
+          data-display-item-id="${escapeAttr(itemId)}"
+          hidden
+        >${detailHtml}</div>
+      ` : ''}
+    </article>
+  `;
+}
+
+function escapeAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
 }
 
 function updateToggleState(container, moduleKey, mode) {
@@ -134,6 +192,56 @@ function updateToggleState(container, moduleKey, mode) {
   });
 }
 
+function closeAllDisplayDetails(container) {
+  if (!container) {
+    return;
+  }
+  container.querySelectorAll('[data-display-detail]').forEach((detail) => {
+    detail.hidden = true;
+    detail.classList.remove('is-open');
+  });
+  container.querySelectorAll('[data-action="toggle-display-detail"]').forEach((button) => {
+    button.setAttribute('aria-expanded', 'false');
+  });
+  container.querySelectorAll('.display-item-open').forEach((item) => {
+    item.classList.remove('display-item-open');
+  });
+}
+
+function toggleDisplayDetail(button) {
+  const article = button.closest('.display-item');
+  const detail = article?.querySelector('[data-display-detail]');
+  if (!article || !detail) {
+    return;
+  }
+
+  const willOpen = detail.hidden;
+  const root = article.closest('[data-display-mode-root]');
+  if (root) {
+    root.querySelectorAll('[data-display-detail]').forEach((other) => {
+      if (other !== detail) {
+        other.hidden = true;
+        other.classList.remove('is-open');
+      }
+    });
+    root.querySelectorAll('[data-action="toggle-display-detail"]').forEach((otherBtn) => {
+      if (otherBtn !== button) {
+        otherBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+    root.querySelectorAll('.display-item-open').forEach((item) => {
+      if (item !== article) {
+        item.classList.remove('display-item-open');
+      }
+    });
+  }
+
+  detail.hidden = !willOpen;
+  detail.classList.toggle('is-open', willOpen);
+  button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  article.classList.toggle('display-item-open', willOpen);
+}
+
 export function applyDisplayMode(container, moduleKey, mode) {
   if (!container || !isValidMode(mode)) {
     return;
@@ -144,6 +252,7 @@ export function applyDisplayMode(container, moduleKey, mode) {
   const root = container.querySelector(`[data-display-mode-root="${moduleKey}"]`);
   if (root) {
     root.dataset.displayMode = mode;
+    closeAllDisplayDetails(root);
   }
 
   updateToggleState(container, moduleKey, mode);
@@ -156,22 +265,25 @@ export function initDisplayModeSystem() {
   displayModeSystemReady = true;
 
   document.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-action="set-display-mode"]');
-    if (!button) {
+    const modeButton = event.target.closest('[data-action="set-display-mode"]');
+    if (modeButton) {
+      const moduleKey = modeButton.dataset.displayModule;
+      const mode = modeButton.dataset.displayMode;
+      const container = document.getElementById('tab-content');
+      if (!container || !moduleKey || !isValidMode(mode)) {
+        return;
+      }
+      if (getDisplayMode(moduleKey) === mode) {
+        return;
+      }
+      applyDisplayMode(container, moduleKey, mode);
       return;
     }
 
-    const moduleKey = button.dataset.displayModule;
-    const mode = button.dataset.displayMode;
-    const container = document.getElementById('tab-content');
-    if (!container || !moduleKey || !isValidMode(mode)) {
-      return;
+    const detailButton = event.target.closest('[data-action="toggle-display-detail"]');
+    if (detailButton) {
+      event.preventDefault();
+      toggleDisplayDetail(detailButton);
     }
-
-    if (getDisplayMode(moduleKey) === mode) {
-      return;
-    }
-
-    applyDisplayMode(container, moduleKey, mode);
   });
 }

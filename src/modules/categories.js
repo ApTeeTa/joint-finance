@@ -9,7 +9,8 @@ import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LAB
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderCompactLine,
+  renderDisplayItem,
+  renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar
@@ -412,142 +413,139 @@ function renderCategoryCard(state, category) {
   const availableClass = available < 0 ? 'text-red-600' : 'text-emerald-700';
   const cardClass = overLimit
     ? 'border-amber-400 bg-amber-50'
-    : 'border-slate-200 bg-slate-50/50';
+    : '';
 
-  return `
-    <article class="display-item border rounded-xl p-4 relative ${cardClass}" data-category-id="${category.id}">
-      ${renderCompactLine({
-        title: escapeHtml(category.name),
-        meta: overLimit ? `Превышен лимит · потрачено ${formatMoney(spent)}` : `Доступно ${formatMoney(available)}`,
-        value: formatMoney(limit)
-      })}
-      <div class="display-expanded-only">
-      <div class="flex items-start justify-between gap-2 mb-3">
-        <div class="flex items-center gap-1.5 min-w-0 flex-1">
-          <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(category.name)}</h3>
-          <button
-            type="button"
-            data-action="open-edit"
-            data-category-id="${category.id}"
-            title="Редактировать"
-            class="p-1 rounded text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors shrink-0"
-          >${ICONS.pencil}</button>
-        </div>
-        <div class="relative shrink-0">
-          <button
-            type="button"
-            data-action="toggle-menu"
-            data-category-id="${category.id}"
-            title="Меню"
-            class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 transition-colors"
-          >${ICONS.dots}</button>
-          <div
-            data-menu="${category.id}"
-            class="hidden absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-10 min-w-[140px]"
-          >
-            <button
-              type="button"
-              data-action="delete-category"
-              data-category-id="${category.id}"
-              class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-            >${ICONS.trash}<span>Удалить</span></button>
-          </div>
-        </div>
-      </div>
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(category.name),
+    meta: overLimit ? `Превышен лимит · потрачено ${formatMoney(spent)}` : `Доступно ${formatMoney(available)}`,
+    value: formatMoney(limit),
+    statsHtml: `
+      <span class="text-slate-500">Лимит:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(limit)}</span>
+      <span class="text-slate-500">Потрачено:</span>
+      <span class="${overLimit ? 'text-red-600' : 'text-slate-900'} font-medium text-right">${formatMoney(spent)}</span>
+      <span class="text-slate-500">Доступно:</span>
+      <span class="${availableClass} font-medium text-right">${formatMoney(available)}</span>
+    `
+  });
 
-      ${overLimit ? `
-        <div class="mb-3 p-2.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-sm">
-          ⚠ Вы превысили лимит категории на ${formatMoney(overflow)}. Рекомендуется увеличить лимит.
-        </div>
-      ` : ''}
-
-      <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-4">
-        <span class="text-slate-500">Лимит:</span>
-        <span class="text-slate-900 font-medium text-right">${formatMoney(limit)}</span>
-        <span class="text-slate-500">Потрачено:</span>
-        <span class="${overLimit ? 'text-red-600' : 'text-slate-900'} font-medium text-right">${formatMoney(spent)}</span>
-        <span class="text-slate-500">Доступно:</span>
-        <span class="${availableClass} font-medium text-right flex items-center justify-end gap-0.5">
-          ${formatMoney(available)}
-          <button
-            type="button"
-            data-action="open-reserve"
-            data-category-id="${category.id}"
-            title="Пополнить"
-            class="p-0.5 rounded text-emerald-600 hover:bg-emerald-100 transition-colors"
-          >${ICONS.reserve}</button>
-          <button
-            type="button"
-            data-action="open-unreserve"
-            data-category-id="${category.id}"
-            title="Вернуть"
-            class="p-0.5 rounded text-slate-500 hover:bg-slate-200 transition-colors"
-          >${ICONS.unreserve}</button>
-        </span>
-      </div>
-
-      ${canFillToLimit ? `
-        <button
-          type="button"
-          data-action="fill-to-limit"
-          data-category-id="${category.id}"
-          class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors mb-2"
-        >Пополнить до лимита</button>
-      ` : ''}
-
+  const actionsHtml = `
+    <button
+      type="button"
+      data-action="open-reserve"
+      data-category-id="${category.id}"
+      title="Пополнить"
+      class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors"
+    >${ICONS.reserve}</button>
+    <button
+      type="button"
+      data-action="open-unreserve"
+      data-category-id="${category.id}"
+      title="Вернуть"
+      class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 transition-colors"
+    >${ICONS.unreserve}</button>
+    <button
+      type="button"
+      data-action="open-edit"
+      data-category-id="${category.id}"
+      title="Редактировать"
+      class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+    >${ICONS.pencil}</button>
+    <div class="relative">
       <button
         type="button"
-        data-action="open-expense"
+        data-action="toggle-menu"
         data-category-id="${category.id}"
-        class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mb-2"
-      >Добавить расход</button>
-
-      <div>
-        <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
-        ${renderExpenses(state, category)}
+        title="Меню"
+        class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 transition-colors"
+      >${ICONS.dots}</button>
+      <div
+        data-menu="${category.id}"
+        class="hidden absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-20 min-w-[140px]"
+      >
+        <button
+          type="button"
+          data-action="delete-category"
+          data-category-id="${category.id}"
+          class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+        >${ICONS.trash}<span>Удалить</span></button>
       </div>
-      </div>
-    </article>
+    </div>
   `;
+
+  const detailHtml = `
+    ${overLimit ? `
+      <div class="mb-3 p-2.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-sm">
+        ⚠ Вы превысили лимит категории на ${formatMoney(overflow)}. Рекомендуется увеличить лимит.
+      </div>
+    ` : ''}
+    ${canFillToLimit ? `
+      <button
+        type="button"
+        data-action="fill-to-limit"
+        data-category-id="${category.id}"
+        class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors mb-2"
+      >Пополнить до лимита</button>
+    ` : ''}
+    <button
+      type="button"
+      data-action="open-expense"
+      data-category-id="${category.id}"
+      class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mb-2"
+    >Добавить расход</button>
+    <div>
+      <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
+      ${renderExpenses(state, category)}
+    </div>
+  `;
+
+  return renderDisplayItem({
+    moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
+    itemId: category.id,
+    dataAttr: 'data-category-id',
+    dataValue: category.id,
+    summaryHtml,
+    actionsHtml,
+    detailHtml,
+    itemClass: cardClass || 'bg-slate-50/50'
+  });
 }
 
 function renderMiscCategoryCard(state, category) {
   const spent = category.spent ?? 0;
 
-  return `
-    <article class="display-item border border-slate-200 rounded-xl p-4 relative bg-slate-50/50" data-category-id="${category.id}">
-      ${renderCompactLine({
-        title: escapeHtml(category.name),
-        meta: 'Системная категория',
-        value: formatMoney(spent)
-      })}
-      <div class="display-expanded-only">
-      <div class="flex items-start justify-between gap-2 mb-3">
-        <div class="min-w-0 flex-1">
-          <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(category.name)}</h3>
-          <p class="text-xs text-slate-400 mt-0.5">Системная категория</p>
-        </div>
-      </div>
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(category.name),
+    meta: 'Системная категория',
+    value: formatMoney(spent),
+    statsHtml: `
+      <span class="text-slate-500">Потрачено:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(spent)}</span>
+    `
+  });
 
-      <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-4">
-        <span class="text-slate-500">Потрачено:</span>
-        <span class="text-slate-900 font-medium text-right">${formatMoney(spent)}</span>
-      </div>
-
-      <button
-        type="button"
-        data-action="open-expense"
-        data-category-id="${category.id}"
-        class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mb-2"
-      >Добавить расход</button>
-
-      <div>
-        <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
-        ${renderExpenses(state, category)}
-      </div>
-      </div>
-    </article>
+  const detailHtml = `
+    <button
+      type="button"
+      data-action="open-expense"
+      data-category-id="${category.id}"
+      class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mb-2"
+    >Добавить расход</button>
+    <div>
+      <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
+      ${renderExpenses(state, category)}
+    </div>
   `;
+
+  return renderDisplayItem({
+    moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
+    itemId: category.id,
+    dataAttr: 'data-category-id',
+    dataValue: category.id,
+    summaryHtml,
+    detailHtml,
+    itemClass: 'bg-slate-50/50'
+  });
 }
 
 function renderAddCategoryModal() {
