@@ -15,6 +15,7 @@ import {
   renderDisplayModeRoot,
   renderModuleToolbar
 } from './displayMode.js';
+import { formatUiMoney } from './formatUi.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -410,22 +411,21 @@ function renderCategoryCard(state, category) {
   const overflow = getLimitOverflow(category);
   const overLimit = isOverLimit(category);
   const canFillToLimit = (category.reserved ?? 0) < limit;
-  const availableClass = available < 0 ? 'text-red-600' : 'text-emerald-700';
   const cardClass = overLimit
     ? 'border-amber-400 bg-amber-50'
     : '';
 
   const summaryHtml = renderDisplaySummary({
     title: escapeHtml(category.name),
-    meta: overLimit ? `Превышен лимит · потрачено ${formatMoney(spent)}` : `Доступно ${formatMoney(available)}`,
-    value: formatMoney(limit),
+    meta: overLimit
+      ? `Превышен лимит · потрачено ${formatUiMoney(spent)}`
+      : `Лимит ${formatUiMoney(limit)} · потрачено ${formatUiMoney(spent)}`,
+    value: formatUiMoney(available),
     statsHtml: `
       <span class="text-slate-500">Лимит:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(limit)}</span>
+      <span class="text-slate-900 font-medium text-right">${formatUiMoney(limit)}</span>
       <span class="text-slate-500">Потрачено:</span>
-      <span class="${overLimit ? 'text-red-600' : 'text-slate-900'} font-medium text-right">${formatMoney(spent)}</span>
-      <span class="text-slate-500">Доступно:</span>
-      <span class="${availableClass} font-medium text-right">${formatMoney(available)}</span>
+      <span class="${overLimit ? 'text-red-600' : 'text-slate-900'} font-medium text-right">${formatUiMoney(spent)}</span>
     `
   });
 
@@ -517,10 +517,10 @@ function renderMiscCategoryCard(state, category) {
   const summaryHtml = renderDisplaySummary({
     title: escapeHtml(category.name),
     meta: 'Системная категория',
-    value: formatMoney(spent),
+    value: formatUiMoney(spent),
     statsHtml: `
       <span class="text-slate-500">Потрачено:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(spent)}</span>
+      <span class="text-slate-900 font-medium text-right">${formatUiMoney(spent)}</span>
     `
   });
 

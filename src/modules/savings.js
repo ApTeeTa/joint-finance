@@ -19,6 +19,7 @@ import {
   renderDisplayModeRoot,
   renderModuleToolbar
 } from './displayMode.js';
+import { formatUiMoney } from './formatUi.js';
 
 const DEADLINE_LABELS = {
   none: 'Без срока',
@@ -410,15 +411,15 @@ function renderSavingCard(state, saving) {
   const summaryHtml = renderDisplaySummary({
     title: escapeHtml(item.name),
     meta: percent != null ? `Прогресс ${percent}%` : (goalReached ? 'Цель достигнута' : ''),
-    value: formatMoney(accumulated),
+    value: formatUiMoney(accumulated),
     badgesHtml: goalReached ? '<span class="text-xs text-emerald-600">Цель достигнута</span>' : '',
     statsHtml: `
       ${targetAmount != null && targetAmount > 0 ? `
         <span class="text-slate-500">Цель:</span>
-        <span class="text-slate-900 font-medium text-right">${formatMoney(targetAmount)}</span>
+        <span class="text-slate-900 font-medium text-right">${formatUiMoney(targetAmount)}</span>
       ` : ''}
       <span class="text-slate-500">Накоплено:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(accumulated)}</span>
+      <span class="text-slate-900 font-medium text-right">${formatUiMoney(accumulated)}</span>
       ${percent != null ? `
         <span class="text-slate-500">Прогресс:</span>
         <span class="text-primary-700 font-medium text-right">${percent}%</span>
@@ -428,8 +429,11 @@ function renderSavingCard(state, saving) {
   });
 
   const actionsHtml = `
-    <button type="button" data-action="open-edit-saving" data-saving-id="${item.id}" title="Редактировать" class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors">${ICONS.pencil}</button>
-    <button type="button" data-action="delete-saving" data-saving-id="${item.id}" title="Удалить" class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
+    ${!goalReached ? `
+      <button type="button" data-action="open-deposit-saving" data-saving-id="${item.id}" title="Пополнить" class="display-list-action p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none font-semibold">+</button>
+    ` : ''}
+    <button type="button" data-action="open-edit-saving" data-saving-id="${item.id}" title="Редактировать" class="display-card-action p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors">${ICONS.pencil}</button>
+    <button type="button" data-action="delete-saving" data-saving-id="${item.id}" title="Удалить" class="display-card-action p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
   `;
 
   const detailHtml = `

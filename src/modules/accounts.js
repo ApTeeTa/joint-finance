@@ -19,6 +19,7 @@ import {
   renderDisplayModeRoot,
   renderModuleToolbar
 } from './displayMode.js';
+import { formatUiMoney } from './formatUi.js';
 import { supabase } from '../lib/supabase.js';
 
 const OWNER_LABELS = {
@@ -509,36 +510,47 @@ function renderOperations(state, accountId, currency) {
 
 function renderAccountCard(state, account) {
   const owner = account.owner ?? 'husband';
-  const ownerLabel = OWNER_LABELS[owner] ?? owner;
   const ownerIcon = OWNER_ICONS[owner] ?? '👤';
   const currency = account.currency ?? 'RUB';
 
   const summaryHtml = renderDisplaySummary({
-    title: escapeHtml(account.name),
-    meta: `${currency} · ${ownerIcon} ${ownerLabel}`,
-    value: formatMoney(account.balance, currency),
+    title: `${ownerIcon} ${escapeHtml(account.name)}`,
+    meta: currency,
+    value: formatUiMoney(account.balance, currency),
     statsHtml: `
       <span class="text-slate-500">Валюта:</span>
       <span class="text-slate-900 font-medium text-right">${currency}</span>
-      <span class="text-slate-500">Владелец:</span>
-      <span class="text-slate-900 font-medium text-right">${ownerIcon} ${ownerLabel}</span>
     `
   });
 
   const actionsHtml = `
     <button
       type="button"
+      data-action="open-topup"
+      data-account-id="${account.id}"
+      title="Пополнить"
+      class="display-list-action p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none font-semibold"
+    >+</button>
+    <button
+      type="button"
+      data-action="open-transfer"
+      data-account-id="${account.id}"
+      title="Перевести"
+      class="display-list-action p-1.5 rounded-lg text-primary-600 hover:bg-primary-50 transition-colors text-sm leading-none font-semibold"
+    >⇄</button>
+    <button
+      type="button"
       data-action="open-edit"
       data-account-id="${account.id}"
       title="Редактировать"
-      class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+      class="display-card-action p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
     >${ICONS.pencil}</button>
     <button
       type="button"
       data-action="delete-account"
       data-account-id="${account.id}"
       title="Удалить"
-      class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+      class="display-card-action p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
     >${ICONS.trash}</button>
   `;
 
