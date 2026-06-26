@@ -27,14 +27,6 @@ const SAVING_TYPE_LABELS = {
   single_use: 'Разовая'
 };
 
-const FIXED_DEADLINE_MONTHS = {
-  months_3: 3,
-  months_6: 6,
-  months_12: 12,
-  years_1: 12,
-  months_24: 24
-};
-
 const ICONS = {
   pencil: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="m2.695 14.763-1.262 3.154a.5.5 0 0 0 .65.65l3.155-1.262a4 4 0 0 0 1.343-.885L17.5 5.5a2.121 2.121 0 0 0-3-3L3.58 13.42a4 4 0 0 0-.885 1.343Z"/></svg>`,
   trash: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 0 0-.584.788 48.065 48.065 0 0 0 .522 7.403.75.75 0 0 0 .43.375A48.112 48.112 0 0 0 8 14.25c0 1.246.124 2.503.38 3.75a.75.75 0 0 0 .75.568h7.5a.75.75 0 0 0 .75-.568c.256-1.247.38-2.504.38-3.75a48.112 48.112 0 0 0-3.439-.908.75.75 0 0 0-.43-.375 48.65 48.65 0 0 0-2.365-.298V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM9.5 3.75V5h1V3.75a.25.25 0 0 0-.25-.25h-.5a.25.25 0 0 0-.25.25ZM4.5 6.75v8.5c0 .414.336.75.75.75h9.5a.75.75 0 0 0 .75-.75v-8.5h-11Z" clip-rule="evenodd"/></svg>`
@@ -121,40 +113,73 @@ export function countFullMonthsBetween(fromDate, toDate) {
   return Math.max(1, months);
 }
 
-function getPaymentMonthCount(saving) {
-  const fixedMonths = FIXED_DEADLINE_MONTHS[saving.deadlineType];
-  if (fixedMonths) {
-    return fixedMonths;
-  }
-
-  if (saving.deadlineType === 'date' && saving.deadlineDate) {
-    return countFullMonthsBetween(
-      parseLocalDate(todayIso()),
-      parseLocalDate(saving.deadlineDate)
-    );
-  }
-
-  return null;
-}
-
-function getRecommendedMonthlyPayment(saving) {
-  const targetAmount = saving.targetAmount;
-  if (targetAmount == null || targetAmount <= 0) {
+function getRemainingMonthsUntilDeadline(saving) {
+  if (!saving.deadlineDate || saving.deadlineType === 'none') {
     return null;
   }
 
-  const months = getPaymentMonthCount(saving);
-  if (!months) {
+  const today = todayIso();
+  if (saving.deadlineDate < today) {
+    return 0;
+  }
+
+  return countFullMonthsBetween(
+    parseLocalDate(today),
+    parseLocalDate(saving.deadlineDate)
+  );
+}
+
+export function getRecommendedMonthlyPayment(saving) {
+  const targetAmount = saving.targetAmount;
+  if (targetAmount == null || targetAmount <= 0) {
     return null;
   }
 
   const accumulated = getSavingAccumulated(saving);
   const remaining = targetAmount - accumulated;
   if (remaining <= 0) {
-    return 0;
+    return { kind: 'completed', amount: 0 };
   }
 
-  return Math.ceil(remaining / months);
+  const remainingMonths = getRemainingMonthsUntilDeadline(saving);
+  if (remainingMonths === null) {
+    return null;
+  }
+  if (remainingMonths <= 0) {
+    return { kind: 'overdue', amount: null };
+  }
+
+  return {
+    kind: 'active',
+    amount: Math.ceil(remaining / remainingMonths),
+    remainingMonths
+  };
+}
+
+function renderRecommendedMonthlyPaymentRow(saving) {
+  const recommendation = getRecommendedMonthlyPayment(saving);
+  if (!recommendation) {
+    return '';
+  }
+
+  if (recommendation.kind === 'completed') {
+    return `
+      <span class="text-slate-500">Рекомендуемый платёж:</span>
+      <span class="text-emerald-700 font-medium text-right">${formatMoney(0)}</span>
+    `;
+  }
+
+  if (recommendation.kind === 'overdue') {
+    return `
+      <span class="text-slate-500">Рекомендуемый платёж:</span>
+      <span class="text-red-600 font-medium text-right">Цель просрочена</span>
+    `;
+  }
+
+  return `
+    <span class="text-slate-500">Рекомендуемый платёж:</span>
+    <span class="text-primary-700 font-medium text-right">${formatMoney(recommendation.amount)} / мес</span>
+  `;
 }
 
 function isGoalReached(saving) {
@@ -384,6 +409,7 @@ function renderSavingCard(state, saving) {
           <span class="text-slate-500">Прогресс:</span>
           <span class="text-primary-700 font-medium text-right">${percent}%</span>
         ` : ''}
+        ${renderRecommendedMonthlyPaymentRow(item)}
       </div>
       ${progressBar}
 

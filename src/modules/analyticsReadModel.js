@@ -5,10 +5,10 @@ import {
 } from './financeEngine.js';
 import { computePaidUntilFromPayments } from './obligationPaidUntil.js';
 import {
-  TRANSACTION_STATUS,
-  TRANSACTION_TYPES,
-  getSavingAccumulated
+  getSavingAccumulated,
+  todayIso
 } from './transactions.js';
+import { getRecommendedMonthlyPayment } from './savings.js';
 
 const EXPENSE_TOP_LIMIT = 10;
 
@@ -47,13 +47,38 @@ function sumObligationReserves(state) {
   );
 }
 
+function sumActiveDebtLiabilities(state) {
+  return (state.debts ?? []).reduce((sum, debt) => {
+    if (debt.type === 'we_owe' || debt.type === 'manual_debt_event') {
+      return sum + (debt.remainingAmount ?? 0);
+    }
+    return sum;
+  }, 0);
+}
+
+function sumActiveDebtReceivables(state) {
+  return (state.debts ?? []).reduce((sum, debt) => {
+    if (debt.type === 'owed_to_us') {
+      return sum + (debt.remainingAmount ?? 0);
+    }
+    return sum;
+  }, 0);
+}
+
 export function getFinancialSummary(state) {
+  const totalBalance = calculateTotalBalance(state);
+  const liabilitiesTotal = sumActiveDebtLiabilities(state);
+  const receivablesTotal = sumActiveDebtReceivables(state);
+
   return {
     freeBalance: calculateFreeBalance(state),
     reservedBalance: calculateReservedBalance(state),
     savingsTotal: sumSavingsAccumulated(state),
     obligationsTotal: sumObligationReserves(state),
-    totalBalance: calculateTotalBalance(state)
+    totalBalance,
+    liabilitiesTotal,
+    receivablesTotal,
+    netBalance: totalBalance + receivablesTotal - liabilitiesTotal
   };
 }
 
@@ -93,6 +118,7 @@ export function getSavingsProgress(state) {
     const progressPercent = hasTarget
       ? Math.min(100, Math.round((accumulated / targetAmount) * 100))
       : null;
+    const recommendation = hasTarget ? getRecommendedMonthlyPayment(saving) : null;
 
     return {
       id: saving.id,
@@ -100,7 +126,9 @@ export function getSavingsProgress(state) {
       accumulated,
       targetAmount,
       progressPercent,
-      savingType: saving.savingType ?? 'recurring'
+      savingType: saving.savingType ?? 'recurring',
+      recommendedMonthly: recommendation?.kind === 'active' ? recommendation.amount : null,
+      recommendationStatus: recommendation?.kind ?? null
     };
   }).sort((a, b) => b.accumulated - a.accumulated);
 }

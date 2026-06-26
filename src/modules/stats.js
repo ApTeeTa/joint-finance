@@ -72,12 +72,14 @@ function renderFinancialSummary(summary) {
   return `
     <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
       <h2 class="text-lg font-semibold text-slate-900 mb-4">Финансовая сводка</h2>
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         ${renderSummaryCard('Свободные деньги', summary.freeBalance, 'emerald')}
         ${renderSummaryCard('Зарезервировано', summary.reservedBalance, 'amber')}
         ${renderSummaryCard('Копилки', summary.savingsTotal, 'violet')}
         ${renderSummaryCard('Обязательства', summary.obligationsTotal, 'blue')}
         ${renderSummaryCard('Баланс счетов', summary.totalBalance, 'slate')}
+        ${renderSummaryCard('Долги (мы должны)', summary.liabilitiesTotal, 'amber')}
+        ${renderSummaryCard('Чистая позиция', summary.netBalance, 'emerald')}
       </div>
     </section>
   `;
@@ -134,6 +136,14 @@ function renderSavingsProgress(items) {
       ? formatMoney(item.targetAmount)
       : 'без цели';
     const progressLabel = item.progressPercent != null ? `${item.progressPercent}%` : '—';
+    let recommendationLabel = '';
+    if (item.recommendationStatus === 'overdue') {
+      recommendationLabel = 'Цель просрочена';
+    } else if (item.recommendationStatus === 'completed') {
+      recommendationLabel = formatMoney(0);
+    } else if (item.recommendedMonthly != null) {
+      recommendationLabel = `${formatMoney(item.recommendedMonthly)} / мес`;
+    }
 
     return `
       <li class="rounded-xl border border-slate-100 p-4">
@@ -141,6 +151,7 @@ function renderSavingsProgress(items) {
           <div>
             <p class="font-medium text-slate-900">${escapeHtml(item.name)}</p>
             <p class="text-sm text-slate-500">${formatMoney(item.accumulated)} из ${targetLabel}</p>
+            ${recommendationLabel ? `<p class="text-xs text-slate-500 mt-1">Рекомендуемый платёж: <span class="font-medium text-primary-700">${recommendationLabel}</span></p>` : ''}
           </div>
           <span class="text-sm font-semibold text-primary-700">${progressLabel}</span>
         </div>

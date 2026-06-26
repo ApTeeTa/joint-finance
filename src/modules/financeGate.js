@@ -22,6 +22,7 @@ import {
   recordSavingSpend,
   recordDebtCreateOwedToUs,
   recordDebtCreateWeOwe,
+  recordManualDebtEvent,
   recordDebtRepayment,
   recordDebtWriteOff,
   cancelTransaction
@@ -170,6 +171,12 @@ export function createDebtOwedToUs(state, params) {
 export function createDebtWeOwe(state, params) {
   return runProtected(FINANCE_ENTRY_POINTS.DEBT, () =>
     recordDebtCreateWeOwe(state, params)
+  );
+}
+
+export function createManualDebtEvent(state, params) {
+  return runProtected(FINANCE_ENTRY_POINTS.DEBT, () =>
+    recordManualDebtEvent(state, params)
   );
 }
 

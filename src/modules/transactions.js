@@ -1415,6 +1415,44 @@ export function recordDebtCreateOwedToUs(state, params) {
   return { ok: true, transaction: tx, debt };
 }
 
+export function recordManualDebtEvent(state, params) {
+  const blocked = guardFinanceEntry('manageDebt');
+  if (blocked) return blocked;
+
+  const { description, amount, date, category, comment } = params;
+  const rubAmount = Number(amount);
+
+  if (!description || !String(description).trim()) {
+    return { ok: false, error: 'Введите описание' };
+  }
+  if (!Number.isFinite(rubAmount) || rubAmount <= 0) {
+    return { ok: false, error: 'Сумма должна быть больше 0' };
+  }
+  if (!date) {
+    return { ok: false, error: 'Укажите дату' };
+  }
+
+  ensureDebts(state);
+  const debt = {
+    id: createId('debt'),
+    type: 'manual_debt_event',
+    title: String(description).trim(),
+    amount: rubAmount,
+    paidAmount: 0,
+    remainingAmount: rubAmount,
+    category: category || 'other',
+    eventDate: date,
+    comment: String(comment ?? '').trim(),
+    status: 'active',
+    createdAt: new Date().toISOString()
+  };
+  state.debts.push(debt);
+
+  enforceFinancialInvariants(state, { operation: 'recordManualDebtEvent', debtId: debt.id });
+
+  return { ok: true, debt };
+}
+
 export function recordDebtCreateWeOwe(state, params) {
   const blocked = guardFinanceEntry('manageDebt');
   if (blocked) return blocked;
@@ -1536,7 +1574,7 @@ export function recordDebtRepayment(state, debtId, amount, accountId, comment, d
     return { ok: true, transaction: tx, debt };
   }
 
-  if (debt.type === 'we_owe') {
+  if (debt.type === 'we_owe' || debt.type === 'manual_debt_event') {
     const freeBalance = calculateFreeBalance(state);
     if (rubAmount > freeBalance) {
       return { ok: false, error: 'Недостаточно свободных денег. Освободите деньги из категорий или копилок.' };
@@ -1561,7 +1599,7 @@ export function recordDebtRepayment(state, debtId, amount, accountId, comment, d
       accountId,
       debtId: debt.id,
       debtTitle: debt.title,
-      debtType: 'we_owe',
+      debtType: debt.type,
       currency: 'RUB',
       accountDebitAmount: accountAmount,
       accountCurrency,

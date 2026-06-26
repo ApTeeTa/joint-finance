@@ -1,6 +1,7 @@
 import {
   createDebtOwedToUs,
   createDebtWeOwe,
+  createManualDebtEvent,
   repayDebt,
   writeOffDebt
 } from './financeGate.js';
@@ -16,7 +17,15 @@ import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAl
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
-  we_owe: 'Мы должны'
+  we_owe: 'Мы должны',
+  manual_debt_event: 'Учётные обязательства'
+};
+
+const MANUAL_DEBT_CATEGORY_LABELS = {
+  emergency: 'Экстренные расходы',
+  rent: 'Аренда / задержка',
+  fees: 'Комиссии / штрафы',
+  other: 'Другое'
 };
 
 function formatMoney(amount) {
@@ -41,7 +50,9 @@ function normalizeDebt(debt) {
   const remainingAmount = debt.remainingAmount ?? Math.max(0, amount - paidAmount);
   return {
     ...debt,
-    type: debt.type === 'we_owe' ? 'we_owe' : 'owed_to_us',
+    type: debt.type === 'manual_debt_event'
+      ? 'manual_debt_event'
+      : (debt.type === 'we_owe' ? 'we_owe' : 'owed_to_us'),
     amount,
     paidAmount,
     remainingAmount,
@@ -58,13 +69,19 @@ function getActiveDebts(state, type) {
 function renderDebtCard(debt) {
   const item = normalizeDebt(debt);
   const isOwedToUs = item.type === 'owed_to_us';
+  const isManual = item.type === 'manual_debt_event';
+  const categoryLabel = isManual
+    ? MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other
+    : '';
 
   return `
     <article class="border border-slate-200 rounded-xl p-4 bg-slate-50/50" data-debt-id="${item.id}">
       <div class="flex items-start justify-between gap-3 mb-3">
         <div class="min-w-0">
           <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(item.title)}</h3>
+          ${isManual && categoryLabel ? `<p class="text-xs text-amber-700 mt-0.5">${escapeHtml(categoryLabel)}</p>` : ''}
           ${item.comment ? `<p class="text-sm text-slate-500 mt-0.5">${escapeHtml(item.comment)}</p>` : ''}
+          ${isManual && item.eventDate ? `<p class="text-xs text-slate-400 mt-0.5">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
         </div>
         <div class="text-right shrink-0">
           <p class="text-lg font-bold text-slate-900">${formatMoney(item.remainingAmount)}</p>
@@ -96,13 +113,15 @@ function renderDebtCard(debt) {
   `;
 }
 
-function renderDebtSection(title, type, debts) {
+function renderDebtSection(title, type, debts, options = {}) {
   const cards = debts.length
     ? `<div class="grid gap-3 sm:grid-cols-2">${debts.map(renderDebtCard).join('')}</div>`
     : '<p class="text-sm text-slate-400">Активных долгов нет</p>';
 
-  const addAction = type === 'owed_to_us' ? 'open-add-debt-owed' : 'open-add-debt-we-owe';
-  const addLabel = type === 'owed_to_us' ? 'Выдать в долг' : 'Взять в долг';
+  const addAction = options.addAction
+    ?? (type === 'owed_to_us' ? 'open-add-debt-owed' : 'open-add-debt-we-owe');
+  const addLabel = options.addLabel
+    ?? (type === 'owed_to_us' ? 'Выдать в долг' : 'Взять в долг');
 
   return `
     <section class="mb-8">
@@ -155,6 +174,49 @@ function renderCreateDebtModal(type) {
           <div class="flex gap-2 pt-2">
             <button type="button" data-action="close-modal" data-modal="${modalKey}" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">${submitLabel}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderCreateManualDebtModal() {
+  const categoryOptions = Object.entries(MANUAL_DEBT_CATEGORY_LABELS).map(
+    ([value, label]) => `<option value="${value}">${label}</option>`
+  ).join('');
+
+  return `
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-manual-debt">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-1">Учётное обязательство</h3>
+        <p class="text-sm text-slate-500 mb-4">Без движения денег по счетам — только учёт долга.</p>
+        <form data-form="add-manual-debt" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Описание</label>
+            <input type="text" name="description" required maxlength="120" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Например, Штраф банка">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="15000">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Категория</label>
+            <select name="category" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+              ${categoryOptions}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
+            <input type="date" name="date" value="${todayIso()}" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button type="button" data-action="close-modal" data-modal="add-manual-debt" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Добавить</button>
           </div>
         </form>
       </div>
@@ -258,14 +320,20 @@ function renderOverdueObligationsSection(state) {
 export function renderDebts(state, container) {
   const owedToUs = getActiveDebts(state, 'owed_to_us');
   const weOwe = getActiveDebts(state, 'we_owe');
+  const manualDebts = getActiveDebts(state, 'manual_debt_event');
 
   container.innerHTML = `
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
       <h2 class="text-lg font-semibold text-slate-900 mb-6">Долги</h2>
       ${renderOverdueObligationsSection(state)}
+      ${renderDebtSection(TYPE_LABELS.manual_debt_event, 'manual_debt_event', manualDebts, {
+        addAction: 'open-add-manual-debt',
+        addLabel: 'Добавить обязательство'
+      })}
       ${renderDebtSection(TYPE_LABELS.owed_to_us, 'owed_to_us', owedToUs)}
       ${renderDebtSection(TYPE_LABELS.we_owe, 'we_owe', weOwe)}
     </div>
+    ${renderCreateManualDebtModal()}
     ${renderCreateDebtModal('owed_to_us')}
     ${renderCreateDebtModal('we_owe')}
     ${renderRepayDebtModal()}
@@ -329,6 +397,11 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
     if (action === 'open-add-debt-we-owe') {
       openModal('add-debt-we-owe');
       refreshAccountSelects(state, container);
+      return;
+    }
+
+    if (action === 'open-add-manual-debt') {
+      openModal('add-manual-debt');
       return;
     }
 
@@ -430,6 +503,26 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
       }
 
       closeModal('add-debt-we-owe');
+      form.reset();
+      refresh();
+      return;
+    }
+
+    if (formKey === 'add-manual-debt') {
+      const result = createManualDebtEvent(state, {
+        description: formData.get('description'),
+        amount: formData.get('amount'),
+        category: formData.get('category'),
+        comment: formData.get('comment'),
+        date: formData.get('date')
+      });
+
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+
+      closeModal('add-manual-debt');
       form.reset();
       refresh();
       return;
