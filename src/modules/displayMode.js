@@ -150,6 +150,7 @@ export function renderDisplayItem({
       data-display-item-id="${escapeAttr(itemId)}"
     >
       <div class="display-item-shell">
+        <div class="display-item-header">
         <button
           type="button"
           class="display-item-body"
@@ -161,6 +162,7 @@ export function renderDisplayItem({
           ${summaryHtml}
         </button>
         ${actionsHtml ? `<div class="display-item-actions">${actionsHtml}</div>` : ''}
+        </div>
       </div>
       ${detailHtml ? `
         <div
