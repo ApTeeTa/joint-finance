@@ -223,9 +223,35 @@ export function saveState(state, options = {}) {
   }
 }
 
+function hasPersistedData(loaded) {
+  if (!loaded || typeof loaded !== 'object') {
+    return false;
+  }
+
+  return ['accounts', 'categories', 'transactions', 'obligations', 'savings', 'debts'].some(
+    (key) => Array.isArray(loaded[key]) && loaded[key].length > 0
+  );
+}
+
 export function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+
+    if (!raw && SNAPSHOT_ID !== 'shared') {
+      const legacyRaw = localStorage.getItem('joint-finance-state-v2');
+      if (legacyRaw) {
+        try {
+          const legacy = JSON.parse(legacyRaw);
+          if (hasPersistedData(legacy)) {
+            raw = legacyRaw;
+            localStorage.setItem(STORAGE_KEY, legacyRaw);
+          }
+        } catch {
+          // ignore invalid legacy cache
+        }
+      }
+    }
+
     if (!raw) {
       return getDefaultState();
     }
