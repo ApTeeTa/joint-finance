@@ -1,3 +1,8 @@
+import {
+  createDisplayContext,
+  resolveEntityTypeFromModuleKey
+} from './uiRulesEngine.js';
+
 export const DISPLAY_MODES = {
   COMPACT: 'compact',
   MEDIUM: 'medium',
@@ -258,6 +263,19 @@ export function applyDisplayMode(container, moduleKey, mode) {
   }
 
   updateToggleState(container, moduleKey, mode);
+
+  document.dispatchEvent(new CustomEvent('joint-finance:display-mode-changed', {
+    detail: { moduleKey, mode }
+  }));
+}
+
+export function getModuleDisplayContext(moduleKey, options = {}) {
+  const entityType = resolveEntityTypeFromModuleKey(moduleKey) ?? moduleKey;
+  return createDisplayContext({
+    entityType,
+    viewMode: getDisplayMode(moduleKey),
+    ...options
+  });
 }
 
 export function initDisplayModeSystem() {

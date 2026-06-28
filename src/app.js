@@ -207,6 +207,24 @@ function renderTab(tab) {
   saveState(state);
 }
 
+const DISPLAY_MODE_TAB_MAP = {
+  accounts: 'accounts',
+  categories: 'categories',
+  savings: 'savings',
+  debts: 'debts',
+  obligations: 'obligations'
+};
+
+function initDisplayModeRefresh() {
+  document.addEventListener('joint-finance:display-mode-changed', (event) => {
+    const moduleKey = event.detail?.moduleKey;
+    const tab = DISPLAY_MODE_TAB_MAP[moduleKey];
+    if (tab && state.activeTab === tab) {
+      renderTab(tab);
+    }
+  });
+}
+
 function initProfileHandlers() {
   document.querySelectorAll('.profile-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -259,6 +277,7 @@ async function init() {
   if (!tabContent) return;
 
   initDisplayModeSystem();
+  initDisplayModeRefresh();
   applyLoadedState(loadState());
   renderProfile();
   updateCounters();

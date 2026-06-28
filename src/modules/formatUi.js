@@ -46,3 +46,20 @@ export function formatUiMoney(amount, currency = 'RUB') {
 
   return `${compact} ₽`;
 }
+
+/** Rule-driven money formatting; falls back to formatUiMoney when rules are absent. */
+export function formatDisplayMoney(amount, currency = 'RUB', rules = null) {
+  if (!rules?.moneyFormat) {
+    return formatUiMoney(amount, currency);
+  }
+
+  if (rules.moneyFormat === 'none') {
+    return '';
+  }
+
+  if (rules.moneyFormat === 'full') {
+    return formatFullMoney(amount, currency);
+  }
+
+  return formatUiMoney(amount, currency);
+}

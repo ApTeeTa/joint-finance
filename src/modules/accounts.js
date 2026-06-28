@@ -25,9 +25,18 @@ import {
   renderDisplayItem,
   renderDisplaySummary,
   renderDisplayModeRoot,
-  renderModuleToolbar
+  renderModuleToolbar,
+  getModuleDisplayContext
 } from './displayMode.js';
-import { formatUiMoney } from './formatUi.js';
+import { formatDisplayMoney } from './formatUi.js';
+import {
+  ENTITY_TYPES,
+  getDisplayRules,
+  getAllowedActions,
+  getAllowedDetailActions,
+  getActionRenderClass,
+  logUiRulesActive
+} from './uiRulesEngine.js';
 import { renderUiIcon } from './uiIcons.js';
 
 const OWNER_LABELS = {
@@ -719,62 +728,138 @@ function renderOperations(state, accountId, currency) {
   return `<ul class="mt-2">${items}</ul>`;
 }
 
-function renderAccountCard(state, account) {
-  const owner = account.owner ?? 'husband';
-  const ownerIcon = OWNER_ICONS[owner] ?? '👤';
-  const currency = account.currency ?? 'RUB';
+const ACCOUNT_HEADER_ACTIONS = [
+  {
+    id: 'open-topup',
+    title: 'Пополнить',
+    markup: '+',
+    tone: 'text-emerald-600 hover:bg-emerald-100 text-base leading-none font-semibold'
+  },
+  {
+    id: 'open-transfer',
+    title: 'Перевести',
+    markup: '⇄',
+    tone: 'text-primary-600 hover:bg-primary-50 text-sm leading-none font-semibold'
+  },
+  {
+    id: 'open-edit',
+    title: 'Редактировать',
+    markup: null,
+    icon: 'pencil',
+    tone: 'text-slate-400 hover:text-primary-600 hover:bg-primary-50'
+  },
+  {
+    id: 'delete-account',
+    title: 'Удалить',
+    markup: null,
+    icon: 'trash',
+    tone: 'text-red-500 hover:bg-red-50'
+  }
+];
 
-  const summaryHtml = renderDisplaySummary({
-    title: `${ownerIcon} ${escapeHtml(account.name)}`,
-    value: formatUiMoney(account.balance, currency)
+function resolveAccountsDisplayContext(options = {}) {
+  return getModuleDisplayContext(DISPLAY_MODULE_KEYS.ACCOUNTS, {
+    entityType: ENTITY_TYPES.ACCOUNT,
+    ...options
   });
+}
 
-  const actionsHtml = `
-    <button
-      type="button"
-      data-action="open-topup"
-      data-account-id="${account.id}"
-      title="Пополнить"
-      class="display-list-action p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none font-semibold"
-    >+</button>
-    <button
-      type="button"
-      data-action="open-transfer"
-      data-account-id="${account.id}"
-      title="Перевести"
-      class="display-list-action p-1.5 rounded-lg text-primary-600 hover:bg-primary-50 transition-colors text-sm leading-none font-semibold"
-    >⇄</button>
-    <button
-      type="button"
-      data-action="open-edit"
-      data-account-id="${account.id}"
-      title="Редактировать"
-      class="display-card-action p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
-    >${ICONS.pencil}</button>
-    <button
-      type="button"
-      data-action="delete-account"
-      data-account-id="${account.id}"
-      title="Удалить"
-      class="display-card-action p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-    >${ICONS.trash}</button>
-  `;
+function resolveAccountsDisplayRules(displayContext = resolveAccountsDisplayContext()) {
+  const rules = getDisplayRules(displayContext);
+  logUiRulesActive(DISPLAY_MODULE_KEYS.ACCOUNTS, displayContext, rules);
+  return rules;
+}
 
-  const detailHtml = `
+function formatAccountDisplayMoney(amount, currency, displayRules) {
+  return formatDisplayMoney(amount, currency, displayRules ?? null);
+}
+
+function buildAccountSummaryMeta(currency, displayRules) {
+  if (!displayRules) {
+    return '';
+  }
+  if (displayRules.labelDensity === 'verbose') {
+    return `Баланс · ${currency}`;
+  }
+  if (displayRules.showSecondaryValues) {
+    return currency;
+  }
+  return '';
+}
+
+function renderAccountHeaderActions(account, displayContext, displayRules) {
+  const viewMode = displayContext.viewMode;
+  const allowedActions = displayRules?.allowedActions
+    ?? getAllowedActions(ENTITY_TYPES.ACCOUNT, viewMode)
+    ?? [];
+
+  return ACCOUNT_HEADER_ACTIONS
+    .filter((action) => allowedActions.includes(action.id))
+    .map((action) => {
+      const visibilityClass = getActionRenderClass(action.id, ENTITY_TYPES.ACCOUNT, viewMode);
+      if (!visibilityClass) {
+        return '';
+      }
+
+      const content = action.icon === 'pencil'
+        ? ICONS.pencil
+        : (action.icon === 'trash' ? ICONS.trash : action.markup);
+
+      return `
+    <button
+      type="button"
+      data-action="${action.id}"
+      data-account-id="${account.id}"
+      title="${action.title}"
+      class="${visibilityClass} p-1.5 rounded-lg transition-colors ${action.tone}"
+    >${content}</button>`;
+    })
+    .join('');
+}
+
+function renderAccountDetailActions(account, displayRules) {
+  const detailActions = displayRules?.allowedDetailActions
+    ?? getAllowedDetailActions(ENTITY_TYPES.ACCOUNT)
+    ?? [];
+
+  return `
     <div class="display-item-detail-actions mb-3">
+      ${detailActions.includes('open-topup') ? `
       <button
         type="button"
         data-action="open-topup"
         data-account-id="${account.id}"
         class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
       >Пополнить</button>
+      ` : ''}
+      ${detailActions.includes('open-transfer') ? `
       <button
         type="button"
         data-action="open-transfer"
         data-account-id="${account.id}"
         class="px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
       >Перевести</button>
-    </div>
+      ` : ''}
+    </div>`;
+}
+
+function renderAccountCard(state, account, displayContext, displayRules) {
+  const owner = account.owner ?? 'husband';
+  const ownerIcon = OWNER_ICONS[owner] ?? '👤';
+  const currency = account.currency ?? 'RUB';
+  const context = displayContext ?? resolveAccountsDisplayContext();
+  const rules = displayRules ?? getDisplayRules(context);
+
+  const summaryHtml = renderDisplaySummary({
+    title: `${ownerIcon} ${escapeHtml(account.name)}`,
+    meta: buildAccountSummaryMeta(currency, rules),
+    value: formatAccountDisplayMoney(account.balance, currency, rules)
+  });
+
+  const actionsHtml = renderAccountHeaderActions(account, context, rules);
+
+  const detailHtml = `
+    ${renderAccountDetailActions(account, rules)}
     <div class="min-w-0">
       <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">История</p>
       ${renderOperations(state, account.id, currency)}
@@ -1080,11 +1165,17 @@ function groupAccountsByOwner(accounts) {
   return groups;
 }
 
-function renderOwnerGroupSection(state, ownerKey, label, accounts) {
+function renderOwnerGroupSection(state, ownerKey, label, accounts, displayRules) {
   if (!accounts.length) return '';
 
   const balanceRub = calculateOwnerBalance(state, ownerKey);
-  const cards = accounts.map((account) => renderAccountCard(state, account)).join('');
+  const rules = displayRules ?? resolveAccountsDisplayRules();
+  const cards = accounts.map((account) => renderAccountCard(
+    state,
+    account,
+    resolveAccountsDisplayContext(),
+    rules
+  )).join('');
 
   return `
     <details class="mb-4 border border-slate-200 rounded-xl bg-slate-50/40 group" open data-owner-group="${ownerKey}">
@@ -1092,7 +1183,7 @@ function renderOwnerGroupSection(state, ownerKey, label, accounts) {
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="font-semibold text-slate-900">${label}</p>
-            <p class="text-sm text-slate-600 mt-0.5">Баланс: ${formatMoney(balanceRub, 'RUB')}</p>
+            <p class="text-sm text-slate-600 mt-0.5">Баланс: ${formatAccountDisplayMoney(balanceRub, 'RUB', rules)}</p>
             <p class="text-xs text-slate-400 mt-1">Счета</p>
           </div>
           <span class="text-slate-400 text-sm shrink-0 group-open:rotate-180 transition-transform mt-1">▼</span>
@@ -1106,9 +1197,10 @@ function renderOwnerGroupSection(state, ownerKey, label, accounts) {
 function renderAccountsList(state, accounts) {
   if (!accounts.length) return renderEmptyState();
 
+  const displayRules = resolveAccountsDisplayRules();
   const groups = groupAccountsByOwner(accounts);
   const sections = OWNER_GROUP_ORDER
-    .map(({ key, label }) => renderOwnerGroupSection(state, key, label, groups[key]))
+    .map(({ key, label }) => renderOwnerGroupSection(state, key, label, groups[key], displayRules))
     .filter(Boolean)
     .join('');
 
