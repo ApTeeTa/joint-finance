@@ -5,6 +5,14 @@ import {
   updateAccountRecord,
   deleteAccountRecord
 } from './financeGate.js';
+import { dispatch, ACTION_TYPES } from './actionRegistry.js';
+import {
+  MUTATION_DOMAINS,
+  registerMutationStrategy,
+  executeMutation,
+  executeLegacyMutation
+} from './mutationContract.js';
+import { IS_EXPERIMENT } from '../config/environment.js';
 import {
   getAccountTransactions,
   renderAccountSelectOptions,
@@ -21,7 +29,6 @@ import {
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
 import { renderUiIcon } from './uiIcons.js';
-import { supabase } from '../lib/supabase.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -38,7 +45,21 @@ const ICONS = {
 };
 
 const DEFAULT_EXCHANGE_RATE = 92;
-const DEFAULT_HOUSEHOLD_ID = null;
+const DISPATCH_SOURCE = 'accounts.js';
+const ACCOUNT_DOMAIN = MUTATION_DOMAINS.ACCOUNT;
+
+function logL1RemovedActive(action = 'account_create') {
+  if (!IS_EXPERIMENT) {
+    return;
+  }
+  console.info('[accounts] L1_REMOVED_ACTIVE', {
+    legacyAccountsTableWrite: false,
+    supabaseAccountsInsertTriggered: false,
+    persistencePath: 'stateRemote → household_snapshots',
+    action
+  });
+}
+
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -73,6 +94,122 @@ function getExchangeRate(state) {
 
 function findAccount(state, accountId) {
   return (state.accounts ?? []).find((account) => account.id === accountId);
+}
+
+/**
+ * Account domain — reference implementation of mutationContract strategies.
+ * Domain-specific entityId/payload mapping lives here only.
+ */
+function registerAccountMutationStrategies() {
+  registerMutationStrategy(ACCOUNT_DOMAIN, ACTION_TYPES.ACCOUNT_CREATE, {
+    resolveEntityId: (payload) => payload.account?.id ?? payload.accountId ?? null,
+    runFallback: (state, payload) => {
+      const { account, balance = 0 } = payload;
+      return recordAccountCreation(state, account, balance, state.profile);
+    },
+    apply: (result) => {
+      const { state, payload } = result;
+      const { account, balance = 0, comment } = payload;
+
+      if (!Array.isArray(state.accounts)) {
+        state.accounts = [];
+      }
+
+      state.accounts.push(account);
+
+      if (balance > 0) {
+        const depositResult = depositAccount(
+          state,
+          account.id,
+          balance,
+          comment || 'Начальный баланс',
+          todayIso(),
+          state.profile
+        );
+        if (!depositResult.ok) {
+          state.accounts.pop();
+          alert(depositResult.error);
+          return false;
+        }
+      }
+
+      return true;
+    }
+  });
+
+  registerMutationStrategy(ACCOUNT_DOMAIN, ACTION_TYPES.ACCOUNT_UPDATE, {
+    resolveEntityId: (payload) => payload.accountId ?? null,
+    runFallback: (state, payload) => {
+      const { accountId, changes, hasChanges } = payload;
+      if (!hasChanges) {
+        return { ok: true };
+      }
+      return updateAccountRecord(state, accountId, changes, state.profile);
+    },
+    apply: (result) => {
+      const { state, payload, entityId } = result;
+      const { changes } = payload;
+      const target = findAccount(state, entityId);
+
+      if (!target) {
+        alert('Счет не найден');
+        return false;
+      }
+
+      target.name = changes.newName;
+      target.balance = changes.newBalance;
+      return true;
+    }
+  });
+
+  registerMutationStrategy(ACCOUNT_DOMAIN, ACTION_TYPES.ACCOUNT_DELETE, {
+    resolveEntityId: (payload) => payload.accountId ?? payload.account?.id ?? null,
+    runFallback: (state, payload) => {
+      const { account, accountId } = payload;
+      const target = account ?? findAccount(state, accountId);
+      if (!target) {
+        alert('Счет не найден');
+        return { ok: false };
+      }
+      return deleteAccountRecord(state, target, state.profile);
+    },
+    apply: (result) => {
+      const { state, entityId } = result;
+      state.accounts = state.accounts.filter((item) => item.id !== entityId);
+      return true;
+    }
+  });
+}
+
+registerAccountMutationStrategies();
+
+function executeAccountMutation({
+  actionType,
+  accountId,
+  state,
+  dispatchPayload,
+  applyContext
+}) {
+  return executeMutation({
+    domain: ACCOUNT_DOMAIN,
+    actionType,
+    entityId: accountId,
+    state,
+    dispatchPayload,
+    payload: applyContext,
+    dispatchFn: dispatch,
+    dispatchMeta: { source: DISPATCH_SOURCE }
+  });
+}
+
+function executeLegacyAccountMutation({ actionType, accountId, state, applyContext }) {
+  return executeLegacyMutation({
+    domain: ACCOUNT_DOMAIN,
+    actionType,
+    entityId: accountId,
+    state,
+    payload: applyContext
+  });
 }
 
 function validateAccountName(name) {
@@ -125,6 +262,47 @@ function validateCurrency(currency) {
   return null;
 }
 
+function createAccountLegacy(state, name, currency, initialBalance, comment, options = {}) {
+  const nameError = validateAccountName(name);
+  if (nameError) {
+    alert(nameError);
+    return false;
+  }
+
+  const currencyError = validateCurrency(currency);
+  if (currencyError) {
+    alert(currencyError);
+    return false;
+  }
+
+  const balanceError = validateBalance(initialBalance);
+  if (balanceError) {
+    alert(balanceError);
+    return false;
+  }
+
+  const balance = Number(initialBalance) || 0;
+  const account = {
+    id: options.remoteId ?? createId('account'),
+    name: String(name).trim(),
+    currency,
+    balance: 0,
+    owner: state.profile,
+    createdAt: new Date().toISOString()
+  };
+
+  return executeLegacyAccountMutation({
+    actionType: ACTION_TYPES.ACCOUNT_CREATE,
+    accountId: account.id,
+    state,
+    applyContext: {
+      account,
+      balance,
+      comment
+    }
+  });
+}
+
 function createAccount(state, name, currency, initialBalance, comment, options = {}) {
   const nameError = validateAccountName(name);
   if (nameError) {
@@ -144,10 +322,6 @@ function createAccount(state, name, currency, initialBalance, comment, options =
     return false;
   }
 
-  if (!Array.isArray(state.accounts)) {
-    state.accounts = [];
-  }
-
   const balance = Number(initialBalance) || 0;
   const account = {
     id: options.remoteId ?? createId('account'),
@@ -158,73 +332,66 @@ function createAccount(state, name, currency, initialBalance, comment, options =
     createdAt: new Date().toISOString()
   };
 
-  state.accounts.push(account);
-
-  if (balance > 0) {
-    const result = depositAccount(
+  return executeAccountMutation({
+    actionType: ACTION_TYPES.ACCOUNT_CREATE,
+    accountId: account.id,
+    state,
+    dispatchPayload: {
       state,
-      account.id,
+      account,
+      initialBalance: balance,
+      author: state.profile
+    },
+    applyContext: {
+      account,
       balance,
-      comment || 'Начальный баланс',
-      todayIso(),
-      state.profile
-    );
-    if (!result.ok) {
-      state.accounts.pop();
-      alert(result.error);
-      return false;
+      comment
     }
-  }
-
-  recordAccountCreation(state, account, balance, state.profile);
-
-  return true;
+  });
 }
 
-async function persistAccountToSupabase(name, currency, initialBalance) {
-  console.log('🔥 SUPABASE INSERT FUNCTION CALLED');
-  console.log('🔥 SUPABASE CLIENT:', supabase);
+function updateAccountLegacy(state, accountId, name, balance) {
+  const nameError = validateAccountName(name);
+  if (nameError) {
+    alert(nameError);
+    return false;
+  }
 
-  const balance = Number(initialBalance) || 0;
-  const payload = {
-    name: String(name).trim(),
-    balance,
-    currency,
-    household_id: DEFAULT_HOUSEHOLD_ID
+  const balanceError = validateBalance(balance);
+  if (balanceError) {
+    alert(balanceError);
+    return false;
+  }
+
+  const account = findAccount(state, accountId);
+  if (!account) {
+    alert('Счет не найден');
+    return false;
+  }
+
+  const changes = {
+    oldName: account.name,
+    newName: String(name).trim(),
+    oldBalance: account.balance ?? 0,
+    newBalance: Number(balance) || 0,
+    oldCurrency: account.currency ?? 'RUB',
+    newCurrency: account.currency ?? 'RUB'
   };
 
-  console.log('BEFORE_INSERT', JSON.stringify({ payload }));
+  const hasChanges = changes.oldName !== changes.newName
+    || changes.oldBalance !== changes.newBalance
+    || changes.oldCurrency !== changes.newCurrency;
 
-  try {
-    const response = await supabase.from('accounts').insert(payload).select();
-    const { data, error, status, statusText } = response;
-
-    console.log('SUPABASE_RESPONSE', JSON.stringify({
-      data,
-      error: error
-        ? {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint
-          }
-        : null,
-      status,
-      statusText
-    }));
-    console.log('AFTER_INSERT', JSON.stringify({ ok: !error, rowCount: data?.length ?? 0 }));
-
-    if (error) {
-      console.error('Supabase accounts insert failed:', error);
-      return { ok: false, error, status, statusText, data };
+  return executeLegacyAccountMutation({
+    actionType: ACTION_TYPES.ACCOUNT_UPDATE,
+    accountId,
+    state,
+    applyContext: {
+      accountId,
+      changes,
+      hasChanges
     }
-
-    return { ok: true, data, status, statusText };
-  } catch (error) {
-    console.error('Supabase accounts insert threw:', error);
-    console.log('AFTER_INSERT', JSON.stringify({ ok: false, thrown: String(error) }));
-    return { ok: false, error };
-  }
+  });
 }
 
 function updateAccount(state, accountId, name, balance) {
@@ -259,14 +426,46 @@ function updateAccount(state, accountId, name, balance) {
     || changes.oldBalance !== changes.newBalance
     || changes.oldCurrency !== changes.newCurrency;
 
-  account.name = changes.newName;
-  account.balance = changes.newBalance;
-
-  if (hasChanges) {
-    updateAccountRecord(state, accountId, changes, state.profile);
+  if (!hasChanges) {
+    return true;
   }
 
-  return true;
+  return executeAccountMutation({
+    actionType: ACTION_TYPES.ACCOUNT_UPDATE,
+    accountId,
+    state,
+    dispatchPayload: {
+      state,
+      accountId,
+      changes,
+      author: state.profile
+    },
+    applyContext: {
+      accountId,
+      changes,
+      hasChanges
+    }
+  });
+}
+
+function deleteAccountLegacy(state, accountId) {
+  if (!Array.isArray(state.accounts)) return false;
+
+  const account = findAccount(state, accountId);
+  if (!account) {
+    alert('Счет не найден');
+    return false;
+  }
+
+  return executeLegacyAccountMutation({
+    actionType: ACTION_TYPES.ACCOUNT_DELETE,
+    accountId,
+    state,
+    applyContext: {
+      accountId,
+      account
+    }
+  });
 }
 
 function deleteAccount(state, accountId) {
@@ -278,9 +477,20 @@ function deleteAccount(state, accountId) {
     return false;
   }
 
-  deleteAccountRecord(state, account, state.profile);
-  state.accounts = state.accounts.filter((item) => item.id !== accountId);
-  return true;
+  return executeAccountMutation({
+    actionType: ACTION_TYPES.ACCOUNT_DELETE,
+    accountId,
+    state,
+    dispatchPayload: {
+      state,
+      account,
+      author: state.profile
+    },
+    applyContext: {
+      accountId,
+      account
+    }
+  });
 }
 
 function depositToAccount(state, accountId, amount, comment, date) {
@@ -1185,7 +1395,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     }
   });
 
-  document.addEventListener('submit', async (event) => {
+  document.addEventListener('submit', (event) => {
     const submitRoot = event.target.closest?.('form') ?? event.target;
     if (!isWithinAppUi(submitRoot, container)) return;
     event.preventDefault();
@@ -1194,20 +1404,14 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       ? submitRoot
       : submitRoot.closest?.('[data-form="add-account"]');
     if (addForm) {
-      console.log('🔥 ADD ACCOUNT SUBMIT HANDLER');
-
       const name = addForm.name.value;
       const currency = addForm.currency.value;
       const initialBalance = addForm.initialBalance.value;
       const comment = addForm.comment.value;
 
-      const supabaseResult = await persistAccountToSupabase(name, currency, initialBalance);
-      if (!supabaseResult.ok) {
-        console.error('🔥 SUPABASE INSERT FAILED — continuing with local fallback:', supabaseResult.error);
-      }
+      logL1RemovedActive('account_create');
 
-      const remoteId = supabaseResult.ok ? supabaseResult.data?.[0]?.id : undefined;
-      if (createAccount(state, name, currency, initialBalance, comment, { remoteId })) {
+      if (createAccount(state, name, currency, initialBalance, comment)) {
         closeModal('add-account');
         addForm.reset();
         refresh(state, container, onUpdate);
