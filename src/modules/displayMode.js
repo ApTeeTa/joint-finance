@@ -2,6 +2,7 @@ import {
   createDisplayContext,
   resolveEntityTypeFromModuleKey
 } from './uiRulesEngine.js';
+import { initOverflowMenuHandlers } from './uiActionRenderer.js';
 
 export const DISPLAY_MODES = {
   COMPACT: 'compact',
@@ -283,6 +284,7 @@ export function initDisplayModeSystem() {
     return;
   }
   displayModeSystemReady = true;
+  initOverflowMenuHandlers();
 
   document.addEventListener('click', (event) => {
     const modeButton = event.target.closest('[data-action="set-display-mode"]');

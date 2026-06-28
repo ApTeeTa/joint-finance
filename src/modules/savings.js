@@ -17,10 +17,12 @@ import {
   renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
-  renderModuleToolbar
+  renderModuleToolbar,
+  getModuleDisplayContext
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
-import { renderUiIcon } from './uiIcons.js';
+import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const DEADLINE_LABELS = {
   none: 'Без срока',
@@ -43,11 +45,6 @@ const TARGET_MONTHS_BY_DEADLINE = {
   months_12: 12,
   years_1: 12,
   months_24: 24
-};
-
-const ICONS = {
-  pencil: renderUiIcon('pencil'),
-  trash: renderUiIcon('trash')
 };
 
 function formatMoney(amount) {
@@ -426,13 +423,17 @@ function renderSavingCard(state, saving) {
     `
   });
 
-  const actionsHtml = `
-    ${!goalReached ? `
-      <button type="button" data-action="open-deposit-saving" data-saving-id="${item.id}" title="Пополнить" class="display-list-action p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none font-semibold">+</button>
-    ` : ''}
-    <button type="button" data-action="open-edit-saving" data-saving-id="${item.id}" title="Редактировать" class="display-card-action p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors">${ICONS.pencil}</button>
-    <button type="button" data-action="delete-saving" data-saving-id="${item.id}" title="Удалить" class="display-card-action p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
-  `;
+  const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.SAVINGS, {
+    entityType: ENTITY_TYPES.SAVING
+  });
+
+  const actionsHtml = renderEntityHeaderActions({
+    moduleKey: DISPLAY_MODULE_KEYS.SAVINGS,
+    entityType: ENTITY_TYPES.SAVING,
+    entityId: item.id,
+    viewMode: displayContext.viewMode,
+    filterAction: (actionId) => actionId !== 'open-deposit-saving' || !goalReached
+  });
 
   const detailHtml = `
     ${progressBar}

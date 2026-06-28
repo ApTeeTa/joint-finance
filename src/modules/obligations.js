@@ -17,10 +17,12 @@ import {
   renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
-  renderModuleToolbar
+  renderModuleToolbar,
+  getModuleDisplayContext
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
-import { renderUiIcon } from './uiIcons.js';
+import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 export {
   computePaidUntilFromPayments,
@@ -32,11 +34,6 @@ export {
 const STATUS_CARD_CLASS = {
   current: 'border-emerald-300 bg-emerald-50/60',
   overdue: 'border-red-300 bg-red-50/60'
-};
-
-const ICONS = {
-  pencil: renderUiIcon('pencil'),
-  trash: renderUiIcon('trash')
 };
 
 function formatMoney(amount) {
@@ -309,12 +306,16 @@ function renderObligationCard(state, obligation) {
     ` : ''
   });
 
-  const actionsHtml = `
-    <button type="button" data-action="open-reserve-obligation" data-obligation-id="${item.id}" title="Зарезервировать" class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors text-base leading-none">+</button>
-    <button type="button" data-action="open-unreserve-obligation" data-obligation-id="${item.id}" title="Снять резерв" class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 transition-colors text-base leading-none">−</button>
-    <button type="button" data-action="open-edit-obligation" data-obligation-id="${item.id}" title="Редактировать" class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors">${ICONS.pencil}</button>
-    <button type="button" data-action="delete-obligation" data-obligation-id="${item.id}" title="Удалить" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">${ICONS.trash}</button>
-  `;
+  const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.OBLIGATIONS, {
+    entityType: ENTITY_TYPES.OBLIGATION
+  });
+
+  const actionsHtml = renderEntityHeaderActions({
+    moduleKey: DISPLAY_MODULE_KEYS.OBLIGATIONS,
+    entityType: ENTITY_TYPES.OBLIGATION,
+    entityId: item.id,
+    viewMode: displayContext.viewMode
+  });
 
   const detailHtml = `
     <div class="display-item-detail-actions">

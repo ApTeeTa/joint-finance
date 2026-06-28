@@ -13,22 +13,16 @@ import {
   renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
-  renderModuleToolbar
+  renderModuleToolbar,
+  getModuleDisplayContext
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
-import { renderUiIcon } from './uiIcons.js';
+import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
   wife: 'Жена'
-};
-
-const ICONS = {
-  pencil: renderUiIcon('pencil'),
-  trash: renderUiIcon('trash'),
-  reserve: renderUiIcon('reserve'),
-  unreserve: renderUiIcon('unreserve'),
-  dots: renderUiIcon('dots')
 };
 
 function formatMoney(amount, currency = 'RUB') {
@@ -424,49 +418,16 @@ function renderCategoryCard(state, category) {
     value: formatUiMoney(available)
   });
 
-  const actionsHtml = `
-    <button
-      type="button"
-      data-action="open-reserve"
-      data-category-id="${category.id}"
-      title="Пополнить"
-      class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 transition-colors"
-    >${ICONS.reserve}</button>
-    <button
-      type="button"
-      data-action="open-unreserve"
-      data-category-id="${category.id}"
-      title="Вернуть"
-      class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 transition-colors"
-    >${ICONS.unreserve}</button>
-    <button
-      type="button"
-      data-action="open-edit"
-      data-category-id="${category.id}"
-      title="Редактировать"
-      class="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
-    >${ICONS.pencil}</button>
-    <div class="relative">
-      <button
-        type="button"
-        data-action="toggle-menu"
-        data-category-id="${category.id}"
-        title="Меню"
-        class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 transition-colors"
-      >${ICONS.dots}</button>
-      <div
-        data-menu="${category.id}"
-        class="hidden absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-20 min-w-[140px]"
-      >
-        <button
-          type="button"
-          data-action="delete-category"
-          data-category-id="${category.id}"
-          class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-        >${ICONS.trash}<span>Удалить</span></button>
-      </div>
-    </div>
-  `;
+  const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.CATEGORIES, {
+    entityType: ENTITY_TYPES.CATEGORY
+  });
+
+  const actionsHtml = renderEntityHeaderActions({
+    moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
+    entityType: ENTITY_TYPES.CATEGORY,
+    entityId: category.id,
+    viewMode: displayContext.viewMode
+  });
 
   const detailHtml = `
     ${overLimit ? `
@@ -706,12 +667,6 @@ export function renderCategories(state, container) {
   `;
 }
 
-function closeAllMenus(container) {
-  container.querySelectorAll('[data-menu]').forEach((menu) => {
-    menu.classList.add('hidden');
-  });
-}
-
 function refresh(state, container, onUpdate) {
   renderCategories(state, container);
   if (typeof onUpdate === 'function') {
@@ -727,10 +682,6 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
-    if (!target.closest('[data-action="toggle-menu"]') && !target.closest('[data-menu]')) {
-      closeAllMenus(container);
-    }
-
     if (target.closest('[data-action="open-add-category-modal"]')) {
       const form = findAppForm('add-category', container);
       if (form) form.reset();
@@ -741,17 +692,6 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     if (target.closest('[data-action="close-modal"]')) {
       const btn = target.closest('[data-action="close-modal"]');
       closeModal(btn.dataset.modal);
-      return;
-    }
-
-    if (target.closest('[data-action="toggle-menu"]')) {
-      const btn = target.closest('[data-action="toggle-menu"]');
-      const menu = container.querySelector(`[data-menu="${btn.dataset.categoryId}"]`);
-      if (menu) {
-        const isHidden = menu.classList.contains('hidden');
-        closeAllMenus(container);
-        if (isHidden) menu.classList.remove('hidden');
-      }
       return;
     }
 

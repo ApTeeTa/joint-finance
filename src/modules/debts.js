@@ -20,8 +20,11 @@ import {
   renderDisplaySummary,
   renderDisplayModeList,
   renderDisplayModeRoot,
-  renderModuleToolbar
+  renderModuleToolbar,
+  getModuleDisplayContext
 } from './displayMode.js';
+import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
@@ -117,12 +120,23 @@ function renderDebtCard(debt) {
     </div>
   `;
 
+  const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.DEBTS, {
+    entityType: ENTITY_TYPES.DEBT
+  });
+  const actionsHtml = renderEntityHeaderActions({
+    moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
+    entityType: ENTITY_TYPES.DEBT,
+    entityId: item.id,
+    viewMode: displayContext.viewMode
+  });
+
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
     itemId: item.id,
     dataAttr: 'data-debt-id',
     dataValue: item.id,
     summaryHtml,
+    actionsHtml,
     detailHtml,
     itemClass: 'bg-slate-50/50'
   });

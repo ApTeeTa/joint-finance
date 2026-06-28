@@ -32,12 +32,10 @@ import { formatDisplayMoney } from './formatUi.js';
 import {
   ENTITY_TYPES,
   getDisplayRules,
-  getAllowedActions,
   getAllowedDetailActions,
-  getActionRenderClass,
   logUiRulesActive
 } from './uiRulesEngine.js';
-import { renderUiIcon } from './uiIcons.js';
+import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -46,11 +44,6 @@ const OWNER_LABELS = {
 const OWNER_ICONS = {
   husband: '👨',
   wife: '👩'
-};
-
-const ICONS = {
-  pencil: renderUiIcon('pencil'),
-  trash: renderUiIcon('trash')
 };
 
 const DEFAULT_EXCHANGE_RATE = 92;
@@ -728,35 +721,6 @@ function renderOperations(state, accountId, currency) {
   return `<ul class="mt-2">${items}</ul>`;
 }
 
-const ACCOUNT_HEADER_ACTIONS = [
-  {
-    id: 'open-topup',
-    title: 'Пополнить',
-    markup: '+',
-    tone: 'text-emerald-600 hover:bg-emerald-100 text-base leading-none font-semibold'
-  },
-  {
-    id: 'open-transfer',
-    title: 'Перевести',
-    markup: '⇄',
-    tone: 'text-primary-600 hover:bg-primary-50 text-sm leading-none font-semibold'
-  },
-  {
-    id: 'open-edit',
-    title: 'Редактировать',
-    markup: null,
-    icon: 'pencil',
-    tone: 'text-slate-400 hover:text-primary-600 hover:bg-primary-50'
-  },
-  {
-    id: 'delete-account',
-    title: 'Удалить',
-    markup: null,
-    icon: 'trash',
-    tone: 'text-red-500 hover:bg-red-50'
-  }
-];
-
 function resolveAccountsDisplayContext(options = {}) {
   return getModuleDisplayContext(DISPLAY_MODULE_KEYS.ACCOUNTS, {
     entityType: ENTITY_TYPES.ACCOUNT,
@@ -785,36 +749,6 @@ function buildAccountSummaryMeta(currency, displayRules) {
     return currency;
   }
   return '';
-}
-
-function renderAccountHeaderActions(account, displayContext, displayRules) {
-  const viewMode = displayContext.viewMode;
-  const allowedActions = displayRules?.allowedActions
-    ?? getAllowedActions(ENTITY_TYPES.ACCOUNT, viewMode)
-    ?? [];
-
-  return ACCOUNT_HEADER_ACTIONS
-    .filter((action) => allowedActions.includes(action.id))
-    .map((action) => {
-      const visibilityClass = getActionRenderClass(action.id, ENTITY_TYPES.ACCOUNT, viewMode);
-      if (!visibilityClass) {
-        return '';
-      }
-
-      const content = action.icon === 'pencil'
-        ? ICONS.pencil
-        : (action.icon === 'trash' ? ICONS.trash : action.markup);
-
-      return `
-    <button
-      type="button"
-      data-action="${action.id}"
-      data-account-id="${account.id}"
-      title="${action.title}"
-      class="${visibilityClass} p-1.5 rounded-lg transition-colors ${action.tone}"
-    >${content}</button>`;
-    })
-    .join('');
 }
 
 function renderAccountDetailActions(account, displayRules) {
@@ -856,7 +790,13 @@ function renderAccountCard(state, account, displayContext, displayRules) {
     value: formatAccountDisplayMoney(account.balance, currency, rules)
   });
 
-  const actionsHtml = renderAccountHeaderActions(account, context, rules);
+  const actionsHtml = renderEntityHeaderActions({
+    moduleKey: DISPLAY_MODULE_KEYS.ACCOUNTS,
+    entityType: ENTITY_TYPES.ACCOUNT,
+    entityId: account.id,
+    viewMode: context.viewMode,
+    displayRules: rules
+  });
 
   const detailHtml = `
     ${renderAccountDetailActions(account, rules)}

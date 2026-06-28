@@ -28,6 +28,14 @@ export const SCREEN_SIZES = Object.freeze({
   DESKTOP: 'desktop'
 });
 
+/** Global invariant: secondary actions (edit, delete) always live in ⋮ overflow menu. */
+export const GLOBAL_ACTION_RULE = Object.freeze({
+  primaryZone: 'inline',
+  secondaryZone: 'overflow',
+  overflow: true,
+  secondaryPatterns: Object.freeze(['open-edit', 'delete-'])
+});
+
 const DISPLAY_MODE_TO_VIEW = Object.freeze({
   compact: VIEW_MODES.LIST,
   medium: VIEW_MODES.MEDIUM,
@@ -42,17 +50,17 @@ const MODULE_KEY_TO_ENTITY = Object.freeze({
   debts: ENTITY_TYPES.DEBT
 });
 
-const ENTITY_VIEW_ACTIONS = Object.freeze({
+const ENTITY_VIEW_SECONDARY = Object.freeze({
   [ENTITY_TYPES.ACCOUNT]: Object.freeze({
-    [VIEW_MODES.LIST]: ['open-topup', 'open-transfer'],
-    [VIEW_MODES.MEDIUM]: ['open-topup', 'open-transfer', 'open-edit'],
-    [VIEW_MODES.FULL]: ['open-topup', 'open-transfer', 'open-edit', 'delete-account']
+    [VIEW_MODES.LIST]: [],
+    [VIEW_MODES.MEDIUM]: ['open-edit'],
+    [VIEW_MODES.FULL]: ['open-edit', 'delete-account']
   })
 });
 
 /**
  * Declarative action catalog per entity (header + detail zones).
- * visibility: list-primary → .display-list-action, card → .display-card-action
+ * Primary = listPrimary; secondary = edit/delete card actions (always overflow).
  */
 const ENTITY_ACTION_CATALOG = Object.freeze({
   [ENTITY_TYPES.ACCOUNT]: Object.freeze({
@@ -67,7 +75,7 @@ const ENTITY_ACTION_CATALOG = Object.freeze({
   }),
   [ENTITY_TYPES.CATEGORY]: Object.freeze({
     listPrimary: ['open-reserve', 'open-unreserve'],
-    card: ['open-edit', 'toggle-menu', 'delete-category'],
+    card: ['open-edit', 'delete-category'],
     detail: ['fill-to-limit', 'open-expense']
   }),
   [ENTITY_TYPES.OBLIGATION]: Object.freeze({
@@ -109,6 +117,54 @@ export function createDisplayContext({
   };
 }
 
+export function isSecondaryAction(actionId) {
+  if (!actionId || actionId === 'toggle-overflow-menu' || actionId === 'toggle-menu') {
+    return false;
+  }
+  return GLOBAL_ACTION_RULE.secondaryPatterns.some((pattern) => actionId.startsWith(pattern));
+}
+
+function resolveSecondaryActions(entityType, viewMode) {
+  const catalog = ENTITY_ACTION_CATALOG[entityType];
+  if (!catalog) {
+    return [];
+  }
+
+  const mode = normalizeViewMode(viewMode);
+  const cardSecondary = (catalog.card ?? []).filter(isSecondaryAction);
+  const viewOverride = ENTITY_VIEW_SECONDARY[entityType]?.[mode];
+
+  if (viewOverride !== undefined) {
+    return viewOverride.filter((id) => cardSecondary.includes(id));
+  }
+
+  if (mode === VIEW_MODES.LIST) {
+    return cardSecondary.filter((id) => id.startsWith('open-edit'));
+  }
+
+  if (mode === VIEW_MODES.MEDIUM) {
+    return cardSecondary.filter((id) => !id.startsWith('delete-'));
+  }
+
+  return [...cardSecondary];
+}
+
+function buildActionGroups(entityType, viewMode) {
+  const catalog = ENTITY_ACTION_CATALOG[entityType];
+  if (!catalog) {
+    return null;
+  }
+
+  const primary = [...(catalog.listPrimary ?? [])];
+  const secondary = resolveSecondaryActions(entityType, viewMode);
+
+  return {
+    primary,
+    secondary,
+    overflow: GLOBAL_ACTION_RULE.overflow && secondary.length > 0
+  };
+}
+
 function getBadgeRules(entityType, viewMode) {
   const mode = normalizeViewMode(viewMode);
 
@@ -143,32 +199,21 @@ export function getMutationStrategy(domain, actionType) {
   return getDisplayStrategy(domain, actionType);
 }
 
+/**
+ * Structured action groups for header rendering.
+ * @returns {{ primary: string[], secondary: string[], overflow: boolean } | null}
+ */
 export function getAllowedActions(entityType, viewMode) {
-  const mode = normalizeViewMode(viewMode);
-  const viewActions = ENTITY_VIEW_ACTIONS[entityType]?.[mode];
-  if (viewActions) {
-    return [...viewActions];
-  }
-
-  const catalog = ENTITY_ACTION_CATALOG[entityType];
-  if (!catalog) {
-    return null;
-  }
-
-  if (mode === VIEW_MODES.LIST) {
-    return [...catalog.listPrimary];
-  }
-
-  return [...catalog.card];
+  return buildActionGroups(entityType, viewMode);
 }
 
 /**
- * CSS class for rendered action — aligns with active viewMode and existing display CSS.
+ * CSS class for rendered primary action — aligns with active viewMode and existing display CSS.
  */
 export function getActionRenderClass(actionId, entityType, viewMode) {
   const mode = normalizeViewMode(viewMode);
-  const allowed = getAllowedActions(entityType, viewMode);
-  if (allowed && !allowed.includes(actionId)) {
+  const groups = getAllowedActions(entityType, viewMode);
+  if (!groups || !groups.primary.includes(actionId)) {
     return null;
   }
 
@@ -197,7 +242,7 @@ export function getActionVisibilityClass(actionId, entityType) {
     return 'display-list-action';
   }
 
-  if (catalog.card.includes(actionId)) {
+  if (catalog.card.includes(actionId) && !isSecondaryAction(actionId)) {
     return 'display-card-action';
   }
 
@@ -205,11 +250,11 @@ export function getActionVisibilityClass(actionId, entityType) {
 }
 
 export function isHeaderActionAllowed(actionId, entityType, viewMode) {
-  const allowed = getAllowedActions(entityType, viewMode);
-  if (allowed === null) {
+  const groups = getAllowedActions(entityType, viewMode);
+  if (groups === null) {
     return true;
   }
-  return allowed.includes(actionId);
+  return groups.primary.includes(actionId) || groups.secondary.includes(actionId);
 }
 
 export function getDisplayRules(displayContext) {
@@ -231,7 +276,7 @@ export function getDisplayRules(displayContext) {
     moneyFormat,
     showSecondaryValues: viewMode !== VIEW_MODES.LIST,
     actionMode,
-    allowedActions: getAllowedActions(entityType, viewMode) ?? [],
+    allowedActions: getAllowedActions(entityType, viewMode) ?? { primary: [], secondary: [], overflow: false },
     allowedDetailActions: getAllowedDetailActions(entityType) ?? [],
     labelDensity: viewMode === VIEW_MODES.LIST
       ? 'minimal'
@@ -253,6 +298,18 @@ export function logUiRulesActive(moduleKey, displayContext, rules) {
     viewMode: displayContext?.viewMode ?? rules.viewMode ?? null,
     moneyFormat: rules.moneyFormat,
     allowedActions: rules.allowedActions
+  });
+}
+
+export function logUiActionRule(moduleKey, entityType, actionGroups) {
+  if (!IS_EXPERIMENT || !actionGroups) {
+    return;
+  }
+  console.info('[UI ACTION RULE]', {
+    module: moduleKey,
+    entityType,
+    primaryActions: actionGroups.primary,
+    overflowActions: actionGroups.secondary
   });
 }
 
