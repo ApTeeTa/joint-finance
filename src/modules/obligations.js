@@ -21,7 +21,7 @@ import {
   getModuleDisplayContext
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
-import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
 import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 export {
@@ -309,12 +309,14 @@ function renderObligationCard(state, obligation) {
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.OBLIGATIONS, {
     entityType: ENTITY_TYPES.OBLIGATION
   });
+  const displayRules = getDisplayRules(displayContext);
 
   const actionsHtml = renderEntityHeaderActions({
     moduleKey: DISPLAY_MODULE_KEYS.OBLIGATIONS,
     entityType: ENTITY_TYPES.OBLIGATION,
     entityId: item.id,
-    viewMode: displayContext.viewMode
+    viewMode: displayContext.viewMode,
+    displayRules
   });
 
   const detailHtml = `

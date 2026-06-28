@@ -17,7 +17,7 @@ import {
   getModuleDisplayContext
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
-import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
 import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
@@ -421,12 +421,14 @@ function renderCategoryCard(state, category) {
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.CATEGORIES, {
     entityType: ENTITY_TYPES.CATEGORY
   });
+  const displayRules = getDisplayRules(displayContext);
 
   const actionsHtml = renderEntityHeaderActions({
     moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
     entityType: ENTITY_TYPES.CATEGORY,
     entityId: category.id,
-    viewMode: displayContext.viewMode
+    viewMode: displayContext.viewMode,
+    displayRules
   });
 
   const detailHtml = `

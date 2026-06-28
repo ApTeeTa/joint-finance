@@ -8,7 +8,8 @@ import {
   getAllowedActions,
   getActionRenderClass,
   normalizeViewMode,
-  logUiActionRule
+  logUiActionRule,
+  logUiMigrationPass
 } from './uiRulesEngine.js';
 import { renderUiIcon } from './uiIcons.js';
 
@@ -122,6 +123,17 @@ const ACTION_DEFS = Object.freeze({
     menuLabel: 'Удалить',
     icon: 'trash',
     menuTone: 'text-red-600 hover:bg-red-50'
+  },
+  'open-repay-debt': {
+    title: 'Погасить',
+    markup: '₽',
+    menuLabel: 'Погасить',
+    tone: 'text-primary-600 hover:bg-primary-50 text-sm leading-none font-semibold'
+  },
+  'open-write-off-debt': {
+    title: 'Списать долг',
+    menuLabel: 'Списать долг',
+    menuTone: 'text-red-600 hover:bg-red-50'
   }
 });
 
@@ -201,6 +213,15 @@ export function renderPrimaryActions({
     .join('');
 }
 
+function detectLegacyInlineActions(html) {
+  if (!html) {
+    return false;
+  }
+  const hasOverflow = html.includes('toggle-overflow-menu');
+  const inlineSecondary = /data-action="(?:open-edit|delete-|open-edit-saving|open-edit-obligation)/.test(html);
+  return inlineSecondary && !hasOverflow;
+}
+
 export function renderOverflowMenuActions({
   entityType,
   entityId,
@@ -211,11 +232,6 @@ export function renderOverflowMenuActions({
   const binding = resolveBinding(entityType);
   const groups = actionGroups ?? { primary: [], secondary: [], overflow: false };
   const secondary = groups.secondary.filter((actionId) => filterAction(actionId));
-
-  if (!secondary.length) {
-    return '';
-  }
-
   const triggerClass = getOverflowTriggerClass(viewMode);
   const menuItems = secondary.map((actionId) => {
     const def = ACTION_DEFS[actionId];
@@ -321,23 +337,37 @@ export function renderEntityHeaderActions({
       if (entityType === ENTITY_TYPES.OBLIGATION) {
         return id.includes('obligation');
       }
+      if (entityType === ENTITY_TYPES.DEBT) {
+        return id.includes('repay') || id.includes('write-off');
+      }
       return false;
     });
-    return renderLegacyInlineActions({
+    const legacyHtml = renderLegacyInlineActions({
       entityType,
       entityId,
       viewMode,
       actionIds: fallbackIds,
       filterAction
     });
+    logUiMigrationPass(moduleKey, viewMode, false, true);
+    return legacyHtml;
   }
 
   logUiActionRule(moduleKey, entityType, groups);
 
-  return [
+  const html = [
     renderPrimaryActions({ entityType, entityId, viewMode, actionGroups: groups, filterAction }),
     renderOverflowMenuActions({ entityType, entityId, viewMode, actionGroups: groups, filterAction })
   ].join('');
+
+  logUiMigrationPass(
+    moduleKey,
+    viewMode,
+    html.includes('toggle-overflow-menu'),
+    detectLegacyInlineActions(html)
+  );
+
+  return html;
 }
 
 function closeAllOverflowMenus() {

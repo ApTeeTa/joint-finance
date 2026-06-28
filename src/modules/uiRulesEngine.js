@@ -50,17 +50,9 @@ const MODULE_KEY_TO_ENTITY = Object.freeze({
   debts: ENTITY_TYPES.DEBT
 });
 
-const ENTITY_VIEW_SECONDARY = Object.freeze({
-  [ENTITY_TYPES.ACCOUNT]: Object.freeze({
-    [VIEW_MODES.LIST]: [],
-    [VIEW_MODES.MEDIUM]: ['open-edit'],
-    [VIEW_MODES.FULL]: ['open-edit', 'delete-account']
-  })
-});
-
 /**
  * Declarative action catalog per entity (header + detail zones).
- * Primary = listPrimary; secondary = edit/delete card actions (always overflow).
+ * Primary = listPrimary; edit/delete = card (overflow); overflow = menu-only actions.
  */
 const ENTITY_ACTION_CATALOG = Object.freeze({
   [ENTITY_TYPES.ACCOUNT]: Object.freeze({
@@ -84,9 +76,10 @@ const ENTITY_ACTION_CATALOG = Object.freeze({
     detail: ['open-pay-obligation']
   }),
   [ENTITY_TYPES.DEBT]: Object.freeze({
-    listPrimary: [],
+    listPrimary: ['open-repay-debt'],
     card: [],
-    detail: ['open-repay-debt', 'open-write-off-debt']
+    overflow: ['open-write-off-debt'],
+    detail: []
   })
 });
 
@@ -132,21 +125,14 @@ function resolveSecondaryActions(entityType, viewMode) {
 
   const mode = normalizeViewMode(viewMode);
   const cardSecondary = (catalog.card ?? []).filter(isSecondaryAction);
-  const viewOverride = ENTITY_VIEW_SECONDARY[entityType]?.[mode];
+  const overflowOnly = [...(catalog.overflow ?? [])];
 
-  if (viewOverride !== undefined) {
-    return viewOverride.filter((id) => cardSecondary.includes(id));
+  let editDelete = cardSecondary;
+  if (mode === VIEW_MODES.LIST || mode === VIEW_MODES.MEDIUM) {
+    editDelete = cardSecondary.filter((id) => !id.startsWith('delete-'));
   }
 
-  if (mode === VIEW_MODES.LIST) {
-    return cardSecondary.filter((id) => id.startsWith('open-edit'));
-  }
-
-  if (mode === VIEW_MODES.MEDIUM) {
-    return cardSecondary.filter((id) => !id.startsWith('delete-'));
-  }
-
-  return [...cardSecondary];
+  return [...editDelete, ...overflowOnly];
 }
 
 function buildActionGroups(entityType, viewMode) {
@@ -161,7 +147,7 @@ function buildActionGroups(entityType, viewMode) {
   return {
     primary,
     secondary,
-    overflow: GLOBAL_ACTION_RULE.overflow && secondary.length > 0
+    overflow: GLOBAL_ACTION_RULE.overflow
   };
 }
 
@@ -310,6 +296,18 @@ export function logUiActionRule(moduleKey, entityType, actionGroups) {
     entityType,
     primaryActions: actionGroups.primary,
     overflowActions: actionGroups.secondary
+  });
+}
+
+export function logUiMigrationPass(moduleKey, viewMode, hasOverflowMenu, legacyDetected) {
+  if (!IS_EXPERIMENT) {
+    return;
+  }
+  console.info('[UI MIGRATION PASS]', {
+    module: moduleKey,
+    viewMode: normalizeViewMode(viewMode),
+    hasOverflowMenu,
+    legacyDetected
   });
 }
 

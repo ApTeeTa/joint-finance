@@ -21,7 +21,7 @@ import {
   getModuleDisplayContext
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
-import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
 import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const DEADLINE_LABELS = {
@@ -426,12 +426,14 @@ function renderSavingCard(state, saving) {
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.SAVINGS, {
     entityType: ENTITY_TYPES.SAVING
   });
+  const displayRules = getDisplayRules(displayContext);
 
   const actionsHtml = renderEntityHeaderActions({
     moduleKey: DISPLAY_MODULE_KEYS.SAVINGS,
     entityType: ENTITY_TYPES.SAVING,
     entityId: item.id,
     viewMode: displayContext.viewMode,
+    displayRules,
     filterAction: (actionId) => actionId !== 'open-deposit-saving' || !goalReached
   });
 

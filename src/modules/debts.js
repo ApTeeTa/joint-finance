@@ -23,7 +23,7 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { ENTITY_TYPES } from './uiRulesEngine.js';
+import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
 import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const TYPE_LABELS = {
@@ -77,6 +77,30 @@ function getActiveDebts(state, type) {
     .filter((debt) => debt.type === type && debt.status !== 'closed' && debt.remainingAmount > 0);
 }
 
+function buildDebtSummaryMeta(item, isManual, categoryLabel, displayRules) {
+  if (isManual && categoryLabel) {
+    return categoryLabel;
+  }
+  if (displayRules?.showSecondaryValues) {
+    return `Погашено ${formatMoney(item.paidAmount)}`;
+  }
+  return '';
+}
+
+function buildDebtStatsHtml(item, displayRules) {
+  if (displayRules?.labelDensity !== 'verbose') {
+    return '';
+  }
+  return `
+      <span class="text-slate-500">Остаток:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(item.remainingAmount)}</span>
+      <span class="text-slate-500">Из суммы:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(item.amount)}</span>
+      <span class="text-slate-500">Погашено:</span>
+      <span class="text-slate-900 font-medium text-right">${formatMoney(item.paidAmount)}</span>
+    `;
+}
+
 function renderDebtCard(debt) {
   const item = normalizeDebt(debt);
   const isOwedToUs = item.type === 'owed_to_us';
@@ -85,50 +109,36 @@ function renderDebtCard(debt) {
     ? MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other
     : '';
 
-  const summaryHtml = renderDisplaySummary({
-    title: escapeHtml(item.title),
-    meta: isManual && categoryLabel ? categoryLabel : `Погашено ${formatMoney(item.paidAmount)}`,
-    value: formatMoney(item.remainingAmount),
-    statsHtml: `
-      <span class="text-slate-500">Остаток:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(item.remainingAmount)}</span>
-      <span class="text-slate-500">Из суммы:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(item.amount)}</span>
-      <span class="text-slate-500">Погашено:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(item.paidAmount)}</span>
-    `
-  });
-
-  const detailHtml = `
-    ${item.comment ? `<p class="text-sm text-slate-500 mb-2">${escapeHtml(item.comment)}</p>` : ''}
-    ${isManual && item.eventDate ? `<p class="text-xs text-slate-400 mb-3">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
-    <div class="display-item-detail-actions">
-      <button
-        type="button"
-        data-action="open-repay-debt"
-        data-debt-id="${item.id}"
-        class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-      >Погасить</button>
-      ${isOwedToUs ? `
-        <button
-          type="button"
-          data-action="open-write-off-debt"
-          data-debt-id="${item.id}"
-          class="px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-        >Списать долг</button>
-      ` : ''}
-    </div>
-  `;
-
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.DEBTS, {
     entityType: ENTITY_TYPES.DEBT
   });
+  const displayRules = getDisplayRules(displayContext);
+
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(item.title),
+    meta: buildDebtSummaryMeta(item, isManual, categoryLabel, displayRules),
+    value: formatMoney(item.remainingAmount),
+    statsHtml: buildDebtStatsHtml(item, displayRules)
+  });
+
   const actionsHtml = renderEntityHeaderActions({
     moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
     entityType: ENTITY_TYPES.DEBT,
     entityId: item.id,
-    viewMode: displayContext.viewMode
+    viewMode: displayContext.viewMode,
+    displayRules,
+    filterAction: (actionId) => {
+      if (actionId === 'open-write-off-debt') {
+        return isOwedToUs;
+      }
+      return true;
+    }
   });
+
+  const detailHtml = `
+    ${item.comment ? `<p class="text-sm text-slate-500 mb-2">${escapeHtml(item.comment)}</p>` : ''}
+    ${isManual && item.eventDate ? `<p class="text-xs text-slate-400">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
+  `;
 
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
