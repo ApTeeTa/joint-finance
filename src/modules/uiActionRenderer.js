@@ -9,7 +9,8 @@ import {
   getActionRenderClass,
   normalizeViewMode,
   logUiActionRule,
-  logUiMigrationPass
+  logUiMigrationPass,
+  logUiUxFix
 } from './uiRulesEngine.js';
 import { renderUiIcon } from './uiIcons.js';
 
@@ -78,6 +79,11 @@ const ACTION_DEFS = Object.freeze({
     title: 'Вернуть',
     icon: 'unreserve',
     tone: 'text-slate-500 hover:bg-slate-200'
+  },
+  'open-expense': {
+    title: 'Расход',
+    markup: '−',
+    tone: 'text-amber-600 hover:bg-amber-100 text-base leading-none font-semibold'
   },
   'delete-category': {
     title: 'Удалить',
@@ -264,7 +270,7 @@ export function renderOverflowMenuActions({
       >${ICONS.dots}</button>
       <div
         data-overflow-menu="${entityId}"
-        class="hidden absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-20 min-w-[140px]"
+        class="display-overflow-menu-panel hidden"
       >
         ${menuItems}
       </div>
@@ -329,7 +335,7 @@ export function renderEntityHeaderActions({
         return id.includes('topup') || id.includes('transfer') || id.includes('edit') || id.includes('delete-account');
       }
       if (entityType === ENTITY_TYPES.CATEGORY) {
-        return id.includes('reserve') || id.includes('unreserve') || id.includes('edit') || id.includes('delete-category');
+        return id.includes('reserve') || id.includes('expense') || id.includes('edit') || id.includes('delete-category');
       }
       if (entityType === ENTITY_TYPES.SAVING) {
         return id.includes('deposit') || id.includes('edit-saving') || id.includes('delete-saving');
@@ -355,6 +361,11 @@ export function renderEntityHeaderActions({
 
   logUiActionRule(moduleKey, entityType, groups);
 
+  if (entityType === ENTITY_TYPES.CATEGORY && !categoryMinusUxFixLogged) {
+    logUiUxFix('category_minus');
+    categoryMinusUxFixLogged = true;
+  }
+
   const html = [
     renderPrimaryActions({ entityType, entityId, viewMode, actionGroups: groups, filterAction }),
     renderOverflowMenuActions({ entityType, entityId, viewMode, actionGroups: groups, filterAction })
@@ -376,11 +387,19 @@ function closeAllOverflowMenus() {
   });
 }
 
+let overflowUxFixLogged = false;
+let categoryMinusUxFixLogged = false;
+
 export function initOverflowMenuHandlers() {
   if (document.body.dataset.overflowMenuHandlersBound === 'true') {
     return;
   }
   document.body.dataset.overflowMenuHandlersBound = 'true';
+
+  if (!overflowUxFixLogged) {
+    logUiUxFix('overflow_menu');
+    overflowUxFixLogged = true;
+  }
 
   document.addEventListener('click', (event) => {
     const toggleBtn = event.target.closest('[data-action="toggle-overflow-menu"]');

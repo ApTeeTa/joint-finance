@@ -66,7 +66,7 @@ const ENTITY_ACTION_CATALOG = Object.freeze({
     detail: ['open-deposit-saving']
   }),
   [ENTITY_TYPES.CATEGORY]: Object.freeze({
-    listPrimary: ['open-reserve', 'open-unreserve'],
+    listPrimary: ['open-reserve', 'open-expense'],
     card: ['open-edit', 'delete-category'],
     detail: ['fill-to-limit', 'open-expense']
   }),
@@ -128,17 +128,32 @@ function resolveSecondaryActions(entityType, viewMode) {
   const overflowOnly = [...(catalog.overflow ?? [])];
 
   let editDelete = cardSecondary;
-  if (mode === VIEW_MODES.LIST || mode === VIEW_MODES.MEDIUM) {
+  if (mode === VIEW_MODES.LIST) {
     editDelete = cardSecondary.filter((id) => !id.startsWith('delete-'));
   }
 
   return [...editDelete, ...overflowOnly];
 }
 
+let overflowConsistencyFixLogged = false;
+
+function maybeLogOverflowConsistencyFix() {
+  if (!IS_EXPERIMENT || overflowConsistencyFixLogged) {
+    return;
+  }
+  overflowConsistencyFixLogged = true;
+  logUiRuleFix('overflow_consistency', { viewModesAffected: ['medium', 'full'] });
+}
+
 function buildActionGroups(entityType, viewMode) {
   const catalog = ENTITY_ACTION_CATALOG[entityType];
   if (!catalog) {
     return null;
+  }
+
+  const mode = normalizeViewMode(viewMode);
+  if (mode === VIEW_MODES.MEDIUM || mode === VIEW_MODES.FULL) {
+    maybeLogOverflowConsistencyFix();
   }
 
   const primary = [...(catalog.listPrimary ?? [])];
@@ -309,6 +324,20 @@ export function logUiMigrationPass(moduleKey, viewMode, hasOverflowMenu, legacyD
     hasOverflowMenu,
     legacyDetected
   });
+}
+
+export function logUiUxFix(issue, status = 'fixed') {
+  if (!IS_EXPERIMENT) {
+    return;
+  }
+  console.info('[UI UX FIX]', { issue, status });
+}
+
+export function logUiRuleFix(fix, meta = {}) {
+  if (!IS_EXPERIMENT) {
+    return;
+  }
+  console.info('[UI RULE FIX]', { fix, ...meta });
 }
 
 export { formatDisplayMoney as formatMoneyByRules } from './formatUi.js';
