@@ -44,6 +44,15 @@ export function exportSharedSnapshot(state) {
   return pickSharedFields(state);
 }
 
+export function getEmptySharedSnapshot() {
+  return pickSharedFields(getDefaultState());
+}
+
+/** RULE 3: hard replace local shared fields — no merge when remote is empty. */
+export function hardReplaceStateFromRemoteSnapshot(state, snapshot) {
+  applySharedSnapshot(state, snapshot ?? getEmptySharedSnapshot());
+}
+
 export function applySharedSnapshot(state, snapshot) {
   if (!snapshot || typeof snapshot !== 'object') {
     return;

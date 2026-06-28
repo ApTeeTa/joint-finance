@@ -8,6 +8,8 @@ import {
   getAllowedActions,
   getActionRenderClass,
   normalizeViewMode,
+  isActionAllowedForEntity,
+  resolveEntityActionGroups,
   logUiActionRule,
   logUiMigrationPass,
   logUiUxFix
@@ -166,22 +168,23 @@ function getOverflowTriggerClass(viewMode) {
     : 'display-card-action';
 }
 
-function normalizeActionGroups(groups, entityType, viewMode) {
+function normalizeActionGroups(groups, entityType, viewMode, entityContext = {}) {
   if (groups && !Array.isArray(groups) && Array.isArray(groups.primary)) {
     return groups;
   }
 
   if (Array.isArray(groups)) {
-    const allowed = new Set(groups);
     const catalogPrimary = groups.filter((id) => !id.startsWith('open-edit') && !id.startsWith('delete-'));
     return {
-      primary: catalogPrimary,
-      secondary: groups.filter((id) => id.startsWith('open-edit') || id.startsWith('delete-')),
+      primary: catalogPrimary.filter((id) => isActionAllowedForEntity(id, entityType, entityContext)),
+      secondary: groups.filter((id) => id.startsWith('open-edit') || id.startsWith('delete-'))
+        .filter((id) => isActionAllowedForEntity(id, entityType, entityContext)),
       overflow: true
     };
   }
 
-  return getAllowedActions(entityType, viewMode);
+  return resolveEntityActionGroups(entityType, entityContext)
+    ?? getAllowedActions(entityType, viewMode, entityContext);
 }
 
 export function renderPrimaryActions({
@@ -189,13 +192,13 @@ export function renderPrimaryActions({
   entityId,
   viewMode,
   actionGroups,
-  filterAction = () => true
+  entityContext = {}
 }) {
   const binding = resolveBinding(entityType);
   const groups = actionGroups ?? { primary: [], secondary: [], overflow: false };
 
   return groups.primary
-    .filter((actionId) => filterAction(actionId))
+    .filter((actionId) => isActionAllowedForEntity(actionId, entityType, entityContext))
     .map((actionId) => {
       const def = ACTION_DEFS[actionId];
       if (!def) {
@@ -233,11 +236,11 @@ export function renderOverflowMenuActions({
   entityId,
   viewMode,
   actionGroups,
-  filterAction = () => true
+  entityContext = {}
 }) {
   const binding = resolveBinding(entityType);
   const groups = actionGroups ?? { primary: [], secondary: [], overflow: false };
-  const secondary = groups.secondary.filter((actionId) => filterAction(actionId));
+  const secondary = groups.secondary.filter((actionId) => isActionAllowedForEntity(actionId, entityType, entityContext));
   const triggerClass = getOverflowTriggerClass(viewMode);
   const menuItems = secondary.map((actionId) => {
     const def = ACTION_DEFS[actionId];
@@ -255,6 +258,7 @@ export function renderOverflowMenuActions({
           data-action="${actionId}"
           ${binding.idAttr}="${entityId}"
           class="w-full flex items-center gap-2 px-3 py-2 text-sm ${tone}"
+          data-overflow-menu-action="true"
         >${icon}<span>${label}</span></button>`;
   }).join('');
 
@@ -282,12 +286,12 @@ function renderLegacyInlineActions({
   entityId,
   viewMode,
   actionIds,
-  filterAction = () => true
+  entityContext = {}
 }) {
   const binding = resolveBinding(entityType);
 
   return actionIds
-    .filter((actionId) => filterAction(actionId))
+    .filter((actionId) => isActionAllowedForEntity(actionId, entityType, entityContext))
     .map((actionId) => {
       const def = ACTION_DEFS[actionId];
       if (!def) {
@@ -315,12 +319,13 @@ export function renderEntityHeaderActions({
   entityId,
   viewMode,
   displayRules = null,
-  filterAction = () => true
+  entityContext = {}
 }) {
   const groups = normalizeActionGroups(
-    displayRules?.allowedActions ?? getAllowedActions(entityType, viewMode),
+    resolveEntityActionGroups(entityType, entityContext),
     entityType,
-    viewMode
+    viewMode,
+    entityContext
   );
 
   if (!groups) {
@@ -353,7 +358,7 @@ export function renderEntityHeaderActions({
       entityId,
       viewMode,
       actionIds: fallbackIds,
-      filterAction
+      entityContext
     });
     logUiMigrationPass(moduleKey, viewMode, false, true);
     return legacyHtml;
@@ -367,8 +372,8 @@ export function renderEntityHeaderActions({
   }
 
   const html = [
-    renderPrimaryActions({ entityType, entityId, viewMode, actionGroups: groups, filterAction }),
-    renderOverflowMenuActions({ entityType, entityId, viewMode, actionGroups: groups, filterAction })
+    renderPrimaryActions({ entityType, entityId, viewMode, actionGroups: groups, entityContext }),
+    renderOverflowMenuActions({ entityType, entityId, viewMode, actionGroups: groups, entityContext })
   ].join('');
 
   logUiMigrationPass(
@@ -381,7 +386,7 @@ export function renderEntityHeaderActions({
   return html;
 }
 
-function closeAllOverflowMenus() {
+export function closeAllOverflowMenus() {
   document.querySelectorAll('[data-overflow-menu]').forEach((menu) => {
     menu.classList.add('hidden');
   });
@@ -414,6 +419,11 @@ export function initOverflowMenuHandlers() {
           menu.classList.remove('hidden');
         }
       }
+      return;
+    }
+
+    if (event.target.closest('[data-overflow-menu-action]')) {
+      closeAllOverflowMenus();
       return;
     }
 

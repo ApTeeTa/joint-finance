@@ -244,8 +244,8 @@ export function subscribeSharedState(state, onChange) {
         }
 
         const result = await pullSharedStateInto(state);
-        if (result.ok && result.hasData && !result.skipped) {
-          onChange();
+        if (result.ok && !result.skipped) {
+          onChange(result);
         }
       }
     )

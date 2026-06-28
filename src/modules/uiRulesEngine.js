@@ -33,7 +33,15 @@ export const GLOBAL_ACTION_RULE = Object.freeze({
   primaryZone: 'inline',
   secondaryZone: 'overflow',
   overflow: true,
-  secondaryPatterns: Object.freeze(['open-edit', 'delete-'])
+  secondaryPatterns: Object.freeze(['open-edit', 'delete-']),
+  /** Core overflow actions are identical in every view mode (list / medium / full). */
+  overflowViewModeInvariant: true
+});
+
+/** RULE 2: modules must not compose actions — only uiRulesEngine catalogs + filters. */
+export const UI_ACTION_SOURCE_RULE = Object.freeze({
+  source: 'uiRulesEngine',
+  moduleCompositionAllowed: false
 });
 
 const DISPLAY_MODE_TO_VIEW = Object.freeze({
@@ -117,22 +125,49 @@ export function isSecondaryAction(actionId) {
   return GLOBAL_ACTION_RULE.secondaryPatterns.some((pattern) => actionId.startsWith(pattern));
 }
 
-function resolveSecondaryActions(entityType, viewMode) {
+function resolveSecondaryActions(entityType) {
   const catalog = ENTITY_ACTION_CATALOG[entityType];
   if (!catalog) {
     return [];
   }
 
-  const mode = normalizeViewMode(viewMode);
   const cardSecondary = (catalog.card ?? []).filter(isSecondaryAction);
   const overflowOnly = [...(catalog.overflow ?? [])];
 
-  let editDelete = cardSecondary;
-  if (mode === VIEW_MODES.LIST) {
-    editDelete = cardSecondary.filter((id) => !id.startsWith('delete-'));
+  return [...cardSecondary, ...overflowOnly];
+}
+
+/**
+ * RULE 2: entity-specific action availability (replaces module-level filterAction).
+ */
+export function isActionAllowedForEntity(actionId, entityType, entityContext = {}) {
+  if (entityType === ENTITY_TYPES.SAVING && actionId === 'open-deposit-saving') {
+    return entityContext.goalReached !== true;
   }
 
-  return [...editDelete, ...overflowOnly];
+  if (entityType === ENTITY_TYPES.DEBT && actionId === 'open-write-off-debt') {
+    return entityContext.isOwedToUs === true;
+  }
+
+  return true;
+}
+
+export function resolveEntityActionGroups(entityType, entityContext = {}) {
+  const catalog = ENTITY_ACTION_CATALOG[entityType];
+  if (!catalog) {
+    return null;
+  }
+
+  const base = buildActionGroups(entityType);
+  if (!base) {
+    return null;
+  }
+
+  return {
+    primary: base.primary.filter((actionId) => isActionAllowedForEntity(actionId, entityType, entityContext)),
+    secondary: base.secondary.filter((actionId) => isActionAllowedForEntity(actionId, entityType, entityContext)),
+    overflow: base.overflow
+  };
 }
 
 let overflowConsistencyFixLogged = false;
@@ -142,22 +177,19 @@ function maybeLogOverflowConsistencyFix() {
     return;
   }
   overflowConsistencyFixLogged = true;
-  logUiRuleFix('overflow_consistency', { viewModesAffected: ['medium', 'full'] });
+  logUiRuleFix('overflow_consistency', { viewModesAffected: ['list', 'medium', 'full'] });
 }
 
-function buildActionGroups(entityType, viewMode) {
+function buildActionGroups(entityType) {
   const catalog = ENTITY_ACTION_CATALOG[entityType];
   if (!catalog) {
     return null;
   }
 
-  const mode = normalizeViewMode(viewMode);
-  if (mode === VIEW_MODES.MEDIUM || mode === VIEW_MODES.FULL) {
-    maybeLogOverflowConsistencyFix();
-  }
+  maybeLogOverflowConsistencyFix();
 
   const primary = [...(catalog.listPrimary ?? [])];
-  const secondary = resolveSecondaryActions(entityType, viewMode);
+  const secondary = resolveSecondaryActions(entityType);
 
   return {
     primary,
@@ -202,10 +234,12 @@ export function getMutationStrategy(domain, actionType) {
 
 /**
  * Structured action groups for header rendering.
+ * Overflow core actions (edit/delete) are view-mode invariant — RULE 1.
  * @returns {{ primary: string[], secondary: string[], overflow: boolean } | null}
  */
-export function getAllowedActions(entityType, viewMode) {
-  return buildActionGroups(entityType, viewMode);
+export function getAllowedActions(entityType, viewMode, entityContext = {}) {
+  void viewMode;
+  return resolveEntityActionGroups(entityType, entityContext);
 }
 
 /**
@@ -277,7 +311,8 @@ export function getDisplayRules(displayContext) {
     moneyFormat,
     showSecondaryValues: viewMode !== VIEW_MODES.LIST,
     actionMode,
-    allowedActions: getAllowedActions(entityType, viewMode) ?? { primary: [], secondary: [], overflow: false },
+    allowedActions: getAllowedActions(entityType, viewMode, displayContext.entityContext ?? {})
+      ?? { primary: [], secondary: [], overflow: false },
     allowedDetailActions: getAllowedDetailActions(entityType) ?? [],
     labelDensity: viewMode === VIEW_MODES.LIST
       ? 'minimal'

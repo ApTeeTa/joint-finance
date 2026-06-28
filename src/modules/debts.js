@@ -127,12 +127,7 @@ function renderDebtCard(debt) {
     entityId: item.id,
     viewMode: displayContext.viewMode,
     displayRules,
-    filterAction: (actionId) => {
-      if (actionId === 'open-write-off-debt') {
-        return isOwedToUs;
-      }
-      return true;
-    }
+    entityContext: { isOwedToUs }
   });
 
   const detailHtml = `

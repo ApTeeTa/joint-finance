@@ -13,9 +13,10 @@ import { renderDebts, initDebtsHandlers } from './modules/debts.js';
 import { renderObligations, initObligationsHandlers } from './modules/obligations.js';
 import { renderStats, initStatsHandlers } from './modules/stats.js';
 import { reconcileLegacyTransactions } from './modules/transactions.js';
-import { saveState, loadState, clearState } from './modules/storage.js';
+import { saveState, loadState, clearState, getEmptySharedSnapshot, hardReplaceStateFromRemoteSnapshot } from './modules/storage.js';
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
+import { IS_EXPERIMENT } from './config/environment.js';
 import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState, markInitialSyncDone } from './lib/stateRemote.js';
 
 console.log('APP ENTRY LOADED');
@@ -257,12 +258,25 @@ function onRemoteStateMerged() {
   refreshFromRemote();
 }
 
+function applyRemotePullResult(result) {
+  if (!result?.ok || result.skipped) {
+    return;
+  }
+
+  if (!result.hasData) {
+    hardReplaceStateFromRemoteSnapshot(state, getEmptySharedSnapshot());
+    if (IS_EXPERIMENT) {
+      console.info('[UI RULE FIX]', { fix: 'empty_remote_hard_reset', status: 'applied' });
+    }
+  }
+
+  onRemoteStateMerged();
+}
+
 async function syncFromRemote() {
   try {
     const result = await pullSharedStateInto(state);
-    if (result?.ok && result.hasData && !result.skipped) {
-      onRemoteStateMerged();
-    }
+    applyRemotePullResult(result);
   } finally {
     markInitialSyncDone();
   }
@@ -285,7 +299,7 @@ async function init() {
   initTabHandlers();
   renderTab(state.activeTab || 'accounts');
 
-  subscribeSharedState(state, onRemoteStateMerged);
+  subscribeSharedState(state, applyRemotePullResult);
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;

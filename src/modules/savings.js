@@ -434,7 +434,7 @@ function renderSavingCard(state, saving) {
     entityId: item.id,
     viewMode: displayContext.viewMode,
     displayRules,
-    filterAction: (actionId) => actionId !== 'open-deposit-saving' || !goalReached
+    entityContext: { goalReached }
   });
 
   const detailHtml = `

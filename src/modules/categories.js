@@ -18,7 +18,7 @@ import {
 } from './displayMode.js';
 import { formatUiMoney } from './formatUi.js';
 import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
-import { renderEntityHeaderActions } from './uiActionRenderer.js';
+import { renderEntityHeaderActions, closeAllOverflowMenus } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -766,12 +766,13 @@ export function initCategoriesHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="delete-category"]')) {
       const btn = target.closest('[data-action="delete-category"]');
-      closeAllMenus(container);
+      closeAllOverflowMenus();
       if (confirm('Вы уверены? Средства из категории вернутся в общий баланс.')) {
         if (deleteCategory(state, btn.dataset.categoryId)) {
           refresh(state, container, onUpdate);
         }
       }
+      return;
     }
   });
 
