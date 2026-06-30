@@ -44,6 +44,52 @@ export const UI_ACTION_SOURCE_RULE = Object.freeze({
   moduleCompositionAllowed: false
 });
 
+/**
+ * RULE 4: header actions never overlap entity title — flex layout, actions beside body.
+ * Applied via .display-item-header--safe-layout in index.html.
+ */
+export const GLOBAL_ENTITY_LAYOUT_RULE = Object.freeze({
+  actionsNeverOverlapTitle: true,
+  titleFlexShrink: true,
+  actionsFlexShrink: false,
+  layoutClass: 'display-item-header--safe-layout'
+});
+
+/**
+ * RULE 5: list → compact money; medium/full → full money with currency.
+ */
+export const GLOBAL_MONEY_FORMAT_RULE = Object.freeze({
+  list: 'short',
+  medium: 'full',
+  full: 'full'
+});
+
+/**
+ * RULE 6: primary card value must not repeat in secondary stats rows.
+ */
+export const GLOBAL_INFO_DEDUP_RULE = Object.freeze({
+  omitStatsMatchingPrimary: true
+});
+
+/**
+ * RULE 7: wherever money is reserved, always show Limit + Reserve in stats.
+ */
+export const GLOBAL_RESERVE_DISPLAY_RULE = Object.freeze({
+  alwaysShowLimit: true,
+  alwaysShowReserve: true,
+  limitExceededLabel: 'Превышен лимит',
+  insufficientReserveLabel: 'Недостаточно денег'
+});
+
+/**
+ * RULE 8: remote snapshot arrays are authoritative — local-only ids drop on sync
+ * unless preferLocalOnConflict (see storage.mergeEntityArrays).
+ */
+export const EMPTY_STATE_SYNC_RULE = Object.freeze({
+  emptyRemoteHardReplace: true,
+  remoteArrayAuthoritative: true
+});
+
 const DISPLAY_MODE_TO_VIEW = Object.freeze({
   compact: VIEW_MODES.LIST,
   medium: VIEW_MODES.MEDIUM,
@@ -85,7 +131,7 @@ const ENTITY_ACTION_CATALOG = Object.freeze({
   }),
   [ENTITY_TYPES.DEBT]: Object.freeze({
     listPrimary: ['open-repay-debt'],
-    card: [],
+    card: ['open-edit-manual-debt', 'delete-manual-debt'],
     overflow: ['open-write-off-debt'],
     detail: []
   })
@@ -149,8 +195,188 @@ export function isActionAllowedForEntity(actionId, entityType, entityContext = {
     return entityContext.isOwedToUs === true;
   }
 
+  if (entityType === ENTITY_TYPES.DEBT) {
+    const isManual = entityContext.isManualDebt === true;
+    if (actionId === 'open-edit-manual-debt' || actionId === 'delete-manual-debt') {
+      return isManual;
+    }
+  }
+
   return true;
 }
+
+export function getEntityHeaderLayoutClass() {
+  return GLOBAL_ENTITY_LAYOUT_RULE.layoutClass;
+}
+
+function normalizeMoneyAmount(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
+/** Stats row pairs: [label, formattedValue]. Drops rows whose numeric value equals primaryValue. */
+export function buildDedupedStatsRows(rows, primaryValue, rules = null) {
+  if (!GLOBAL_INFO_DEDUP_RULE.omitStatsMatchingPrimary || primaryValue == null) {
+    return rows;
+  }
+
+  const primaryNum = normalizeMoneyAmount(primaryValue);
+  return rows.filter((row) => {
+    if (!row || row.numericValue == null) {
+      return true;
+    }
+    return normalizeMoneyAmount(row.numericValue) !== primaryNum;
+  });
+}
+
+export function renderStatsRowsHtml(rows) {
+  return rows
+    .filter((row) => row && row.label && row.formattedValue != null)
+    .map((row) => `
+      <span class="text-slate-500">${row.label}:</span>
+      <span class="text-slate-900 font-medium text-right">${row.formattedValue}</span>
+    `)
+    .join('');
+}
+
+/**
+ * Reserve-aware display for categories and obligations.
+ * @returns {{ meta: string, value: string, statsHtml: string, primaryNumeric: number|null }}
+ */
+export function buildReserveEntityDisplay({
+  limit,
+  reserve,
+  spent = 0,
+  primaryNumeric,
+  primaryLabel = null,
+  formatMoney,
+  rules = null
+}) {
+  const limitNum = normalizeMoneyAmount(limit);
+  const reserveNum = normalizeMoneyAmount(reserve);
+  const spentNum = normalizeMoneyAmount(spent);
+  const primary = primaryNumeric != null ? normalizeMoneyAmount(primaryNumeric) : limitNum - spentNum;
+
+  const warnings = [];
+  if (spentNum > limitNum && limitNum > 0) {
+    warnings.push(GLOBAL_RESERVE_DISPLAY_RULE.limitExceededLabel);
+  }
+  if (spentNum > reserveNum && reserveNum >= 0) {
+    warnings.push(GLOBAL_RESERVE_DISPLAY_RULE.insufficientReserveLabel);
+  }
+
+  const metaParts = [];
+  if (warnings.length) {
+    metaParts.push(warnings.join(' · '));
+  }
+
+  const statsRows = buildDedupedStatsRows([
+    {
+      label: 'Лимит',
+      formattedValue: formatMoney(limitNum, 'RUB', rules),
+      numericValue: limitNum
+    },
+    {
+      label: 'Резерв',
+      formattedValue: formatMoney(reserveNum, 'RUB', rules),
+      numericValue: reserveNum
+    }
+  ], primary, rules);
+
+  const valueText = primaryLabel
+    ? formatMoney(primary, 'RUB', rules)
+    : formatMoney(primary, 'RUB', rules);
+
+  return {
+    meta: metaParts.join(' · '),
+    value: valueText,
+    statsHtml: renderStatsRowsHtml(statsRows),
+    primaryNumeric: primary
+  };
+}
+
+export function buildDebtEntityDisplay(item, formatMoney, rules) {
+  const remaining = normalizeMoneyAmount(item.remainingAmount);
+  let meta = '';
+  if (item.type === 'manual_debt_event' && item.category) {
+    meta = MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other;
+  } else if (rules?.showSecondaryValues) {
+    meta = `Погашено ${formatMoney(item.paidAmount, 'RUB', rules)}`;
+  }
+
+  const statsRows = buildDedupedStatsRows(
+    rules?.labelDensity === 'verbose'
+      ? [
+        {
+          label: 'Остаток',
+          formattedValue: formatMoney(remaining, 'RUB', rules),
+          numericValue: remaining
+        },
+        {
+          label: 'Из суммы',
+          formattedValue: formatMoney(item.amount, 'RUB', rules),
+          numericValue: item.amount
+        },
+        {
+          label: 'Погашено',
+          formattedValue: formatMoney(item.paidAmount, 'RUB', rules),
+          numericValue: item.paidAmount
+        }
+      ]
+      : [],
+    remaining,
+    rules
+  );
+
+  return {
+    meta,
+    value: formatMoney(remaining, 'RUB', rules),
+    statsHtml: renderStatsRowsHtml(statsRows),
+    primaryNumeric: remaining
+  };
+}
+
+export function buildSavingEntityDisplay(item, formatMoney, rules, extras = {}) {
+  const accumulated = normalizeMoneyAmount(extras.accumulated ?? item.accumulated);
+  const targetAmount = extras.targetAmount;
+  const percent = extras.percent;
+
+  const statsRows = buildDedupedStatsRows(
+    [
+      targetAmount != null && targetAmount > 0
+        ? {
+          label: 'Цель',
+          formattedValue: formatMoney(targetAmount, 'RUB', rules),
+          numericValue: targetAmount
+        }
+        : null,
+      ...(extras.extraStatsRows ?? [])
+    ].filter(Boolean),
+    accumulated,
+    rules
+  );
+
+  let meta = '';
+  if (percent != null) {
+    meta = `Прогресс ${percent}%`;
+  } else if (extras.goalReached) {
+    meta = 'Цель достигнута';
+  }
+
+  return {
+    meta,
+    value: formatMoney(accumulated, 'RUB', rules),
+    statsHtml: renderStatsRowsHtml(statsRows),
+    primaryNumeric: accumulated
+  };
+}
+
+const MANUAL_DEBT_CATEGORY_LABELS = Object.freeze({
+  emergency: 'Экстренные расходы',
+  rent: 'Аренда / задержка',
+  fees: 'Комиссии / штрафы',
+  other: 'Другое'
+});
 
 export function resolveEntityActionGroups(entityType, entityContext = {}) {
   const catalog = ENTITY_ACTION_CATALOG[entityType];
@@ -301,7 +527,7 @@ export function getDisplayRules(displayContext) {
   const entityType = displayContext.entityType ?? ENTITY_TYPES.ACCOUNT;
   const expanded = displayContext.expanded === true;
 
-  const moneyFormat = viewMode === VIEW_MODES.LIST ? 'short' : 'full';
+  const moneyFormat = GLOBAL_MONEY_FORMAT_RULE[viewMode] ?? 'full';
 
   const actionMode = viewMode === VIEW_MODES.LIST
     ? 'compact'

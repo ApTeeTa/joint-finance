@@ -1,6 +1,7 @@
 import {
   createDisplayContext,
-  resolveEntityTypeFromModuleKey
+  resolveEntityTypeFromModuleKey,
+  getEntityHeaderLayoutClass
 } from './uiRulesEngine.js';
 import { initOverflowMenuHandlers } from './uiActionRenderer.js';
 
@@ -156,7 +157,7 @@ export function renderDisplayItem({
       data-display-item-id="${escapeAttr(itemId)}"
     >
       <div class="display-item-shell">
-        <div class="display-item-header">
+        <div class="display-item-header ${getEntityHeaderLayoutClass()}">
         <button
           type="button"
           class="display-item-body"

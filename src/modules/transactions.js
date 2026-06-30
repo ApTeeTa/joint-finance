@@ -1500,6 +1500,47 @@ export function recordManualDebtEvent(state, params) {
   return { ok: true, debt };
 }
 
+export function recordManualDebtUpdate(state, debtId, params) {
+  const blocked = guardFinanceEntry('manageDebt');
+  if (blocked) return blocked;
+
+  const debt = findDebt(state, debtId);
+  if (!debt || debt.type !== 'manual_debt_event') {
+    return { ok: false, error: 'Обязательство не найдено' };
+  }
+
+  const { description, date } = params;
+  if (!description || !String(description).trim()) {
+    return { ok: false, error: 'Введите название' };
+  }
+  if (!date) {
+    return { ok: false, error: 'Укажите дату' };
+  }
+
+  debt.title = String(description).trim();
+  debt.eventDate = date;
+
+  enforceFinancialInvariants(state, { operation: 'recordManualDebtUpdate', debtId: debt.id });
+
+  return { ok: true, debt };
+}
+
+export function recordManualDebtDelete(state, debtId) {
+  const blocked = guardFinanceEntry('manageDebt');
+  if (blocked) return blocked;
+
+  const debt = findDebt(state, debtId);
+  if (!debt || debt.type !== 'manual_debt_event') {
+    return { ok: false, error: 'Обязательство не найдено' };
+  }
+
+  state.debts = (state.debts ?? []).filter((item) => item.id !== debtId);
+
+  enforceFinancialInvariants(state, { operation: 'recordManualDebtDelete', debtId });
+
+  return { ok: true };
+}
+
 export function recordDebtCreateWeOwe(state, params) {
   const blocked = guardFinanceEntry('manageDebt');
   if (blocked) return blocked;

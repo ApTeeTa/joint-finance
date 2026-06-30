@@ -101,15 +101,21 @@ function pickRecordOnConflict(localRecord, remoteRecord, preferLocalOnConflict) 
 
 function mergeEntityArrays(localItems, remoteItems, preferLocalOnConflict) {
   const byId = new Map();
+  const remoteIds = new Set();
 
   (remoteItems ?? []).forEach((item) => {
     if (item?.id) {
       byId.set(item.id, item);
+      remoteIds.add(item.id);
     }
   });
 
   (localItems ?? []).forEach((localItem) => {
     if (!localItem?.id) {
+      return;
+    }
+
+    if (!remoteIds.has(localItem.id) && !preferLocalOnConflict) {
       return;
     }
 

@@ -1,5 +1,5 @@
 import { supabase } from './supabase.js';
-import { exportSharedSnapshot, applySharedSnapshot, mergeSharedSnapshots } from '../modules/storage.js';
+import { exportSharedSnapshot, applySharedSnapshot, mergeSharedSnapshots, getEmptySharedSnapshot, hardReplaceStateFromRemoteSnapshot } from '../modules/storage.js';
 import { SNAPSHOT_ID, SEED_SNAPSHOT_ID } from '../config/environment.js';
 
 const PUSH_DELAY_MS = 400;
@@ -167,6 +167,10 @@ export async function pullSharedStateInto(state) {
 
   const data = snapshotResult.data;
   if (!data?.payload || !hasSharedData(data.payload)) {
+    applyingRemote = true;
+    hardReplaceStateFromRemoteSnapshot(state, getEmptySharedSnapshot());
+    applyingRemote = false;
+    lastRemoteUpdatedAt = data?.updated_at ?? null;
     return { ok: true, hasData: false };
   }
 

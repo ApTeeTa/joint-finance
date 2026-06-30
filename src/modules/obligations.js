@@ -20,8 +20,8 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatUiMoney } from './formatUi.js';
-import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
+import { formatDisplayMoney } from './formatUi.js';
+import { ENTITY_TYPES, getDisplayRules, buildReserveEntityDisplay } from './uiRulesEngine.js';
 import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 export {
@@ -291,25 +291,40 @@ function renderObligationCard(state, obligation) {
   const item = normalizeObligation(obligation);
   const uiStatus = getUiStatus(item);
   const cardClass = STATUS_CARD_CLASS[uiStatus.ui] ?? STATUS_CARD_CLASS.current;
-  const amountLabel = item.targetAmount != null && item.targetAmount > 0
-    ? formatUiMoney(item.targetAmount)
-    : '—';
   const reservedAmount = item.reserveAmount ?? 0;
-
-  const summaryHtml = renderDisplaySummary({
-    title: escapeHtml(item.name),
-    meta: formatObligationDueMeta(item),
-    value: amountLabel,
-    statsHtml: reservedAmount > 0 ? `
-      <span class="text-slate-500">Зарезервировано:</span>
-      <span class="text-slate-900 font-medium text-right">${formatUiMoney(reservedAmount)}</span>
-    ` : ''
-  });
+  const paymentsTotal = (item.payments ?? []).reduce(
+    (sum, payment) => sum + (Number(payment.amount) || 0),
+    0
+  );
+  const primaryAmount = item.targetAmount != null && item.targetAmount > 0
+    ? item.targetAmount
+    : reservedAmount;
 
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.OBLIGATIONS, {
     entityType: ENTITY_TYPES.OBLIGATION
   });
   const displayRules = getDisplayRules(displayContext);
+
+  const reserveDisplay = buildReserveEntityDisplay({
+    limit: item.targetAmount ?? 0,
+    reserve: reservedAmount,
+    spent: paymentsTotal,
+    primaryNumeric: primaryAmount,
+    formatMoney: formatDisplayMoney,
+    rules: displayRules
+  });
+
+  const dueMeta = formatObligationDueMeta(item);
+  const combinedMeta = [reserveDisplay.meta, dueMeta].filter(Boolean).join(' · ');
+
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(item.name),
+    meta: combinedMeta,
+    value: primaryAmount > 0 || reservedAmount > 0
+      ? reserveDisplay.value
+      : '—',
+    statsHtml: reserveDisplay.statsHtml
+  });
 
   const actionsHtml = renderEntityHeaderActions({
     moduleKey: DISPLAY_MODULE_KEYS.OBLIGATIONS,

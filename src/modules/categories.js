@@ -16,8 +16,12 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatUiMoney } from './formatUi.js';
-import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
+import { formatDisplayMoney } from './formatUi.js';
+import {
+  ENTITY_TYPES,
+  getDisplayRules,
+  buildReserveEntityDisplay
+} from './uiRulesEngine.js';
 import { renderEntityHeaderActions, closeAllOverflowMenus } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
@@ -410,18 +414,26 @@ function renderCategoryCard(state, category) {
     ? 'border-amber-400 bg-amber-50'
     : '';
 
-  const summaryHtml = renderDisplaySummary({
-    title: escapeHtml(category.name),
-    meta: overLimit
-      ? `Превышен лимит · потрачено ${formatUiMoney(spent)}`
-      : `Лимит ${formatUiMoney(limit)} · потрачено ${formatUiMoney(spent)}`,
-    value: formatUiMoney(available)
-  });
-
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.CATEGORIES, {
     entityType: ENTITY_TYPES.CATEGORY
   });
   const displayRules = getDisplayRules(displayContext);
+
+  const reserveDisplay = buildReserveEntityDisplay({
+    limit,
+    reserve: category.reserved ?? 0,
+    spent,
+    primaryNumeric: available,
+    formatMoney: formatDisplayMoney,
+    rules: displayRules
+  });
+
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(category.name),
+    meta: reserveDisplay.meta,
+    value: reserveDisplay.value,
+    statsHtml: reserveDisplay.statsHtml
+  });
 
   const actionsHtml = renderEntityHeaderActions({
     moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
@@ -472,10 +484,15 @@ function renderCategoryCard(state, category) {
 function renderMiscCategoryCard(state, category) {
   const spent = category.spent ?? 0;
 
+  const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.CATEGORIES, {
+    entityType: ENTITY_TYPES.CATEGORY
+  });
+  const displayRules = getDisplayRules(displayContext);
+
   const summaryHtml = renderDisplaySummary({
     title: escapeHtml(category.name),
     meta: 'Системная категория',
-    value: formatUiMoney(spent)
+    value: formatDisplayMoney(spent, 'RUB', displayRules)
   });
 
   const detailHtml = `

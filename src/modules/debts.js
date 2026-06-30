@@ -2,6 +2,8 @@ import {
   createDebtOwedToUs,
   createDebtWeOwe,
   createManualDebtEvent,
+  updateManualDebtEvent,
+  deleteManualDebtEvent,
   repayDebt,
   writeOffDebt
 } from './financeGate.js';
@@ -23,8 +25,9 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
-import { renderEntityHeaderActions } from './uiActionRenderer.js';
+import { formatDisplayMoney } from './formatUi.js';
+import { ENTITY_TYPES, getDisplayRules, buildDebtEntityDisplay } from './uiRulesEngine.js';
+import { renderEntityHeaderActions, closeAllOverflowMenus } from './uiActionRenderer.js';
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
@@ -77,48 +80,22 @@ function getActiveDebts(state, type) {
     .filter((debt) => debt.type === type && debt.status !== 'closed' && debt.remainingAmount > 0);
 }
 
-function buildDebtSummaryMeta(item, isManual, categoryLabel, displayRules) {
-  if (isManual && categoryLabel) {
-    return categoryLabel;
-  }
-  if (displayRules?.showSecondaryValues) {
-    return `Погашено ${formatMoney(item.paidAmount)}`;
-  }
-  return '';
-}
-
-function buildDebtStatsHtml(item, displayRules) {
-  if (displayRules?.labelDensity !== 'verbose') {
-    return '';
-  }
-  return `
-      <span class="text-slate-500">Остаток:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(item.remainingAmount)}</span>
-      <span class="text-slate-500">Из суммы:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(item.amount)}</span>
-      <span class="text-slate-500">Погашено:</span>
-      <span class="text-slate-900 font-medium text-right">${formatMoney(item.paidAmount)}</span>
-    `;
-}
-
 function renderDebtCard(debt) {
   const item = normalizeDebt(debt);
   const isOwedToUs = item.type === 'owed_to_us';
   const isManual = item.type === 'manual_debt_event';
-  const categoryLabel = isManual
-    ? MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other
-    : '';
 
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.DEBTS, {
     entityType: ENTITY_TYPES.DEBT
   });
   const displayRules = getDisplayRules(displayContext);
+  const debtDisplay = buildDebtEntityDisplay(item, formatDisplayMoney, displayRules);
 
   const summaryHtml = renderDisplaySummary({
     title: escapeHtml(item.title),
-    meta: buildDebtSummaryMeta(item, isManual, categoryLabel, displayRules),
-    value: formatMoney(item.remainingAmount),
-    statsHtml: buildDebtStatsHtml(item, displayRules)
+    meta: debtDisplay.meta,
+    value: debtDisplay.value,
+    statsHtml: debtDisplay.statsHtml
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -127,7 +104,7 @@ function renderDebtCard(debt) {
     entityId: item.id,
     viewMode: displayContext.viewMode,
     displayRules,
-    entityContext: { isOwedToUs }
+    entityContext: { isOwedToUs, isManualDebt: isManual }
   });
 
   const detailHtml = `
@@ -258,6 +235,31 @@ function renderCreateManualDebtModal() {
   `;
 }
 
+function renderEditManualDebtModal() {
+  return `
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-manual-debt">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование обязательства</h3>
+        <form data-form="edit-manual-debt" class="space-y-4">
+          <input type="hidden" name="debtId" value="">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Название</label>
+            <input type="text" name="description" required maxlength="120" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
+            <input type="date" name="date" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button type="button" data-action="close-modal" data-modal="edit-manual-debt" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
 function renderRepayDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="repay-debt">
@@ -373,6 +375,7 @@ export function renderDebts(state, container) {
     </div>
     `)}
     ${renderCreateManualDebtModal()}
+    ${renderEditManualDebtModal()}
     ${renderCreateDebtModal('owed_to_us')}
     ${renderCreateDebtModal('we_owe')}
     ${renderRepayDebtModal()}
@@ -441,6 +444,38 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
 
     if (action === 'open-add-manual-debt') {
       openModal('add-manual-debt');
+      return;
+    }
+
+    if (action === 'open-edit-manual-debt') {
+      const debtId = event.target.closest('[data-action]').dataset.debtId;
+      const debt = findDebt(state, debtId);
+      if (!debt || debt.type !== 'manual_debt_event') {
+        alert('Обязательство не найдено');
+        return;
+      }
+
+      const form = findAppForm('edit-manual-debt', container);
+      if (!form) return;
+      form.debtId.value = debt.id;
+      form.description.value = debt.title;
+      form.date.value = debt.eventDate ?? todayIso();
+      openModal('edit-manual-debt');
+      return;
+    }
+
+    if (action === 'delete-manual-debt') {
+      closeAllOverflowMenus();
+      const debtId = event.target.closest('[data-action]').dataset.debtId;
+      if (!confirm('Удалить обязательство?')) {
+        return;
+      }
+      const result = deleteManualDebtEvent(state, debtId);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      refresh();
       return;
     }
 
@@ -563,6 +598,20 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
 
       closeModal('add-manual-debt');
       form.reset();
+      refresh();
+      return;
+    }
+
+    if (formKey === 'edit-manual-debt') {
+      const result = updateManualDebtEvent(state, formData.get('debtId'), {
+        description: formData.get('description'),
+        date: formData.get('date')
+      });
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      closeModal('edit-manual-debt');
       refresh();
       return;
     }

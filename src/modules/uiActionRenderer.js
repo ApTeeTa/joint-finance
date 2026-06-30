@@ -134,9 +134,21 @@ const ACTION_DEFS = Object.freeze({
   },
   'open-repay-debt': {
     title: 'Погасить',
-    markup: '₽',
+    markup: '+',
     menuLabel: 'Погасить',
-    tone: 'text-primary-600 hover:bg-primary-50 text-sm leading-none font-semibold'
+    tone: 'text-emerald-600 hover:bg-emerald-100 text-base leading-none font-semibold'
+  },
+  'open-edit-manual-debt': {
+    title: 'Редактировать',
+    menuLabel: 'Редактировать',
+    icon: 'pencil',
+    menuTone: 'text-slate-700 hover:bg-slate-50'
+  },
+  'delete-manual-debt': {
+    title: 'Удалить',
+    menuLabel: 'Удалить',
+    icon: 'trash',
+    menuTone: 'text-red-600 hover:bg-red-50'
   },
   'open-write-off-debt': {
     title: 'Списать долг',

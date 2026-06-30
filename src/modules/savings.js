@@ -20,8 +20,8 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatUiMoney } from './formatUi.js';
-import { ENTITY_TYPES, getDisplayRules } from './uiRulesEngine.js';
+import { formatDisplayMoney } from './formatUi.js';
+import { ENTITY_TYPES, getDisplayRules, buildSavingEntityDisplay } from './uiRulesEngine.js';
 import { renderEntityHeaderActions } from './uiActionRenderer.js';
 
 const DEADLINE_LABELS = {
@@ -177,30 +177,33 @@ export function getRecommendedMonthlyPayment(saving) {
   };
 }
 
-function renderRecommendedMonthlyPaymentRow(saving) {
+function renderRecommendedMonthlyPaymentRow(saving, formatMoneyFn = formatMoney, rules = null) {
   const recommendation = getRecommendedMonthlyPayment(saving);
   if (!recommendation) {
-    return '';
+    return [];
   }
 
   if (recommendation.kind === 'completed') {
-    return `
-      <span class="text-slate-500">Рекомендуемый платёж:</span>
-      <span class="text-emerald-700 font-medium text-right">${formatMoney(0)}</span>
-    `;
+    return [{
+      label: 'Рекомендуемый платёж',
+      formattedValue: formatMoneyFn(0, 'RUB', rules),
+      numericValue: 0
+    }];
   }
 
   if (recommendation.kind === 'overdue') {
-    return `
-      <span class="text-slate-500">Рекомендуемый платёж:</span>
-      <span class="text-red-600 font-medium text-right">Цель просрочена</span>
-    `;
+    return [{
+      label: 'Рекомендуемый платёж',
+      formattedValue: 'Цель просрочена',
+      numericValue: null
+    }];
   }
 
-  return `
-    <span class="text-slate-500">Рекомендуемый платёж:</span>
-    <span class="text-primary-700 font-medium text-right">${formatMoney(recommendation.amount)} / мес</span>
-  `;
+  return [{
+    label: 'Рекомендуемый платёж',
+    formattedValue: `${formatMoneyFn(recommendation.amount, 'RUB', rules)} / мес`,
+    numericValue: recommendation.amount
+  }];
 }
 
 function isGoalReached(saving) {
@@ -406,27 +409,25 @@ function renderSavingCard(state, saving) {
     `
     : '';
 
-  const summaryHtml = renderDisplaySummary({
-    title: escapeHtml(item.name),
-    meta: percent != null ? `Прогресс ${percent}%` : (goalReached ? 'Цель достигнута' : ''),
-    value: formatUiMoney(accumulated),
-    statsHtml: `
-      ${targetAmount != null && targetAmount > 0 ? `
-        <span class="text-slate-500">Цель:</span>
-        <span class="text-slate-900 font-medium text-right">${formatUiMoney(targetAmount)}</span>
-      ` : ''}
-      ${percent != null ? `
-        <span class="text-slate-500">Прогресс:</span>
-        <span class="text-primary-700 font-medium text-right">${percent}%</span>
-      ` : ''}
-      ${renderRecommendedMonthlyPaymentRow(item)}
-    `
-  });
-
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.SAVINGS, {
     entityType: ENTITY_TYPES.SAVING
   });
   const displayRules = getDisplayRules(displayContext);
+
+  const savingDisplay = buildSavingEntityDisplay(item, formatDisplayMoney, displayRules, {
+    accumulated,
+    targetAmount,
+    percent,
+    goalReached,
+    extraStatsRows: renderRecommendedMonthlyPaymentRow(item, formatDisplayMoney, displayRules)
+  });
+
+  const summaryHtml = renderDisplaySummary({
+    title: escapeHtml(item.name),
+    meta: savingDisplay.meta,
+    value: savingDisplay.value,
+    statsHtml: savingDisplay.statsHtml
+  });
 
   const actionsHtml = renderEntityHeaderActions({
     moduleKey: DISPLAY_MODULE_KEYS.SAVINGS,

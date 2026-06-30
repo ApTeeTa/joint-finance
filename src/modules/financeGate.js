@@ -23,6 +23,8 @@ import {
   recordDebtCreateOwedToUs,
   recordDebtCreateWeOwe,
   recordManualDebtEvent,
+  recordManualDebtUpdate,
+  recordManualDebtDelete,
   recordDebtRepayment,
   recordDebtWriteOff,
   cancelTransaction
@@ -177,6 +179,18 @@ export function createDebtWeOwe(state, params) {
 export function createManualDebtEvent(state, params) {
   return runProtected(FINANCE_ENTRY_POINTS.DEBT, () =>
     recordManualDebtEvent(state, params)
+  );
+}
+
+export function updateManualDebtEvent(state, debtId, params) {
+  return runProtected(FINANCE_ENTRY_POINTS.DEBT, () =>
+    recordManualDebtUpdate(state, debtId, params)
+  );
+}
+
+export function deleteManualDebtEvent(state, debtId) {
+  return runProtected(FINANCE_ENTRY_POINTS.DEBT, () =>
+    recordManualDebtDelete(state, debtId)
   );
 }
 
