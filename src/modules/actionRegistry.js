@@ -199,6 +199,11 @@ export function dispatch(action) {
 
   if (result?.ok) {
     devLog('info', `dispatch ok: ${type}`, { source });
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      import('../lib/offlineActionsQueue.js').then(({ enqueueRegistryAction }) => {
+        enqueueRegistryAction(type, payload);
+      });
+    }
   } else {
     devLog('warn', `dispatch rejected: ${type}`, { source, error: result?.error });
   }

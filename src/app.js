@@ -19,6 +19,13 @@ import { initDisplayModeSystem } from './modules/displayMode.js';
 import { isExperiment } from './config/environmentConfig.js';
 import { validateEnvironmentIsolation } from './config/environmentConfig.js';
 import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState, markInitialSyncDone } from './lib/stateRemote.js';
+import {
+  flushOfflineQueue,
+  hasPendingOfflineActions,
+  initOfflineSyncQueue,
+  loadOfflineQueue,
+  clearOfflineQueue
+} from './lib/offlineActionsQueue.js';
 
 console.log('APP ENTRY LOADED');
 
@@ -126,6 +133,7 @@ function resetAllData() {
     return;
   }
   clearState();
+  clearOfflineQueue();
   clearRemoteSharedState().finally(() => {
     location.reload();
   });
@@ -276,8 +284,24 @@ function applyRemotePullResult(result) {
 
 async function syncFromRemote() {
   try {
+    if (hasPendingOfflineActions()) {
+      const flushResult = await flushOfflineQueue(state);
+      if (!flushResult.ok || hasPendingOfflineActions()) {
+        return { ok: true, skipped: true, reason: 'offline_queue_pending' };
+      }
+      if (flushResult.flushed) {
+        saveState(state, { skipRemote: true });
+        refreshFromRemote();
+      }
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return { ok: true, skipped: true, reason: 'offline' };
+    }
+
     const result = await pullSharedStateInto(state);
     applyRemotePullResult(result);
+    return result;
   } finally {
     markInitialSyncDone();
   }
@@ -295,6 +319,14 @@ async function init() {
   initDisplayModeSystem();
   initDisplayModeRefresh();
   applyLoadedState(loadState());
+  loadOfflineQueue();
+  initOfflineSyncQueue(state, {
+    onFlushed: async () => {
+      saveState(state, { skipRemote: true });
+      refreshFromRemote();
+      await syncFromRemote();
+    }
+  });
   renderProfile();
   updateCounters();
   initProfileHandlers();

@@ -152,6 +152,12 @@ export function saveState(state, options = {}) {
     const payload = pickPersistedFields(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     if (!options.skipRemote) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        import('../lib/offlineActionsQueue.js').then(({ enqueueSnapshotPush }) => {
+          enqueueSnapshotPush(state);
+        });
+        return true;
+      }
       import('../lib/stateRemote.js').then((remote) => {
         remote.schedulePushSharedState(state);
       });
