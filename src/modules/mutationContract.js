@@ -14,7 +14,7 @@
  *
  * Architectural guard (dev-only): architectureGuard.js
  */
-import { IS_EXPERIMENT } from '../config/environment.js';
+import { isExperiment } from '../config/environmentConfig.js';
 import {
   validateMutationStrategy,
   guardUnregisteredMutationStrategy,
@@ -123,7 +123,7 @@ export function applyMutationResult(result) {
 }
 
 export function logMutationExecution({ domain, actionType, entityId, source, ok }) {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   console.info('[mutation] execution', {

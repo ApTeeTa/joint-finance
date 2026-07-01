@@ -16,7 +16,7 @@ import { reconcileLegacyTransactions } from './modules/transactions.js';
 import { saveState, loadState, clearState, getEmptySharedSnapshot, hardReplaceStateFromRemoteSnapshot } from './modules/storage.js';
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
-import { IS_EXPERIMENT } from './config/environment.js';
+import { isExperiment } from './config/environmentConfig.js';
 import { validateEnvironmentIsolation } from './config/environmentConfig.js';
 import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState, markInitialSyncDone } from './lib/stateRemote.js';
 
@@ -266,7 +266,7 @@ function applyRemotePullResult(result) {
 
   if (!result.hasData) {
     hardReplaceStateFromRemoteSnapshot(state, getEmptySharedSnapshot());
-    if (IS_EXPERIMENT) {
+    if (isExperiment()) {
       console.info('[UI RULE FIX]', { fix: 'empty_remote_hard_reset', status: 'applied' });
     }
   }

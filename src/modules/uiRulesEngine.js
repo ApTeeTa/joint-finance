@@ -7,7 +7,7 @@
  *
  * UI = f(state, uiRulesEngine) — modules must not embed display policy.
  */
-import { IS_EXPERIMENT } from '../config/environment.js';
+import { isExperiment } from '../config/environmentConfig.js';
 
 export const ENTITY_TYPES = Object.freeze({
   ACCOUNT: 'account',
@@ -399,7 +399,7 @@ export function resolveEntityActionGroups(entityType, entityContext = {}) {
 let overflowConsistencyFixLogged = false;
 
 function maybeLogOverflowConsistencyFix() {
-  if (!IS_EXPERIMENT || overflowConsistencyFixLogged) {
+  if (!isExperiment() || overflowConsistencyFixLogged) {
     return;
   }
   overflowConsistencyFixLogged = true;
@@ -552,7 +552,7 @@ export function getDisplayRules(displayContext) {
 }
 
 export function logUiRulesActive(moduleKey, displayContext, rules) {
-  if (!IS_EXPERIMENT || !rules) {
+  if (!isExperiment() || !rules) {
     return;
   }
   console.info('[UI RULES ACTIVE]', {
@@ -564,7 +564,7 @@ export function logUiRulesActive(moduleKey, displayContext, rules) {
 }
 
 export function logUiActionRule(moduleKey, entityType, actionGroups) {
-  if (!IS_EXPERIMENT || !actionGroups) {
+  if (!isExperiment() || !actionGroups) {
     return;
   }
   console.info('[UI ACTION RULE]', {
@@ -576,7 +576,7 @@ export function logUiActionRule(moduleKey, entityType, actionGroups) {
 }
 
 export function logUiMigrationPass(moduleKey, viewMode, hasOverflowMenu, legacyDetected) {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   console.info('[UI MIGRATION PASS]', {
@@ -588,14 +588,14 @@ export function logUiMigrationPass(moduleKey, viewMode, hasOverflowMenu, legacyD
 }
 
 export function logUiUxFix(issue, status = 'fixed') {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   console.info('[UI UX FIX]', { issue, status });
 }
 
 export function logUiRuleFix(fix, meta = {}) {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   console.info('[UI RULE FIX]', { fix, ...meta });

@@ -78,9 +78,9 @@ Environment isolation is enforced by **`ENVIRONMENT_ISOLATION_RULE`** in `src/co
 | `'production'` | `main` | `shared` | `shared` only |
 | `'experiment'` | `experiment-full-sync` | `shared-experiment` | `shared-experiment` only |
 
-- All remote read/write/subscribe operations resolve snapshot row via `environmentConfig.js` — not hardcoded in modules
+- All remote read/write/subscribe operations resolve snapshot id via `getActiveSnapshotId()` in `environmentConfig.js` — not hardcoded in modules
 - Runtime guards throw if production reads/writes experiment row or experiment writes production row
-- `src/config/environment.js` exports only `IS_EXPERIMENT` for UI/dev flags — **not** snapshot ids
+- `src/config/environment.js` is a deprecated re-export barrel — import from `environmentConfig.js`
 
 Experiment may **read** production once to seed an empty experiment snapshot (bootstrap copy). That operation writes only to the experiment row.
 

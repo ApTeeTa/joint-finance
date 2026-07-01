@@ -2,7 +2,7 @@
  * Architectural enforcement layer (dev-only observability).
  * Detects drift from mutationContract patterns — never blocks production execution.
  */
-import { IS_EXPERIMENT } from '../config/environment.js';
+import { isExperiment } from '../config/environmentConfig.js';
 
 const REQUIRED_STRATEGY_METHODS = ['resolveEntityId', 'runFallback', 'apply'];
 
@@ -17,7 +17,7 @@ export function logArchGuardViolation({
   actionType = null,
   module = 'unknown'
 }) {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   console.warn('[ARCH GUARD]', {
@@ -44,7 +44,7 @@ function inferModuleFromStack(stack) {
 }
 
 export function validateMutationStrategy(domain, actionType, strategy, module = 'mutationContract') {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return true;
   }
 
@@ -65,7 +65,7 @@ export function validateMutationStrategy(domain, actionType, strategy, module = 
 }
 
 export function guardUnregisteredMutationStrategy(domain, actionType, module = 'mutationContract') {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   logArchGuardViolation({
@@ -77,35 +77,35 @@ export function guardUnregisteredMutationStrategy(domain, actionType, module = '
 }
 
 export function beginMutationPipeline() {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   mutationPipelineDepth += 1;
 }
 
 export function endMutationPipeline() {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   mutationPipelineDepth = Math.max(0, mutationPipelineDepth - 1);
 }
 
 export function beginLegacyPipeline() {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   legacyPipelineDepth += 1;
 }
 
 export function endLegacyPipeline() {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   legacyPipelineDepth = Math.max(0, legacyPipelineDepth - 1);
 }
 
 export function beginLegacyFallbackAccess({ domain, actionType, module = 'mutationContract' }) {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
 
@@ -122,14 +122,14 @@ export function beginLegacyFallbackAccess({ domain, actionType, module = 'mutati
 }
 
 export function endLegacyFallbackAccess() {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   legacyFallbackDepth = Math.max(0, legacyFallbackDepth - 1);
 }
 
 export function guardApplyMutationResultEntry({ domain, actionType, module = 'mutationContract' }) {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
 
@@ -144,21 +144,21 @@ export function guardApplyMutationResultEntry({ domain, actionType, module = 'mu
 }
 
 export function beginApplyMutation() {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   applyMutationDepth += 1;
 }
 
 export function endApplyMutation() {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   applyMutationDepth = Math.max(0, applyMutationDepth - 1);
 }
 
 export function warnDirectStateMutation(module, detail = null) {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
 
@@ -175,7 +175,7 @@ export function warnDirectStateMutation(module, detail = null) {
 }
 
 export function installSupabaseWriteGuard(supabaseClient) {
-  if (!IS_EXPERIMENT || !supabaseClient?.from || supabaseClient.__archGuardInstalled) {
+  if (!isExperiment() || !supabaseClient?.from || supabaseClient.__archGuardInstalled) {
     return;
   }
 
@@ -211,7 +211,7 @@ export function installSupabaseWriteGuard(supabaseClient) {
   supabaseClient.__archGuardInstalled = true;
 }
 
-if (IS_EXPERIMENT) {
+if (isExperiment()) {
   import('../lib/supabase.js')
     .then(({ supabase }) => installSupabaseWriteGuard(supabase))
     .catch(() => {});

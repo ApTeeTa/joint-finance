@@ -49,9 +49,9 @@ Configured in **`src/config/environmentConfig.js`** — the **only** file that m
 **Architectural guarantees (runtime):**
 
 - `validateEnvironmentIsolation()` runs on app boot (`app.js`)
-- `stateRemote.js` resolves targets only via `getActiveSnapshotRow()` / `getSeedReadSnapshotRow()`
-- `assertSnapshotReadTarget()` / `assertSnapshotWriteTarget()` block cross-environment access
-- Feature modules **must not** import snapshot row ids — only `IS_EXPERIMENT` flag when needed
+- `stateRemote.js` resolves targets only via `getActiveSnapshotId()` / `getSeedReadSnapshotId()`
+- `assertSnapshotId()` / `assertSnapshotWriteTarget()` / `assertSnapshotReadTarget()` block cross-environment access
+- Feature modules **must not** import snapshot row ids — use `isExperiment()` / `isProduction()` when needed
 
 **Rules:**
 

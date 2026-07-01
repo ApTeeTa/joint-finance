@@ -1,7 +1,7 @@
 /**
  * Standard entity header action renderer — enforces GLOBAL_ACTION_RULE from uiRulesEngine.
  */
-import { IS_EXPERIMENT } from '../config/environment.js';
+import { isExperiment } from '../config/environmentConfig.js';
 import {
   ENTITY_TYPES,
   VIEW_MODES,
@@ -341,7 +341,7 @@ export function renderEntityHeaderActions({
   );
 
   if (!groups) {
-    if (IS_EXPERIMENT) {
+    if (isExperiment()) {
       console.warn('[UI ACTION RULE] rulesEngine missing — fallback to inline actions', {
         module: moduleKey,
         entityType

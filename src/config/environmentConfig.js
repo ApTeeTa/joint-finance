@@ -1,20 +1,24 @@
 /**
- * Environment Isolation — single switch for deployment mode.
+ * Environment Isolation — single configuration layer for deployment mode + snapshot ids.
  *
- * RULE: Only this file defines snapshot row ids and maps them to environments.
- * Sync modules (stateRemote, storage) resolve targets via exported getters.
- * Feature modules MUST NOT import snapshot row ids.
+ * RULE: Snapshot row ids exist ONLY in SNAPSHOT_IDS below.
+ * All runtime code must use getActiveSnapshotId(), isExperiment(), isProduction().
  */
+
+const SNAPSHOT_IDS = Object.freeze({
+  PRODUCTION: 'shared',
+  EXPERIMENT: 'shared-experiment'
+});
 
 export const ENVIRONMENT_ISOLATION_RULE = Object.freeze({
   id: 'ENVIRONMENT_ISOLATION_RULE',
   singleSwitch: 'ACTIVE_ENVIRONMENT',
   modes: Object.freeze(['production', 'experiment']),
-  productionSnapshotRow: 'shared',
-  experimentSnapshotRow: 'shared-experiment',
+  productionSnapshotId: SNAPSHOT_IDS.PRODUCTION,
+  experimentSnapshotId: SNAPSHOT_IDS.EXPERIMENT,
   invariants: Object.freeze({
-    productionNeverUsesExperimentRow: true,
-    experimentNeverWritesProductionRow: true,
+    productionNeverUsesExperimentSnapshot: true,
+    experimentNeverWritesProductionSnapshot: true,
     experimentSeedReadsProductionOnce: true
   })
 });
@@ -29,19 +33,19 @@ export const ACTIVE_ENVIRONMENT = 'experiment';
 const MODE_REGISTRY = Object.freeze({
   production: Object.freeze({
     mode: 'production',
-    activeSnapshotRow: ENVIRONMENT_ISOLATION_RULE.productionSnapshotRow,
-    seedReadSnapshotRow: null,
+    activeSnapshotId: SNAPSHOT_IDS.PRODUCTION,
+    seedReadSnapshotId: null,
     allowSeedFromProduction: false,
     allowLegacyStorageKeyMigration: false,
     financialStorageKey: 'joint-finance-state-v2'
   }),
   experiment: Object.freeze({
     mode: 'experiment',
-    activeSnapshotRow: ENVIRONMENT_ISOLATION_RULE.experimentSnapshotRow,
-    seedReadSnapshotRow: ENVIRONMENT_ISOLATION_RULE.productionSnapshotRow,
+    activeSnapshotId: SNAPSHOT_IDS.EXPERIMENT,
+    seedReadSnapshotId: SNAPSHOT_IDS.PRODUCTION,
     allowSeedFromProduction: true,
     allowLegacyStorageKeyMigration: true,
-    financialStorageKey: `joint-finance-state-v2-${ENVIRONMENT_ISOLATION_RULE.experimentSnapshotRow}`
+    financialStorageKey: `joint-finance-state-v2-${SNAPSHOT_IDS.EXPERIMENT}`
   })
 });
 
@@ -58,29 +62,36 @@ function resolveConfig() {
   return config;
 }
 
+function getSnapshotIds() {
+  return {
+    production: ENVIRONMENT_ISOLATION_RULE.productionSnapshotId,
+    experiment: ENVIRONMENT_ISOLATION_RULE.experimentSnapshotId
+  };
+}
+
 export function validateEnvironmentIsolation() {
   if (validated) {
     return resolveConfig();
   }
 
   const config = resolveConfig();
-  const { productionSnapshotRow, experimentSnapshotRow } = ENVIRONMENT_ISOLATION_RULE;
+  const { production, experiment } = getSnapshotIds();
 
   if (config.mode === 'production') {
-    if (config.activeSnapshotRow !== productionSnapshotRow) {
-      throw new Error('[ENVIRONMENT] Production mode must bind to production snapshot row only');
+    if (config.activeSnapshotId !== production) {
+      throw new Error('[ENVIRONMENT] Production mode must bind to production snapshot id only');
     }
-    if (config.activeSnapshotRow === experimentSnapshotRow) {
-      throw new Error('[ENVIRONMENT] Production mode cannot use experiment snapshot row');
+    if (config.activeSnapshotId === experiment) {
+      throw new Error('[ENVIRONMENT] Production mode cannot use experiment snapshot id');
     }
   }
 
   if (config.mode === 'experiment') {
-    if (config.activeSnapshotRow !== experimentSnapshotRow) {
-      throw new Error('[ENVIRONMENT] Experiment mode must bind to experiment snapshot row only');
+    if (config.activeSnapshotId !== experiment) {
+      throw new Error('[ENVIRONMENT] Experiment mode must bind to experiment snapshot id only');
     }
-    if (config.activeSnapshotRow === productionSnapshotRow) {
-      throw new Error('[ENVIRONMENT] Experiment mode cannot use production snapshot as active row');
+    if (config.activeSnapshotId === production) {
+      throw new Error('[ENVIRONMENT] Experiment mode cannot use production snapshot as active id');
     }
   }
 
@@ -90,7 +101,7 @@ export function validateEnvironmentIsolation() {
     console.info('[ENVIRONMENT]', {
       rule: ENVIRONMENT_ISOLATION_RULE.id,
       mode: config.mode,
-      activeSnapshotRow: config.activeSnapshotRow,
+      activeSnapshotId: config.activeSnapshotId,
       seedReadAllowed: config.allowSeedFromProduction
     });
   }
@@ -98,77 +109,109 @@ export function validateEnvironmentIsolation() {
   return config;
 }
 
-export function getActiveSnapshotRow() {
-  return validateEnvironmentIsolation().activeSnapshotRow;
+/** Active Supabase household_snapshots row id for this deployment. */
+export function getActiveSnapshotId() {
+  return validateEnvironmentIsolation().activeSnapshotId;
 }
 
-export function getSeedReadSnapshotRow() {
+export function getSeedReadSnapshotId() {
   const config = validateEnvironmentIsolation();
-  return config.allowSeedFromProduction ? config.seedReadSnapshotRow : null;
+  return config.allowSeedFromProduction ? config.seedReadSnapshotId : null;
 }
 
 export function getFinancialStorageKey() {
   return validateEnvironmentIsolation().financialStorageKey;
 }
 
+export function getLegacyProductionStorageKey() {
+  return MODE_REGISTRY.production.financialStorageKey;
+}
+
 export function allowsLegacyStorageKeyMigration() {
   return validateEnvironmentIsolation().allowLegacyStorageKeyMigration;
 }
 
-export function isExperimentEnvironment() {
+export function isExperiment() {
   return validateEnvironmentIsolation().mode === 'experiment';
 }
 
-export function isProductionEnvironment() {
+export function isProduction() {
   return validateEnvironmentIsolation().mode === 'production';
 }
 
 export function getRealtimeChannelName() {
-  return `joint-finance-shared-state-${getActiveSnapshotRow()}`;
+  return `joint-finance-shared-state-${getActiveSnapshotId()}`;
 }
 
-export function assertSnapshotWriteTarget(snapshotRowId) {
-  const { productionSnapshotRow, experimentSnapshotRow } = ENVIRONMENT_ISOLATION_RULE;
+/**
+ * Guard any snapshot id usage. Throws on cross-environment access.
+ * @param {'read'|'write'} operation
+ */
+export function assertSnapshotId(snapshotId, operation = 'read', { seedBootstrap = false } = {}) {
+  if (operation === 'write') {
+    assertSnapshotWriteTarget(snapshotId);
+    return;
+  }
+  assertSnapshotReadTarget(snapshotId, { seedBootstrap });
+}
+
+export function assertSnapshotWriteTarget(snapshotId) {
+  const { production, experiment } = getSnapshotIds();
   validateEnvironmentIsolation();
 
-  if (snapshotRowId === productionSnapshotRow && !isProductionEnvironment()) {
-    throw new Error('[ENVIRONMENT] Experiment deployment cannot write production snapshot row');
+  if (snapshotId === production && !isProduction()) {
+    throw new Error('[ENVIRONMENT] Experiment deployment cannot write production snapshot id');
   }
 
-  if (snapshotRowId === experimentSnapshotRow && isProductionEnvironment()) {
-    throw new Error('[ENVIRONMENT] Production deployment cannot write experiment snapshot row');
+  if (snapshotId === experiment && isProduction()) {
+    throw new Error('[ENVIRONMENT] Production deployment cannot write experiment snapshot id');
   }
 
-  if (snapshotRowId !== getActiveSnapshotRow()) {
-    throw new Error(`[ENVIRONMENT] Write target "${snapshotRowId}" is not the active snapshot row`);
+  if (snapshotId !== getActiveSnapshotId()) {
+    throw new Error(`[ENVIRONMENT] Write target "${snapshotId}" is not the active snapshot id`);
   }
 }
 
-export function assertSnapshotReadTarget(snapshotRowId, { seedBootstrap = false } = {}) {
-  const { productionSnapshotRow, experimentSnapshotRow } = ENVIRONMENT_ISOLATION_RULE;
+export function assertSnapshotReadTarget(snapshotId, { seedBootstrap = false } = {}) {
+  const { production, experiment } = getSnapshotIds();
   validateEnvironmentIsolation();
 
-  if (isProductionEnvironment()) {
-    if (snapshotRowId === experimentSnapshotRow) {
-      throw new Error('[ENVIRONMENT] Production deployment cannot read experiment snapshot row');
+  if (isProduction()) {
+    if (snapshotId === experiment) {
+      throw new Error('[ENVIRONMENT] Production deployment cannot read experiment snapshot id');
     }
-    if (snapshotRowId !== productionSnapshotRow) {
-      throw new Error(`[ENVIRONMENT] Production deployment cannot read snapshot row "${snapshotRowId}"`);
+    if (snapshotId !== production) {
+      throw new Error(`[ENVIRONMENT] Production deployment cannot read snapshot id "${snapshotId}"`);
     }
     return;
   }
 
-  if (snapshotRowId === getActiveSnapshotRow()) {
+  if (snapshotId === getActiveSnapshotId()) {
     return;
   }
 
-  if (seedBootstrap && snapshotRowId === productionSnapshotRow && getSeedReadSnapshotRow() === productionSnapshotRow) {
+  if (seedBootstrap && snapshotId === production && getSeedReadSnapshotId() === production) {
     return;
   }
 
-  if (snapshotRowId === productionSnapshotRow) {
+  if (snapshotId === production) {
     throw new Error('[ENVIRONMENT] Experiment cannot read production snapshot outside seed bootstrap');
   }
 
-  throw new Error(`[ENVIRONMENT] Experiment deployment cannot read snapshot row "${snapshotRowId}"`);
+  throw new Error(`[ENVIRONMENT] Experiment deployment cannot read snapshot id "${snapshotId}"`);
+}
+
+/** @deprecated Use getActiveSnapshotId */
+export function getActiveSnapshotRow() {
+  return getActiveSnapshotId();
+}
+
+/** @deprecated Use isExperiment */
+export function isExperimentEnvironment() {
+  return isExperiment();
+}
+
+/** @deprecated Use isProduction */
+export function isProductionEnvironment() {
+  return isProduction();
 }

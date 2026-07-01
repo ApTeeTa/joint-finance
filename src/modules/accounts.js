@@ -12,7 +12,7 @@ import {
   executeMutation,
   executeLegacyMutation
 } from './mutationContract.js';
-import { IS_EXPERIMENT } from '../config/environment.js';
+import { isExperiment } from '../config/environmentConfig.js';
 import {
   getAccountTransactions,
   renderAccountSelectOptions,
@@ -51,7 +51,7 @@ const DISPATCH_SOURCE = 'accounts.js';
 const ACCOUNT_DOMAIN = MUTATION_DOMAINS.ACCOUNT;
 
 function logL1RemovedActive(action = 'account_create') {
-  if (!IS_EXPERIMENT) {
+  if (!isExperiment()) {
     return;
   }
   console.info('[accounts] L1_REMOVED_ACTIVE', {

@@ -1,10 +1,11 @@
 import {
   getFinancialStorageKey,
+  getLegacyProductionStorageKey,
   allowsLegacyStorageKeyMigration
 } from '../config/environmentConfig.js';
 
 const STORAGE_KEY = getFinancialStorageKey();
-const LEGACY_PRODUCTION_STORAGE_KEY = 'joint-finance-state-v2';
+const LEGACY_PRODUCTION_STORAGE_KEY = getLegacyProductionStorageKey();
 
 const VALID_TABS = ['accounts', 'categories', 'history', 'obligations', 'savings', 'debts', 'stats'];
 

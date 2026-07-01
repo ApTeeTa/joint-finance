@@ -3,7 +3,7 @@
  * Central dispatch layer for ActionIntents → financeGate.
  * Legacy UI may still call financeGate directly; this module is an additive wrapper.
  */
-import { IS_EXPERIMENT } from '../config/environment.js';
+import { isExperiment } from '../config/environmentConfig.js';
 import {
   createAccount,
   updateAccountRecord,
@@ -15,7 +15,7 @@ import {
 } from './financeGate.js';
 
 /** Log dispatch activity in experiment / local dev builds only. */
-const DEV_LOGGING = IS_EXPERIMENT;
+const DEV_LOGGING = isExperiment();
 
 export const ACTION_TYPES = Object.freeze({
   ACCOUNT_CREATE: 'ACCOUNT_CREATE',
