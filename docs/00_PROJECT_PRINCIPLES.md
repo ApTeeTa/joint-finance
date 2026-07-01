@@ -69,15 +69,22 @@ Sync merges remote snapshots with local state; it does not replace architecture 
 
 ## Principle: Experiment Isolation Must Never Affect Production
 
-On the experiment branch:
+Environment isolation is enforced by **`ENVIRONMENT_ISOLATION_RULE`** in `src/config/environmentConfig.js`.
 
-- `SNAPSHOT_ID` is `shared-experiment` (see `src/config/environment.js`)
-- All remote read/write/subscribe operations target that row only
-- Production row `shared` is never written by experiment code
+**Single switch:** `ACTIVE_ENVIRONMENT`
 
-Experiment may **read** production once to seed an empty experiment snapshot (bootstrap copy). That operation copies data into `shared-experiment` only.
+| Value | Branch | Remote row | Writes |
+|-------|--------|------------|--------|
+| `'production'` | `main` | `shared` | `shared` only |
+| `'experiment'` | `experiment-full-sync` | `shared-experiment` | `shared-experiment` only |
 
-Main branch must keep `SNAPSHOT_ID = 'shared'`.
+- All remote read/write/subscribe operations resolve snapshot row via `environmentConfig.js` — not hardcoded in modules
+- Runtime guards throw if production reads/writes experiment row or experiment writes production row
+- `src/config/environment.js` exports only `IS_EXPERIMENT` for UI/dev flags — **not** snapshot ids
+
+Experiment may **read** production once to seed an empty experiment snapshot (bootstrap copy). That operation writes only to the experiment row.
+
+When merging to `main`, change **`ACTIVE_ENVIRONMENT` to `'production'`** — this is the only required environment change.
 
 Different devices may have different display preferences (localStorage), but **financial data environments must not cross-contaminate**.
 

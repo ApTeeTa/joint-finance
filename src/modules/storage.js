@@ -1,8 +1,10 @@
-import { SNAPSHOT_ID } from '../config/environment.js';
+import {
+  getFinancialStorageKey,
+  allowsLegacyStorageKeyMigration
+} from '../config/environmentConfig.js';
 
-const STORAGE_KEY = SNAPSHOT_ID === 'shared'
-  ? 'joint-finance-state-v2'
-  : `joint-finance-state-v2-${SNAPSHOT_ID}`;
+const STORAGE_KEY = getFinancialStorageKey();
+const LEGACY_PRODUCTION_STORAGE_KEY = 'joint-finance-state-v2';
 
 const VALID_TABS = ['accounts', 'categories', 'history', 'obligations', 'savings', 'debts', 'stats'];
 
@@ -252,8 +254,8 @@ export function loadState() {
   try {
     let raw = localStorage.getItem(STORAGE_KEY);
 
-    if (!raw && SNAPSHOT_ID !== 'shared') {
-      const legacyRaw = localStorage.getItem('joint-finance-state-v2');
+    if (!raw && allowsLegacyStorageKeyMigration()) {
+      const legacyRaw = localStorage.getItem(LEGACY_PRODUCTION_STORAGE_KEY);
       if (legacyRaw) {
         try {
           const legacy = JSON.parse(legacyRaw);

@@ -1,6 +1,14 @@
 import { supabase } from './supabase.js';
 import { exportSharedSnapshot, applySharedSnapshot, mergeSharedSnapshots, getEmptySharedSnapshot, hardReplaceStateFromRemoteSnapshot } from '../modules/storage.js';
-import { SNAPSHOT_ID, SEED_SNAPSHOT_ID } from '../config/environment.js';
+import {
+  assertSnapshotReadTarget,
+  assertSnapshotWriteTarget,
+  getActiveSnapshotRow,
+  getRealtimeChannelName,
+  getSeedReadSnapshotRow,
+  isExperimentEnvironment,
+  validateEnvironmentIsolation
+} from '../config/environmentConfig.js';
 
 const PUSH_DELAY_MS = 400;
 
@@ -47,27 +55,31 @@ function canSeedExperimentFromProduction(payload) {
   return accounts.length > 0;
 }
 
-async function fetchSnapshotRow(snapshotId) {
+async function fetchSnapshotRow(snapshotRowId, { seedBootstrap = false } = {}) {
+  assertSnapshotReadTarget(snapshotRowId, { seedBootstrap });
+
   const { data, error } = await supabase
     .from('household_snapshots')
     .select('payload, updated_at')
-    .eq('id', snapshotId)
+    .eq('id', snapshotRowId)
     .maybeSingle();
 
   if (error) {
-    console.error(`Failed to load snapshot "${snapshotId}" from Supabase:`, error);
+    console.error(`Failed to load snapshot "${snapshotRowId}" from Supabase:`, error);
     return { ok: false, error };
   }
 
   return { ok: true, data };
 }
 
-async function upsertSnapshotRow(snapshotId, payload) {
+async function upsertSnapshotRow(snapshotRowId, payload) {
+  assertSnapshotWriteTarget(snapshotRowId);
+
   const updatedAt = new Date().toISOString();
   const { data, error } = await supabase
     .from('household_snapshots')
     .upsert({
-      id: snapshotId,
+      id: snapshotRowId,
       payload,
       updated_at: updatedAt
     })
@@ -75,7 +87,7 @@ async function upsertSnapshotRow(snapshotId, payload) {
     .single();
 
   if (error) {
-    console.error(`Failed to upsert snapshot "${snapshotId}" in Supabase:`, error);
+    console.error(`Failed to upsert snapshot "${snapshotRowId}" in Supabase:`, error);
     return { ok: false, error };
   }
 
@@ -88,37 +100,41 @@ async function upsertSnapshotRow(snapshotId, payload) {
   };
 }
 
-async function resolveExperimentSnapshotRow() {
-  if (SNAPSHOT_ID !== 'shared-experiment') {
-    return fetchSnapshotRow(SNAPSHOT_ID);
+async function resolveActiveSnapshotRow() {
+  validateEnvironmentIsolation();
+  const activeSnapshotRow = getActiveSnapshotRow();
+
+  if (!isExperimentEnvironment()) {
+    return fetchSnapshotRow(activeSnapshotRow);
   }
 
-  const experimentResult = await fetchSnapshotRow(SNAPSHOT_ID);
+  const experimentResult = await fetchSnapshotRow(activeSnapshotRow);
   if (!experimentResult.ok) {
     return experimentResult;
   }
 
   const experimentPayload = experimentResult.data?.payload;
   const needsSeed = isExperimentSnapshotUnderInitialized(experimentPayload);
+  const seedReadSnapshotRow = getSeedReadSnapshotRow();
 
-  if (!needsSeed || experimentSeedAttempted) {
+  if (!needsSeed || experimentSeedAttempted || !seedReadSnapshotRow) {
     return experimentResult;
   }
 
   experimentSeedAttempted = true;
 
-  const productionResult = await fetchSnapshotRow(SEED_SNAPSHOT_ID);
+  const productionResult = await fetchSnapshotRow(seedReadSnapshotRow, { seedBootstrap: true });
   if (!productionResult.ok || !canSeedExperimentFromProduction(productionResult.data?.payload)) {
     return experimentResult;
   }
 
   const seedPayload = cloneSnapshotPayload(productionResult.data.payload);
-  const seedResult = await upsertSnapshotRow(SNAPSHOT_ID, seedPayload);
+  const seedResult = await upsertSnapshotRow(activeSnapshotRow, seedPayload);
   if (!seedResult.ok) {
     return experimentResult;
   }
 
-  console.info('Seeded shared-experiment snapshot from shared (read-only copy).');
+  console.info('[ENVIRONMENT] Seeded experiment snapshot from production (one-time read-only bootstrap).');
   return { ok: true, data: seedResult.data, seededFromProduction: true };
 }
 
@@ -134,13 +150,16 @@ export function schedulePushSharedState(state) {
 }
 
 export async function pushSharedState(state) {
+  const activeSnapshotRow = getActiveSnapshotRow();
+  assertSnapshotWriteTarget(activeSnapshotRow);
+
   const payload = exportSharedSnapshot(state);
   const updatedAt = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('household_snapshots')
     .upsert({
-      id: SNAPSHOT_ID,
+      id: activeSnapshotRow,
       payload,
       updated_at: updatedAt
     })
@@ -160,7 +179,7 @@ export async function pushSharedState(state) {
 export async function pullSharedStateInto(state) {
   const localBeforeFetch = exportSharedSnapshot(state);
 
-  const snapshotResult = await resolveExperimentSnapshotRow();
+  const snapshotResult = await resolveActiveSnapshotRow();
   if (!snapshotResult.ok) {
     return { ok: false, error: snapshotResult.error };
   }
@@ -200,10 +219,13 @@ export async function pullSharedStateInto(state) {
 }
 
 export async function clearRemoteSharedState() {
+  const activeSnapshotRow = getActiveSnapshotRow();
+  assertSnapshotWriteTarget(activeSnapshotRow);
+
   const { error } = await supabase
     .from('household_snapshots')
     .upsert({
-      id: SNAPSHOT_ID,
+      id: activeSnapshotRow,
       payload: exportSharedSnapshot({
         accounts: [],
         categories: [],
@@ -226,19 +248,22 @@ export async function clearRemoteSharedState() {
 }
 
 export function subscribeSharedState(state, onChange) {
+  const activeSnapshotRow = getActiveSnapshotRow();
+  validateEnvironmentIsolation();
+
   const channel = supabase
-    .channel(`joint-finance-shared-state-${SNAPSHOT_ID}`)
+    .channel(getRealtimeChannelName())
     .on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
         table: 'household_snapshots',
-        filter: `id=eq.${SNAPSHOT_ID}`
+        filter: `id=eq.${activeSnapshotRow}`
       },
       async (payload) => {
         const rowId = payload.new?.id ?? payload.old?.id;
-        if (rowId !== SNAPSHOT_ID) {
+        if (rowId !== activeSnapshotRow) {
           return;
         }
 

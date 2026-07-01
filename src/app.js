@@ -17,6 +17,7 @@ import { saveState, loadState, clearState, getEmptySharedSnapshot, hardReplaceSt
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
 import { IS_EXPERIMENT } from './config/environment.js';
+import { validateEnvironmentIsolation } from './config/environmentConfig.js';
 import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState, markInitialSyncDone } from './lib/stateRemote.js';
 
 console.log('APP ENTRY LOADED');
@@ -290,6 +291,7 @@ async function init() {
 
   if (!tabContent) return;
 
+  validateEnvironmentIsolation();
   initDisplayModeSystem();
   initDisplayModeRefresh();
   applyLoadedState(loadState());

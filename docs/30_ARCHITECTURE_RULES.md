@@ -37,24 +37,33 @@ localStorage survives offline and speeds first paint; sync layer reconciles with
 
 ---
 
-## 3. Snapshot Isolation
+## 3. Environment Isolation (ENVIRONMENT_ISOLATION_RULE)
 
-Configured in `src/config/environment.js`:
+Configured in **`src/config/environmentConfig.js`** — the **only** file that maps deployment mode to snapshot rows.
 
-| Environment | `SNAPSHOT_ID` | Writes |
-|-------------|---------------|--------|
-| Production (main) | `shared` | `shared` only |
-| Experiment | `shared-experiment` | `shared-experiment` only |
+| Switch | Branch | Active snapshot row | localStorage cache key |
+|--------|--------|---------------------|-------------------------|
+| `ACTIVE_ENVIRONMENT = 'production'` | `main` | `shared` | `joint-finance-state-v2` |
+| `ACTIVE_ENVIRONMENT = 'experiment'` | `experiment-full-sync` | `shared-experiment` | `joint-finance-state-v2-shared-experiment` |
+
+**Architectural guarantees (runtime):**
+
+- `validateEnvironmentIsolation()` runs on app boot (`app.js`)
+- `stateRemote.js` resolves targets only via `getActiveSnapshotRow()` / `getSeedReadSnapshotRow()`
+- `assertSnapshotReadTarget()` / `assertSnapshotWriteTarget()` block cross-environment access
+- Feature modules **must not** import snapshot row ids — only `IS_EXPERIMENT` flag when needed
 
 **Rules:**
 
-- `stateRemote.js` uses `SNAPSHOT_ID` for pull, push, clear, and realtime filter
-- Experiment never upserts row `shared`
-- Realtime subscription filters `id=eq.{SNAPSHOT_ID}`
+- Production never reads or writes `shared-experiment`
+- Experiment never writes `shared`
+- Realtime subscription filters `id=eq.{activeSnapshotRow}` from config
 
-**Experiment bootstrap (implemented):**
+**Experiment bootstrap (one-time, read-only):**
 
-If `shared-experiment` has no accounts but `shared` has data, experiment may copy payload from `shared` → `shared-experiment` once (read-only read from production). Prevents empty experiment UI after isolation switch.
+If experiment snapshot has no accounts but production row has data, experiment may **read** production once and **write** only to the experiment row. Controlled by `allowSeedFromProduction` in mode registry.
+
+Legacy key `joint-finance-state-v2` may be migrated once into experiment cache if experiment cache is empty — experiment mode only.
 
 ---
 
@@ -165,11 +174,9 @@ Failure in a single module import must not silently half-initialize — module g
 
 ## 11. Branch and Backup Policy (Process)
 
-- Production work on `main` with `SNAPSHOT_ID = 'shared'`
-- Experiment work on `experiment-full-sync` with `SNAPSHOT_ID = 'shared-experiment'`
-- Backup reference: branch `backup/experiment-full-ui-clean-2026-06-27`, tag `backup-experiment-ui-clean`
-
-Do not merge experiment into main without explicit instruction and environment config review.
+- Production work on `main` with **`ACTIVE_ENVIRONMENT = 'production'`** in `environmentConfig.js`
+- Experiment work on `experiment-full-sync` with **`ACTIVE_ENVIRONMENT = 'experiment'`**
+- Do not merge experiment into main without switching `ACTIVE_ENVIRONMENT` and verifying isolation guards
 
 ---
 
