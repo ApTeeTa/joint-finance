@@ -10,7 +10,8 @@ import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayItem,
-  renderDisplaySummary,
+  renderDisplaySummaryParts,
+  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
@@ -22,7 +23,7 @@ import {
   getDisplayRules,
   buildReserveEntityDisplay
 } from './uiRulesEngine.js';
-import { renderEntityHeaderActions, closeAllOverflowMenus } from './uiActionRenderer.js';
+import { renderEntityHeaderActions, renderEntityExpandedActions, closeAllOverflowMenus } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -409,7 +410,6 @@ function renderCategoryCard(state, category) {
   const available = getCategoryAvailableDisplay(category);
   const overflow = getLimitOverflow(category);
   const overLimit = isOverLimit(category);
-  const canFillToLimit = (category.reserved ?? 0) < limit;
   const cardClass = overLimit
     ? 'border-amber-400 bg-amber-50'
     : '';
@@ -428,11 +428,14 @@ function renderCategoryCard(state, category) {
     rules: displayRules
   });
 
-  const summaryHtml = renderDisplaySummary({
+  const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(category.name),
     meta: reserveDisplay.meta,
     value: reserveDisplay.value,
-    statsHtml: reserveDisplay.statsHtml
+    statsHtml: reserveDisplay.statsHtml,
+    reserveLineHtml: reserveDisplay.reserveLineHtml,
+    limitLineHtml: reserveDisplay.limitLineHtml,
+    listMetrics: reserveDisplay.listMetrics
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -443,38 +446,47 @@ function renderCategoryCard(state, category) {
     displayRules
   });
 
-  const detailHtml = `
+  const expandedActionsHtml = renderEntityExpandedActions({
+    entityType: ENTITY_TYPES.CATEGORY,
+    entityId: category.id,
+    viewMode: displayContext.viewMode,
+    entityContext: {}
+  });
+
+  const expandedInfoHtml = `
+    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <div><span class="text-slate-500">Потрачено</span><div class="font-medium text-slate-900">${formatDisplayMoney(spent, 'RUB', displayRules)}</div></div>
+      <div><span class="text-slate-500">Резерв</span><div class="font-medium text-slate-900">${formatDisplayMoney(category.reserved ?? 0, 'RUB', displayRules)}</div></div>
+      <div><span class="text-slate-500">Лимит</span><div class="font-medium text-slate-900">${formatDisplayMoney(limit, 'RUB', displayRules)}</div></div>
+      <div><span class="text-slate-500">Доступно</span><div class="font-medium text-slate-900">${formatDisplayMoney(available, 'RUB', displayRules)}</div></div>
+    </div>
     ${overLimit ? `
-      <div class="mb-3 p-2.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-sm">
+      <div class="mt-3 p-2.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-sm">
         ⚠ Вы превысили лимит категории на ${formatMoney(overflow)}. Рекомендуется увеличить лимит.
       </div>
     ` : ''}
-    ${canFillToLimit ? `
-      <button
-        type="button"
-        data-action="fill-to-limit"
-        data-category-id="${category.id}"
-        class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors mb-2"
-      >Пополнить до лимита</button>
-    ` : ''}
-    <button
-      type="button"
-      data-action="open-expense"
-      data-category-id="${category.id}"
-      class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mb-2"
-    >Добавить расход</button>
-    <div>
-      <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
-      ${renderExpenses(state, category)}
-    </div>
   `;
+
+  const detailHtml = renderExpandedDetailView({
+    title: escapeHtml(category.name),
+    meta: reserveDisplay.meta,
+    infoHtml: expandedInfoHtml,
+    actionsHtml: expandedActionsHtml,
+    contentHtml: `
+      <div>
+        <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
+        ${renderExpenses(state, category)}
+      </div>
+    `
+  });
 
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
     itemId: category.id,
     dataAttr: 'data-category-id',
     dataValue: category.id,
-    summaryHtml,
+    summaryTitleHtml: summaryParts.titleHtml,
+    summaryMetricsHtml: summaryParts.metricsHtml,
     actionsHtml,
     detailHtml,
     itemClass: cardClass || 'bg-slate-50/50'
@@ -489,31 +501,35 @@ function renderMiscCategoryCard(state, category) {
   });
   const displayRules = getDisplayRules(displayContext);
 
-  const summaryHtml = renderDisplaySummary({
+  const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(category.name),
     meta: 'Системная категория',
     value: formatDisplayMoney(spent, 'RUB', displayRules)
   });
 
-  const detailHtml = `
-    <button
-      type="button"
-      data-action="open-expense"
-      data-category-id="${category.id}"
-      class="w-full px-3 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mb-2"
-    >Добавить расход</button>
-    <div>
-      <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
-      ${renderExpenses(state, category)}
-    </div>
-  `;
+  const detailHtml = renderExpandedDetailView({
+    title: escapeHtml(category.name),
+    meta: 'Системная категория',
+    actionsHtml: renderEntityExpandedActions({
+      entityType: ENTITY_TYPES.CATEGORY,
+      entityId: category.id,
+      viewMode: displayContext.viewMode
+    }),
+    contentHtml: `
+      <div>
+        <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
+        ${renderExpenses(state, category)}
+      </div>
+    `
+  });
 
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
     itemId: category.id,
     dataAttr: 'data-category-id',
     dataValue: category.id,
-    summaryHtml,
+    summaryTitleHtml: summaryParts.titleHtml,
+    summaryMetricsHtml: summaryParts.metricsHtml,
     detailHtml,
     itemClass: 'bg-slate-50/50'
   });

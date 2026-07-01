@@ -118,17 +118,82 @@ export function renderDisplayModeList(innerHtml) {
   return `<div class="display-mode-list">${innerHtml}</div>`;
 }
 
-/** Layout layer: single summary source styled per display mode via CSS. */
-export function renderDisplaySummary({ title, meta = '', value = '', statsHtml = '', badgesHtml = '' }) {
+/** Layout layer: title line + metrics lines; actions injected between them in renderDisplayItem. */
+export function renderDisplaySummaryParts({
+  title,
+  meta = '',
+  value = '',
+  statsHtml = '',
+  reserveLineHtml = '',
+  limitLineHtml = '',
+  listMetrics = '',
+  badgesHtml = ''
+}) {
+  const titleHtml = `
+    <div class="display-item-head min-w-0">
+      ${badgesHtml ? `<div class="display-item-badges">${badgesHtml}</div>` : ''}
+      <h3 class="display-item-title">${title}</h3>
+      ${meta ? `<p class="display-item-meta">${meta}</p>` : ''}
+    </div>
+  `;
+
+  const metricsParts = [];
+  if (listMetrics) {
+    metricsParts.push(`<div class="display-item-line display-item-line--list-metrics"><span class="display-item-list-metrics">${listMetrics}</span></div>`);
+  }
+  if (reserveLineHtml) {
+    metricsParts.push(`<div class="display-item-line display-item-line--reserve">${reserveLineHtml}</div>`);
+  }
+  if (limitLineHtml) {
+    metricsParts.push(`<div class="display-item-line display-item-line--limit">${limitLineHtml}</div>`);
+  }
+  if (statsHtml) {
+    metricsParts.push(`<div class="display-item-line display-item-line--stats"><div class="display-item-stats">${statsHtml}</div></div>`);
+  }
+  if (value) {
+    metricsParts.push(`<div class="display-item-line display-item-line--value"><span class="display-item-value">${value}</span></div>`);
+  }
+
+  return {
+    titleHtml,
+    metricsHtml: metricsParts.join('')
+  };
+}
+
+/** @deprecated Use renderDisplaySummaryParts + renderDisplayItem split layout. */
+export function renderDisplaySummary({ title, meta = '', value = '', statsHtml = '', badgesHtml = '', reserveLineHtml = '', limitLineHtml = '', listMetrics = '' }) {
+  const { titleHtml, metricsHtml } = renderDisplaySummaryParts({
+    title,
+    meta,
+    value,
+    statsHtml,
+    badgesHtml,
+    reserveLineHtml,
+    limitLineHtml,
+    listMetrics
+  });
   return `
     <div class="display-item-summary">
-      <div class="display-item-head min-w-0">
-        ${badgesHtml ? `<div class="display-item-badges">${badgesHtml}</div>` : ''}
-        <h3 class="display-item-title">${title}</h3>
-        ${meta ? `<p class="display-item-meta">${meta}</p>` : ''}
-      </div>
-      ${statsHtml ? `<div class="display-item-stats">${statsHtml}</div>` : ''}
-      ${value ? `<div class="display-item-value-wrap"><span class="display-item-value">${value}</span></div>` : ''}
+      <div class="display-item-line display-item-line--title">${titleHtml}</div>
+      ${metricsHtml}
+    </div>
+  `;
+}
+
+/** Full-detail expanded view — replaces compact card when open. */
+export function renderExpandedDetailView({
+  title = '',
+  meta = '',
+  infoHtml = '',
+  actionsHtml = '',
+  contentHtml = ''
+}) {
+  return `
+    <div class="display-item-expanded-view">
+      ${title ? `<div class="display-item-expanded-header"><h3 class="text-lg font-semibold text-slate-900">${title}</h3>${meta ? `<p class="text-sm text-slate-500 mt-1">${meta}</p>` : ''}</div>` : ''}
+      ${infoHtml ? `<div class="display-item-expanded-info">${infoHtml}</div>` : ''}
+      ${actionsHtml ? `<div class="display-item-expanded-actions">${actionsHtml}</div>` : ''}
+      ${contentHtml ? `<div class="display-item-expanded-content">${contentHtml}</div>` : ''}
     </div>
   `;
 }
@@ -145,10 +210,19 @@ export function renderDisplayItem({
   dataAttr,
   dataValue,
   summaryHtml,
+  summaryTitleHtml = '',
+  summaryMetricsHtml = '',
   actionsHtml = '',
   detailHtml = '',
   itemClass = ''
 }) {
+  let titleBlock = summaryTitleHtml;
+  let metricsBlock = summaryMetricsHtml;
+
+  if (!titleBlock && !metricsBlock && summaryHtml) {
+    titleBlock = summaryHtml;
+  }
+
   return `
     <article
       class="display-item ${itemClass}"
@@ -156,19 +230,35 @@ export function renderDisplayItem({
       data-display-item
       data-display-item-id="${escapeAttr(itemId)}"
     >
-      <div class="display-item-shell">
-        <div class="display-item-header ${getEntityHeaderLayoutClass()}">
-        <button
-          type="button"
-          class="display-item-body"
-          data-action="toggle-display-detail"
-          data-display-module="${moduleKey}"
-          data-display-item-id="${escapeAttr(itemId)}"
-          aria-expanded="false"
-        >
-          ${summaryHtml}
-        </button>
-        ${actionsHtml ? `<div class="display-item-actions">${actionsHtml}</div>` : ''}
+      <div class="display-item-compact">
+        <div class="display-item-shell">
+          <div class="display-item-header ${getEntityHeaderLayoutClass()}">
+            ${titleBlock ? `
+              <button
+                type="button"
+                class="display-item-title-toggle"
+                data-action="toggle-display-detail"
+                data-display-module="${moduleKey}"
+                data-display-item-id="${escapeAttr(itemId)}"
+                aria-expanded="false"
+              >
+                ${titleBlock}
+              </button>
+            ` : ''}
+            ${actionsHtml ? `<div class="display-item-actions-row">${actionsHtml}</div>` : ''}
+            ${metricsBlock ? `
+              <button
+                type="button"
+                class="display-item-body"
+                data-action="toggle-display-detail"
+                data-display-module="${moduleKey}"
+                data-display-item-id="${escapeAttr(itemId)}"
+                aria-expanded="false"
+              >
+                <div class="display-item-summary">${metricsBlock}</div>
+              </button>
+            ` : ''}
+          </div>
         </div>
       </div>
       ${detailHtml ? `
@@ -234,9 +324,7 @@ function toggleDisplayDetail(button) {
       }
     });
     root.querySelectorAll('[data-action="toggle-display-detail"]').forEach((otherBtn) => {
-      if (otherBtn !== button) {
-        otherBtn.setAttribute('aria-expanded', 'false');
-      }
+      otherBtn.setAttribute('aria-expanded', 'false');
     });
     root.querySelectorAll('.display-item-open').forEach((item) => {
       if (item !== article) {
@@ -247,7 +335,9 @@ function toggleDisplayDetail(button) {
 
   detail.hidden = !willOpen;
   detail.classList.toggle('is-open', willOpen);
-  button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  article.querySelectorAll('[data-action="toggle-display-detail"]').forEach((toggleBtn) => {
+    toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  });
   article.classList.toggle('display-item-open', willOpen);
 }
 

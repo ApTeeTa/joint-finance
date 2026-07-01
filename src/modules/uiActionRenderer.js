@@ -10,6 +10,7 @@ import {
   normalizeViewMode,
   isActionAllowedForEntity,
   resolveEntityActionGroups,
+  getAllowedDetailActions,
   logUiActionRule,
   logUiMigrationPass,
   logUiUxFix
@@ -87,6 +88,11 @@ const ACTION_DEFS = Object.freeze({
     markup: '−',
     tone: 'text-amber-600 hover:bg-amber-100 text-base leading-none font-semibold'
   },
+  'fill-to-limit': {
+    title: 'Пополнить до лимита',
+    menuLabel: 'Пополнить до лимита',
+    tone: 'text-emerald-600 hover:bg-emerald-100'
+  },
   'delete-category': {
     title: 'Удалить',
     menuLabel: 'Удалить',
@@ -131,6 +137,11 @@ const ACTION_DEFS = Object.freeze({
     menuLabel: 'Удалить',
     icon: 'trash',
     menuTone: 'text-red-600 hover:bg-red-50'
+  },
+  'open-pay-obligation': {
+    title: 'Оплатить',
+    menuLabel: 'Оплатить',
+    tone: 'text-primary-600 hover:bg-primary-50'
   },
   'open-repay-debt': {
     title: 'Погасить',
@@ -396,6 +407,52 @@ export function renderEntityHeaderActions({
   );
 
   return html;
+}
+
+/** Expanded card: all actions as visible buttons (no overflow-only). */
+export function renderEntityExpandedActions({
+  entityType,
+  entityId,
+  viewMode,
+  entityContext = {}
+}) {
+  const groups = normalizeActionGroups(
+    resolveEntityActionGroups(entityType, entityContext),
+    entityType,
+    viewMode,
+    entityContext
+  );
+  const detailActions = getAllowedDetailActions(entityType) ?? [];
+  const binding = resolveBinding(entityType);
+
+  const actionIds = [...new Set([
+    ...(groups?.primary ?? []),
+    ...(groups?.secondary ?? []),
+    ...detailActions
+  ])].filter((actionId) => isActionAllowedForEntity(actionId, entityType, entityContext));
+
+  const buttons = actionIds.map((actionId) => {
+    const def = ACTION_DEFS[actionId];
+    if (!def) {
+      return '';
+    }
+
+    const label = def.menuLabel ?? def.title;
+    const isDestructive = actionId.startsWith('delete') || actionId.includes('write-off');
+    const btnClass = isDestructive
+      ? 'bg-red-50 text-red-700 hover:bg-red-100'
+      : 'bg-primary-600 text-white hover:bg-primary-700';
+
+    return `
+      <button
+        type="button"
+        data-action="${actionId}"
+        ${binding.idAttr}="${entityId}"
+        class="px-3 py-2 text-sm font-medium rounded-lg transition-colors ${btnClass}"
+      >${label}</button>`;
+  }).join('');
+
+  return buttons;
 }
 
 export function closeAllOverflowMenus() {

@@ -23,7 +23,8 @@ import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from '
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayItem,
-  renderDisplaySummary,
+  renderDisplaySummaryParts,
+  renderExpandedDetailView,
   renderDisplayModeRoot,
   renderModuleToolbar,
   getModuleDisplayContext
@@ -35,7 +36,7 @@ import {
   getAllowedDetailActions,
   logUiRulesActive
 } from './uiRulesEngine.js';
-import { renderEntityHeaderActions } from './uiActionRenderer.js';
+import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -784,7 +785,7 @@ function renderAccountCard(state, account, displayContext, displayRules) {
   const context = displayContext ?? resolveAccountsDisplayContext();
   const rules = displayRules ?? getDisplayRules(context);
 
-  const summaryHtml = renderDisplaySummary({
+  const summaryParts = renderDisplaySummaryParts({
     title: `${ownerIcon} ${escapeHtml(account.name)}`,
     meta: buildAccountSummaryMeta(currency, rules),
     value: formatAccountDisplayMoney(account.balance, currency, rules)
@@ -798,20 +799,30 @@ function renderAccountCard(state, account, displayContext, displayRules) {
     displayRules: rules
   });
 
-  const detailHtml = `
-    ${renderAccountDetailActions(account, rules)}
-    <div class="min-w-0">
-      <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">История</p>
-      ${renderOperations(state, account.id, currency)}
-    </div>
-  `;
+  const detailHtml = renderExpandedDetailView({
+    title: `${ownerIcon} ${escapeHtml(account.name)}`,
+    meta: buildAccountSummaryMeta(currency, rules),
+    infoHtml: `<div class="text-2xl font-bold text-slate-900">${formatAccountDisplayMoney(account.balance, currency, rules)}</div>`,
+    actionsHtml: renderEntityExpandedActions({
+      entityType: ENTITY_TYPES.ACCOUNT,
+      entityId: account.id,
+      viewMode: context.viewMode
+    }),
+    contentHtml: `
+      <div class="min-w-0">
+        <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">История</p>
+        ${renderOperations(state, account.id, currency)}
+      </div>
+    `
+  });
 
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.ACCOUNTS,
     itemId: account.id,
     dataAttr: 'data-account-id',
     dataValue: account.id,
-    summaryHtml,
+    summaryTitleHtml: summaryParts.titleHtml,
+    summaryMetricsHtml: summaryParts.metricsHtml,
     actionsHtml,
     detailHtml,
     itemClass: 'bg-slate-50/50'

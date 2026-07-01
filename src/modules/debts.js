@@ -19,7 +19,8 @@ import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAl
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayItem,
-  renderDisplaySummary,
+  renderDisplaySummaryParts,
+  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
@@ -27,7 +28,7 @@ import {
 } from './displayMode.js';
 import { formatDisplayMoney } from './formatUi.js';
 import { ENTITY_TYPES, getDisplayRules, buildDebtEntityDisplay } from './uiRulesEngine.js';
-import { renderEntityHeaderActions, closeAllOverflowMenus } from './uiActionRenderer.js';
+import { renderEntityHeaderActions, renderEntityExpandedActions, closeAllOverflowMenus } from './uiActionRenderer.js';
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
@@ -91,7 +92,7 @@ function renderDebtCard(debt) {
   const displayRules = getDisplayRules(displayContext);
   const debtDisplay = buildDebtEntityDisplay(item, formatDisplayMoney, displayRules);
 
-  const summaryHtml = renderDisplaySummary({
+  const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(item.title),
     meta: debtDisplay.meta,
     value: debtDisplay.value,
@@ -107,17 +108,30 @@ function renderDebtCard(debt) {
     entityContext: { isOwedToUs, isManualDebt: isManual }
   });
 
-  const detailHtml = `
-    ${item.comment ? `<p class="text-sm text-slate-500 mb-2">${escapeHtml(item.comment)}</p>` : ''}
-    ${isManual && item.eventDate ? `<p class="text-xs text-slate-400">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
-  `;
+  const detailHtml = renderExpandedDetailView({
+    title: escapeHtml(item.title),
+    meta: debtDisplay.meta,
+    infoHtml: `
+      <div class="text-2xl font-bold text-slate-900">${debtDisplay.value}</div>
+      ${item.comment ? `<p class="text-sm text-slate-500 mt-2">${escapeHtml(item.comment)}</p>` : ''}
+      ${isManual && item.eventDate ? `<p class="text-xs text-slate-400 mt-1">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
+    `,
+    actionsHtml: renderEntityExpandedActions({
+      entityType: ENTITY_TYPES.DEBT,
+      entityId: item.id,
+      viewMode: displayContext.viewMode,
+      entityContext: { isOwedToUs, isManualDebt: isManual }
+    }),
+    contentHtml: ''
+  });
 
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
     itemId: item.id,
     dataAttr: 'data-debt-id',
     dataValue: item.id,
-    summaryHtml,
+    summaryTitleHtml: summaryParts.titleHtml,
+    summaryMetricsHtml: summaryParts.metricsHtml,
     actionsHtml,
     detailHtml,
     itemClass: 'bg-slate-50/50'

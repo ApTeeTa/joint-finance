@@ -45,14 +45,13 @@ export const UI_ACTION_SOURCE_RULE = Object.freeze({
 });
 
 /**
- * RULE 4: header actions never overlap entity title — flex layout, actions beside body.
- * Applied via .display-item-header--safe-layout in index.html.
+ * RULE 4: stacked vertical card layout — actions on dedicated row, never absolute.
  */
 export const GLOBAL_ENTITY_LAYOUT_RULE = Object.freeze({
   actionsNeverOverlapTitle: true,
   titleFlexShrink: true,
   actionsFlexShrink: false,
-  layoutClass: 'display-item-header--safe-layout'
+  layoutClass: 'display-item-header--stacked'
 });
 
 /**
@@ -240,6 +239,40 @@ export function renderStatsRowsHtml(rows) {
     .join('');
 }
 
+/** List mode: spent / limit / reserve — always 3 values, short format. */
+export function formatListTripleMetrics(spent, limit, reserve, formatMoney, rules = null) {
+  return [
+    formatMoney(spent, 'RUB', rules),
+    formatMoney(limit, 'RUB', rules),
+    formatMoney(reserve, 'RUB', rules)
+  ].join(' / ');
+}
+
+function renderMetricPair(label, formattedValue) {
+  return `<span class="display-metric-pair"><span class="text-slate-500">${label}:</span> <span class="text-slate-900 font-medium">${formattedValue}</span></span>`;
+}
+
+function renderReserveLimitLines({
+  spent,
+  limit,
+  reserve,
+  available,
+  formatMoney,
+  rules
+}) {
+  const reserveLineHtml = [
+    renderMetricPair('Потрачено', formatMoney(spent, 'RUB', rules)),
+    renderMetricPair('Резерв', formatMoney(reserve, 'RUB', rules))
+  ].join('<span class="text-slate-300 mx-1">·</span>');
+
+  const limitLineHtml = [
+    renderMetricPair('Лимит', formatMoney(limit, 'RUB', rules)),
+    renderMetricPair('Доступно', formatMoney(available, 'RUB', rules))
+  ].join('<span class="text-slate-300 mx-1">·</span>');
+
+  return { reserveLineHtml, limitLineHtml };
+}
+
 /**
  * Reserve-aware display for categories and obligations.
  * @returns {{ meta: string, value: string, statsHtml: string, primaryNumeric: number|null }}
@@ -256,7 +289,8 @@ export function buildReserveEntityDisplay({
   const limitNum = normalizeMoneyAmount(limit);
   const reserveNum = normalizeMoneyAmount(reserve);
   const spentNum = normalizeMoneyAmount(spent);
-  const primary = primaryNumeric != null ? normalizeMoneyAmount(primaryNumeric) : limitNum - spentNum;
+  const available = primaryNumeric != null ? normalizeMoneyAmount(primaryNumeric) : limitNum - spentNum;
+  const isListMode = rules?.viewMode === VIEW_MODES.LIST || rules?.moneyFormat === 'short';
 
   const warnings = [];
   if (spentNum > limitNum && limitNum > 0) {
@@ -271,68 +305,71 @@ export function buildReserveEntityDisplay({
     metaParts.push(warnings.join(' · '));
   }
 
-  const statsRows = buildDedupedStatsRows([
-    {
-      label: 'Лимит',
-      formattedValue: formatMoney(limitNum, 'RUB', rules),
-      numericValue: limitNum
-    },
-    {
-      label: 'Резерв',
-      formattedValue: formatMoney(reserveNum, 'RUB', rules),
-      numericValue: reserveNum
-    }
-  ], primary, rules);
+  if (isListMode) {
+    return {
+      meta: metaParts.join(' · '),
+      value: '',
+      statsHtml: '',
+      listMetrics: formatListTripleMetrics(spentNum, limitNum, reserveNum, formatMoney, rules),
+      reserveLineHtml: '',
+      limitLineHtml: '',
+      primaryNumeric: available
+    };
+  }
 
-  const valueText = primaryLabel
-    ? formatMoney(primary, 'RUB', rules)
-    : formatMoney(primary, 'RUB', rules);
+  const { reserveLineHtml, limitLineHtml } = renderReserveLimitLines({
+    spent: spentNum,
+    limit: limitNum,
+    reserve: reserveNum,
+    available,
+    formatMoney,
+    rules
+  });
 
   return {
     meta: metaParts.join(' · '),
-    value: valueText,
-    statsHtml: renderStatsRowsHtml(statsRows),
-    primaryNumeric: primary
+    value: '',
+    statsHtml: '',
+    listMetrics: '',
+    reserveLineHtml,
+    limitLineHtml,
+    primaryNumeric: available
   };
 }
 
 export function buildDebtEntityDisplay(item, formatMoney, rules) {
   const remaining = normalizeMoneyAmount(item.remainingAmount);
+  const viewMode = rules?.viewMode ?? VIEW_MODES.MEDIUM;
+
   let meta = '';
   if (item.type === 'manual_debt_event' && item.category) {
     meta = MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other;
-  } else if (rules?.showSecondaryValues) {
+  } else if (viewMode === VIEW_MODES.FULL && rules?.labelDensity === 'verbose') {
     meta = `Погашено ${formatMoney(item.paidAmount, 'RUB', rules)}`;
   }
 
-  const statsRows = buildDedupedStatsRows(
-    rules?.labelDensity === 'verbose'
-      ? [
-        {
-          label: 'Остаток',
-          formattedValue: formatMoney(remaining, 'RUB', rules),
-          numericValue: remaining
-        },
-        {
-          label: 'Из суммы',
-          formattedValue: formatMoney(item.amount, 'RUB', rules),
-          numericValue: item.amount
-        },
-        {
-          label: 'Погашено',
-          formattedValue: formatMoney(item.paidAmount, 'RUB', rules),
-          numericValue: item.paidAmount
-        }
-      ]
-      : [],
-    remaining,
-    rules
-  );
+  const statsRows = viewMode === VIEW_MODES.FULL && rules?.labelDensity === 'verbose'
+    ? buildDedupedStatsRows([
+      {
+        label: 'Из суммы',
+        formattedValue: formatMoney(item.amount, 'RUB', rules),
+        numericValue: item.amount
+      },
+      {
+        label: 'Погашено',
+        formattedValue: formatMoney(item.paidAmount, 'RUB', rules),
+        numericValue: item.paidAmount
+      }
+    ], remaining, rules)
+    : [];
 
   return {
     meta,
     value: formatMoney(remaining, 'RUB', rules),
     statsHtml: renderStatsRowsHtml(statsRows),
+    listMetrics: '',
+    reserveLineHtml: '',
+    limitLineHtml: '',
     primaryNumeric: remaining
   };
 }
@@ -368,6 +405,9 @@ export function buildSavingEntityDisplay(item, formatMoney, rules, extras = {}) 
     meta,
     value: formatMoney(accumulated, 'RUB', rules),
     statsHtml: renderStatsRowsHtml(statsRows),
+    listMetrics: '',
+    reserveLineHtml: '',
+    limitLineHtml: '',
     primaryNumeric: accumulated
   };
 }

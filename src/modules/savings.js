@@ -14,7 +14,8 @@ import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from '
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayItem,
-  renderDisplaySummary,
+  renderDisplaySummaryParts,
+  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
@@ -22,7 +23,7 @@ import {
 } from './displayMode.js';
 import { formatDisplayMoney } from './formatUi.js';
 import { ENTITY_TYPES, getDisplayRules, buildSavingEntityDisplay } from './uiRulesEngine.js';
-import { renderEntityHeaderActions } from './uiActionRenderer.js';
+import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
 
 const DEADLINE_LABELS = {
   none: 'Без срока',
@@ -422,7 +423,7 @@ function renderSavingCard(state, saving) {
     extraStatsRows: renderRecommendedMonthlyPaymentRow(item, formatDisplayMoney, displayRules)
   });
 
-  const summaryHtml = renderDisplaySummary({
+  const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(item.name),
     meta: savingDisplay.meta,
     value: savingDisplay.value,
@@ -438,27 +439,30 @@ function renderSavingCard(state, saving) {
     entityContext: { goalReached }
   });
 
-  const detailHtml = `
-    ${progressBar}
-    <div class="display-item-detail-actions mt-3">
-      ${!goalReached ? `
-        <button type="button" data-action="open-deposit-saving" data-saving-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Пополнить</button>
-      ` : ''}
-      ${accumulated > 0 ? `
-        <button type="button" data-action="open-withdraw-saving" data-saving-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">Вернуть</button>
-      ` : ''}
-      ${goalReached && accumulated > 0 ? `
-        <button type="button" data-action="open-spend-saving" data-saving-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Потратить</button>
-      ` : ''}
-    </div>
-  `;
+  const detailHtml = renderExpandedDetailView({
+    title: escapeHtml(item.name),
+    meta: savingDisplay.meta,
+    infoHtml: `
+      ${progressBar}
+      <div class="text-2xl font-bold text-slate-900 mt-2">${savingDisplay.value}</div>
+      ${targetAmount ? `<p class="text-sm text-slate-500 mt-1">Цель: ${formatDisplayMoney(targetAmount, 'RUB', displayRules)}</p>` : ''}
+    `,
+    actionsHtml: renderEntityExpandedActions({
+      entityType: ENTITY_TYPES.SAVING,
+      entityId: item.id,
+      viewMode: displayContext.viewMode,
+      entityContext: { goalReached }
+    }),
+    contentHtml: ''
+  });
 
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.SAVINGS,
     itemId: item.id,
     dataAttr: 'data-saving-id',
     dataValue: item.id,
-    summaryHtml,
+    summaryTitleHtml: summaryParts.titleHtml,
+    summaryMetricsHtml: summaryParts.metricsHtml,
     actionsHtml,
     detailHtml,
     itemClass: 'bg-slate-50/50'

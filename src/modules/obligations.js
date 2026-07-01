@@ -14,7 +14,8 @@ import { openModal, closeModal, isWithinAppUi, relocateModals, findAppForm, find
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayItem,
-  renderDisplaySummary,
+  renderDisplaySummaryParts,
+  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
@@ -22,7 +23,7 @@ import {
 } from './displayMode.js';
 import { formatDisplayMoney } from './formatUi.js';
 import { ENTITY_TYPES, getDisplayRules, buildReserveEntityDisplay } from './uiRulesEngine.js';
-import { renderEntityHeaderActions } from './uiActionRenderer.js';
+import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
 
 export {
   computePaidUntilFromPayments,
@@ -317,13 +318,14 @@ function renderObligationCard(state, obligation) {
   const dueMeta = formatObligationDueMeta(item);
   const combinedMeta = [reserveDisplay.meta, dueMeta].filter(Boolean).join(' · ');
 
-  const summaryHtml = renderDisplaySummary({
+  const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(item.name),
     meta: combinedMeta,
-    value: primaryAmount > 0 || reservedAmount > 0
-      ? reserveDisplay.value
-      : '—',
-    statsHtml: reserveDisplay.statsHtml
+    value: reserveDisplay.value,
+    statsHtml: reserveDisplay.statsHtml,
+    reserveLineHtml: reserveDisplay.reserveLineHtml,
+    limitLineHtml: reserveDisplay.limitLineHtml,
+    listMetrics: reserveDisplay.listMetrics
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -334,18 +336,32 @@ function renderObligationCard(state, obligation) {
     displayRules
   });
 
-  const detailHtml = `
-    <div class="display-item-detail-actions">
-      <button type="button" data-action="open-pay-obligation" data-obligation-id="${item.id}" class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Оплатить</button>
-    </div>
-  `;
+  const detailHtml = renderExpandedDetailView({
+    title: escapeHtml(item.name),
+    meta: combinedMeta,
+    infoHtml: `
+      <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <div><span class="text-slate-500">Резерв</span><div class="font-medium">${formatDisplayMoney(reservedAmount, 'RUB', displayRules)}</div></div>
+        <div><span class="text-slate-500">Оплачено</span><div class="font-medium">${formatDisplayMoney(paymentsTotal, 'RUB', displayRules)}</div></div>
+        ${item.targetAmount ? `<div><span class="text-slate-500">Сумма</span><div class="font-medium">${formatDisplayMoney(item.targetAmount, 'RUB', displayRules)}</div></div>` : ''}
+        <div><span class="text-slate-500">Срок</span><div class="font-medium">${formatObligationDueMeta(item)}</div></div>
+      </div>
+    `,
+    actionsHtml: renderEntityExpandedActions({
+      entityType: ENTITY_TYPES.OBLIGATION,
+      entityId: item.id,
+      viewMode: displayContext.viewMode
+    }),
+    contentHtml: ''
+  });
 
   return renderDisplayItem({
     moduleKey: DISPLAY_MODULE_KEYS.OBLIGATIONS,
     itemId: item.id,
     dataAttr: 'data-obligation-id',
     dataValue: item.id,
-    summaryHtml,
+    summaryTitleHtml: summaryParts.titleHtml,
+    summaryMetricsHtml: summaryParts.metricsHtml,
     actionsHtml,
     detailHtml,
     itemClass: cardClass
