@@ -1,5 +1,5 @@
 import { supabase } from './supabase.js';
-import { exportSharedSnapshot, applySharedSnapshot, mergeSharedSnapshots, getEmptySharedSnapshot, hardReplaceStateFromRemoteSnapshot } from '../modules/storage.js';
+import { exportSharedSnapshot, hardReplaceStateFromRemoteSnapshot, getEmptySharedSnapshot } from '../modules/storage.js';
 import {
   assertSnapshotId,
   getActiveSnapshotId,
@@ -176,8 +176,6 @@ export async function pushSharedState(state) {
 }
 
 export async function pullSharedStateInto(state) {
-  const localBeforeFetch = exportSharedSnapshot(state);
-
   const snapshotResult = await resolveActiveSnapshotRow();
   if (!snapshotResult.ok) {
     return { ok: false, error: snapshotResult.error };
@@ -200,19 +198,14 @@ export async function pullSharedStateInto(state) {
     return { ok: true, hasData: true, skipped: true };
   }
 
-  const localNow = exportSharedSnapshot(state);
-  const preferLocalOnConflict = JSON.stringify(localBeforeFetch) !== JSON.stringify(localNow);
-
   applyingRemote = true;
-  const mergedSnapshot = mergeSharedSnapshots(localNow, data.payload, { preferLocalOnConflict });
-  applySharedSnapshot(state, mergedSnapshot);
+  hardReplaceStateFromRemoteSnapshot(state, data.payload);
   applyingRemote = false;
   lastRemoteUpdatedAt = data.updated_at;
   return {
     ok: true,
     hasData: true,
     updatedAt: data.updated_at,
-    mergedLocalChanges: preferLocalOnConflict,
     seededFromProduction: snapshotResult.seededFromProduction === true
   };
 }

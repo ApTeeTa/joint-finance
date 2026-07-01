@@ -82,12 +82,13 @@ export const GLOBAL_RESERVE_DISPLAY_RULE = Object.freeze({
 });
 
 /**
- * RULE 8: remote snapshot arrays are authoritative — local-only ids drop on sync
- * unless preferLocalOnConflict (see storage.mergeEntityArrays).
+ * RULE 8: remote snapshot is the sole source of entity existence.
+ * Sync hard-replaces shared arrays from remote; local-only ids are dropped after first sync.
  */
 export const EMPTY_STATE_SYNC_RULE = Object.freeze({
   emptyRemoteHardReplace: true,
-  remoteArrayAuthoritative: true
+  remoteArrayAuthoritative: true,
+  remoteHardReplaceOnSync: true
 });
 
 const DISPLAY_MODE_TO_VIEW = Object.freeze({

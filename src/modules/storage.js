@@ -51,31 +51,6 @@ export function getEmptySharedSnapshot() {
   return pickSharedFields(getDefaultState());
 }
 
-/** RULE 3: hard replace local shared fields — no merge when remote is empty. */
-export function hardReplaceStateFromRemoteSnapshot(state, snapshot) {
-  applySharedSnapshot(state, snapshot ?? getEmptySharedSnapshot());
-}
-
-export function applySharedSnapshot(state, snapshot) {
-  if (!snapshot || typeof snapshot !== 'object') {
-    return;
-  }
-
-  const merged = mergeWithDefaults({
-    ...snapshot,
-    profile: state.profile,
-    activeTab: state.activeTab
-  });
-
-  state.accounts = merged.accounts;
-  state.categories = merged.categories;
-  state.transactions = merged.transactions;
-  state.obligations = merged.obligations;
-  state.savings = merged.savings;
-  state.debts = merged.debts;
-  state.exchangeRate = merged.exchangeRate;
-}
-
 function getRecordTimestamp(record) {
   if (!record || typeof record !== 'object') {
     return 0;
@@ -86,103 +61,15 @@ function getRecordTimestamp(record) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function pickRecordOnConflict(localRecord, remoteRecord, preferLocalOnConflict) {
-  if (!remoteRecord) {
-    return localRecord;
-  }
-  if (!localRecord) {
-    return remoteRecord;
-  }
-  if (preferLocalOnConflict) {
-    return localRecord;
-  }
-
-  return getRecordTimestamp(localRecord) >= getRecordTimestamp(remoteRecord)
-    ? localRecord
-    : remoteRecord;
-}
-
-function mergeEntityArrays(localItems, remoteItems, preferLocalOnConflict) {
-  const byId = new Map();
-  const remoteIds = new Set();
-
-  (remoteItems ?? []).forEach((item) => {
-    if (item?.id) {
-      byId.set(item.id, item);
-      remoteIds.add(item.id);
-    }
-  });
-
-  (localItems ?? []).forEach((localItem) => {
-    if (!localItem?.id) {
-      return;
-    }
-
-    if (!remoteIds.has(localItem.id) && !preferLocalOnConflict) {
-      return;
-    }
-
-    byId.set(
-      localItem.id,
-      pickRecordOnConflict(localItem, byId.get(localItem.id), preferLocalOnConflict)
-    );
-  });
-
-  return Array.from(byId.values());
-}
-
-function mergeObligationRecords(localItems, remoteItems, preferLocalOnConflict) {
-  const localById = new Map((localItems ?? []).filter((item) => item?.id).map((item) => [item.id, item]));
-  const remoteById = new Map((remoteItems ?? []).filter((item) => item?.id).map((item) => [item.id, item]));
-  const ids = new Set([...localById.keys(), ...remoteById.keys()]);
-
-  return Array.from(ids).map((id) => {
-    const localItem = localById.get(id);
-    const remoteItem = remoteById.get(id);
-    const winner = pickRecordOnConflict(localItem, remoteItem, preferLocalOnConflict);
-    const other = winner === localItem ? remoteItem : localItem;
-
-    return normalizeObligationRecord({
-      ...(other ?? {}),
-      ...winner,
-      payments: mergeEntityArrays(
-        localItem?.payments,
-        remoteItem?.payments,
-        preferLocalOnConflict
-      )
-    });
-  });
-}
-
-function mergeTransactions(localItems, remoteItems, preferLocalOnConflict) {
-  const merged = mergeEntityArrays(localItems, remoteItems, preferLocalOnConflict);
-
-  return merged.sort((left, right) => {
+function sortTransactionsByRecency(transactions) {
+  return [...(transactions ?? [])].sort((left, right) => {
     const leftTs = getRecordTimestamp(left);
     const rightTs = getRecordTimestamp(right);
     if (rightTs !== leftTs) {
       return rightTs - leftTs;
     }
-    return String(right.id ?? '').localeCompare(String(left.id ?? ''));
+    return String(left.id ?? '').localeCompare(String(right.id ?? ''));
   });
-}
-
-export function mergeSharedSnapshots(localSnapshot, remoteSnapshot, options = {}) {
-  const preferLocalOnConflict = options.preferLocalOnConflict === true;
-  const local = mergeWithDefaults(localSnapshot);
-  const remote = mergeWithDefaults(remoteSnapshot);
-
-  return {
-    accounts: mergeEntityArrays(local.accounts, remote.accounts, preferLocalOnConflict),
-    categories: mergeEntityArrays(local.categories, remote.categories, preferLocalOnConflict),
-    transactions: mergeTransactions(local.transactions, remote.transactions, preferLocalOnConflict),
-    obligations: mergeObligationRecords(local.obligations, remote.obligations, preferLocalOnConflict),
-    savings: mergeEntityArrays(local.savings, remote.savings, preferLocalOnConflict),
-    debts: mergeEntityArrays(local.debts, remote.debts, preferLocalOnConflict),
-    exchangeRate: preferLocalOnConflict
-      ? local.exchangeRate
-      : (remote.exchangeRate ?? local.exchangeRate)
-  };
 }
 
 function normalizeObligationRecord(obligation) {
@@ -224,6 +111,40 @@ function mergeWithDefaults(loaded) {
       ? 'obligations'
       : (VALID_TABS.includes(loaded.activeTab) ? loaded.activeTab : defaults.activeTab)
   };
+}
+
+/** Remote snapshot is the sole source of entity existence — normalize schema only, no local union. */
+export function normalizeSharedSnapshot(snapshot) {
+  const normalized = mergeWithDefaults(snapshot ?? getDefaultState());
+  const shared = pickSharedFields(normalized);
+  shared.transactions = sortTransactionsByRecency(shared.transactions);
+  shared.obligations = normalizeObligations(shared.obligations);
+  return shared;
+}
+
+/** RULE: in-memory shared fields = remote snapshot exactly (no local union merge). */
+export function hardReplaceStateFromRemoteSnapshot(state, snapshot) {
+  applySharedSnapshot(state, normalizeSharedSnapshot(snapshot));
+}
+
+export function applySharedSnapshot(state, snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return;
+  }
+
+  const merged = mergeWithDefaults({
+    ...snapshot,
+    profile: state.profile,
+    activeTab: state.activeTab
+  });
+
+  state.accounts = merged.accounts;
+  state.categories = merged.categories;
+  state.transactions = merged.transactions;
+  state.obligations = merged.obligations;
+  state.savings = merged.savings;
+  state.debts = merged.debts;
+  state.exchangeRate = merged.exchangeRate;
 }
 
 export function saveState(state, options = {}) {

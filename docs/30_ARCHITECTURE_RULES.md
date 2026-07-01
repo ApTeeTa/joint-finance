@@ -72,7 +72,7 @@ Legacy key `joint-finance-state-v2` may be migrated once into experiment cache i
 `src/lib/stateRemote.js` + `src/modules/storage.js`:
 
 - **Export** shared fields from in-memory state (`exportSharedSnapshot`)
-- **Merge** local and remote (`mergeSharedSnapshots`) — not blind replace
+- **Replace** in-memory shared fields from remote on sync (`hardReplaceStateFromRemoteSnapshot`) — no union merge
 - **Apply** merged result to state (`applySharedSnapshot`)
 - **Schedule push** after local changes (debounced; blocked until initial sync completes)
 
@@ -183,7 +183,7 @@ Failure in a single module import must not silently half-initialize — module g
 ## OPEN QUESTIONS / UNCERTAIN AREAS
 
 - **Full mutation audit:** Not every UI handler path has been verified to go exclusively through `financeGate` — rule stated as target architecture.
-- **Conflict resolution edge cases:** `mergeSharedSnapshots` prefer-local behavior during concurrent edits — documented in code but not fully specified for users.
+- **Conflict resolution:** remote snapshot wins on pull; local-only entities survive only until first sync
 - **Stats / History tabs:** Use rendering patterns outside display mode system — whether they must migrate is undecided.
 - **Auth / multi-household:** Current model assumes single shared snapshot per deployment; no household picker architecture yet.
 - **Schema changes:** Rule is «no schema changes» for experiment work; future migrations would need their own architecture addendum.

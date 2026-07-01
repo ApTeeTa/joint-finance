@@ -255,7 +255,7 @@ function refreshFromRemote() {
 
 function onRemoteStateMerged() {
   reconcileLegacyTransactions(state);
-  saveState(state);
+  saveState(state, { skipRemote: true });
   refreshFromRemote();
 }
 
