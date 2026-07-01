@@ -18,16 +18,20 @@ import {
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAllInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderDisplayItem,
-  renderDisplaySummaryParts,
-  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { ENTITY_TYPES, getDisplayRules, buildDebtEntityDisplay, formatEntityMoney, getExpandedDisplayRules } from './uiRulesEngine.js';
-import { renderEntityHeaderActions, renderEntityExpandedActions, closeAllOverflowMenus } from './uiActionRenderer.js';
+import { ENTITY_TYPES, getDisplayRules, createRawMoney } from './uiRulesEngine.js';
+import { renderEntityCard, closeAllOverflowMenus } from './uiActionRenderer.js';
+
+const MANUAL_DEBT_CATEGORY_LABELS = Object.freeze({
+  emergency: 'Экстренные расходы',
+  rent: 'Аренда / задержка',
+  fees: 'Комиссии / штрафы',
+  other: 'Другое'
+});
 
 const TYPE_LABELS = {
   owed_to_us: 'Нам должны',
@@ -89,60 +93,33 @@ function renderDebtCard(debt) {
     entityType: ENTITY_TYPES.DEBT
   });
   const displayRules = getDisplayRules(displayContext);
-  const debtDisplay = buildDebtEntityDisplay(item, null, displayRules);
 
-  const summaryParts = renderDisplaySummaryParts({
-    title: escapeHtml(item.title),
-    meta: debtDisplay.meta,
-    value: debtDisplay.value,
-    statsHtml: debtDisplay.statsHtml,
-    listMetrics: debtDisplay.listMetrics,
-    reserveLineHtml: debtDisplay.reserveLineHtml,
-    limitLineHtml: debtDisplay.limitLineHtml
-  });
+  let debtCategoryLabel = '';
+  if (item.type === 'manual_debt_event' && item.category) {
+    debtCategoryLabel = MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other;
+  }
 
-  const actionsHtml = renderEntityHeaderActions({
+  return renderEntityCard({
     moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
     entityType: ENTITY_TYPES.DEBT,
     entityId: item.id,
-    viewMode: displayContext.viewMode,
-    displayRules,
-    entityContext: { isOwedToUs, isManualDebt: isManual }
-  });
-
-  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.DEBT, {
-    viewMode: displayContext.viewMode,
-    entityContext: { isOwedToUs, isManualDebt: isManual }
-  });
-
-  const detailHtml = renderExpandedDetailView({
-    title: escapeHtml(item.title),
-    meta: debtDisplay.meta,
-    infoHtml: `
-      <div class="text-2xl font-bold text-slate-900">${formatEntityMoney(item.remainingAmount, 'RUB', expandedRules)}</div>
-      <p class="text-sm text-slate-500 mt-2">${formatEntityMoney(item.paidAmount, 'RUB', expandedRules)} / ${formatEntityMoney(item.amount, 'RUB', expandedRules)}</p>
-      ${item.comment ? `<p class="text-sm text-slate-500 mt-2">${escapeHtml(item.comment)}</p>` : ''}
-      ${isManual && item.eventDate ? `<p class="text-xs text-slate-400 mt-1">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
-    `,
-    actionsHtml: renderEntityExpandedActions({
-      entityType: ENTITY_TYPES.DEBT,
-      entityId: item.id,
-      viewMode: displayContext.viewMode,
-      entityContext: { isOwedToUs, isManualDebt: isManual }
-    }),
-    contentHtml: ''
-  });
-
-  return renderDisplayItem({
-    moduleKey: DISPLAY_MODULE_KEYS.DEBTS,
-    itemId: item.id,
     dataAttr: 'data-debt-id',
     dataValue: item.id,
-    summaryTitleHtml: summaryParts.titleHtml,
-    summaryMetricsHtml: summaryParts.metricsHtml,
-    actionsHtml,
-    detailHtml,
-    itemClass: 'bg-slate-50/50'
+    itemClass: 'bg-slate-50/50',
+    title: escapeHtml(item.title),
+    meta: debtCategoryLabel,
+    currency: 'RUB',
+    rawValues: {
+      paid: createRawMoney(item.paidAmount ?? 0),
+      total: createRawMoney(item.amount ?? 0)
+    },
+    context: {
+      comment: item.comment ?? '',
+      eventDateIso: isManual && item.eventDate ? item.eventDate : ''
+    },
+    entityContext: { isOwedToUs, isManualDebt: isManual },
+    viewMode: displayContext.viewMode,
+    displayRules
   });
 }
 

@@ -127,6 +127,11 @@ export function getLegacyProductionStorageKey() {
   return MODE_REGISTRY.production.financialStorageKey;
 }
 
+/** Persisted flag — legacy localStorage migration runs at most once per environment key. */
+export function getLegacyMigrationDoneKey() {
+  return `${validateEnvironmentIsolation().financialStorageKey}-legacy-migration-done`;
+}
+
 export function allowsLegacyStorageKeyMigration() {
   return validateEnvironmentIsolation().allowLegacyStorageKeyMigration;
 }

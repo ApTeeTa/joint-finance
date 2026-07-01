@@ -9,9 +9,6 @@ import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LAB
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderDisplayItem,
-  renderDisplaySummaryParts,
-  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
@@ -20,12 +17,9 @@ import {
 import {
   ENTITY_TYPES,
   getDisplayRules,
-  buildReserveEntityDisplay,
-  buildAccountEntityDisplay,
-  formatEntityMoney,
-  getExpandedDisplayRules
+  createRawMoney
 } from './uiRulesEngine.js';
-import { renderEntityHeaderActions, renderEntityExpandedActions, closeAllOverflowMenus } from './uiActionRenderer.js';
+import { renderEntityCard, closeAllOverflowMenus } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -409,8 +403,6 @@ function renderCategoryCard(state, category) {
 
   const limit = category.limit ?? 0;
   const spent = category.spent ?? 0;
-  const available = getCategoryAvailableDisplay(category);
-  const overflow = getLimitOverflow(category);
   const overLimit = isOverLimit(category);
   const cardClass = overLimit
     ? 'border-amber-400 bg-amber-50'
@@ -421,81 +413,29 @@ function renderCategoryCard(state, category) {
   });
   const displayRules = getDisplayRules(displayContext);
 
-  const reserveDisplay = buildReserveEntityDisplay({
-    limit,
-    reserve: category.reserved ?? 0,
-    spent,
-    primaryNumeric: available,
-    rules: displayRules,
-    entityType: ENTITY_TYPES.CATEGORY
-  });
-
-  const summaryParts = renderDisplaySummaryParts({
-    title: escapeHtml(category.name),
-    meta: reserveDisplay.meta,
-    value: reserveDisplay.value,
-    statsHtml: reserveDisplay.statsHtml,
-    listMetrics: reserveDisplay.listMetrics,
-    reserveLineHtml: reserveDisplay.reserveLineHtml,
-    limitLineHtml: reserveDisplay.limitLineHtml
-  });
-
-  const actionsHtml = renderEntityHeaderActions({
+  return renderEntityCard({
     moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
     entityType: ENTITY_TYPES.CATEGORY,
     entityId: category.id,
-    viewMode: displayContext.viewMode,
-    displayRules
-  });
-
-  const expandedActionsHtml = renderEntityExpandedActions({
-    entityType: ENTITY_TYPES.CATEGORY,
-    entityId: category.id,
-    viewMode: displayContext.viewMode,
-    entityContext: {}
-  });
-
-  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.CATEGORY, {
-    viewMode: displayContext.viewMode
-  });
-
-  const expandedInfoHtml = `
-    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-      <div><span class="text-slate-500">Потрачено</span><div class="font-medium text-slate-900">${formatEntityMoney(spent, 'RUB', expandedRules)}</div></div>
-      <div><span class="text-slate-500">Резерв</span><div class="font-medium text-slate-900">${formatEntityMoney(category.reserved ?? 0, 'RUB', expandedRules)}</div></div>
-      <div><span class="text-slate-500">Лимит</span><div class="font-medium text-slate-900">${formatEntityMoney(limit, 'RUB', expandedRules)}</div></div>
-      <div><span class="text-slate-500">Доступно</span><div class="font-medium text-slate-900">${formatEntityMoney(available, 'RUB', expandedRules)}</div></div>
-    </div>
-    ${overLimit ? `
-      <div class="mt-3 p-2.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-sm">
-        ⚠ Вы превысили лимит категории на ${formatMoney(overflow)}. Рекомендуется увеличить лимит.
-      </div>
-    ` : ''}
-  `;
-
-  const detailHtml = renderExpandedDetailView({
+    dataAttr: 'data-category-id',
+    dataValue: category.id,
+    itemClass: cardClass || 'bg-slate-50/50',
     title: escapeHtml(category.name),
-    meta: reserveDisplay.meta,
-    infoHtml: expandedInfoHtml,
-    actionsHtml: expandedActionsHtml,
-    contentHtml: `
+    meta: '',
+    currency: 'RUB',
+    rawValues: {
+      spent: createRawMoney(spent),
+      limit: createRawMoney(limit),
+      reserve: createRawMoney(category.reserved ?? 0)
+    },
+    viewMode: displayContext.viewMode,
+    displayRules,
+    expandedContentHtml: `
       <div>
         <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
         ${renderExpenses(state, category)}
       </div>
     `
-  });
-
-  return renderDisplayItem({
-    moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
-    itemId: category.id,
-    dataAttr: 'data-category-id',
-    dataValue: category.id,
-    summaryTitleHtml: summaryParts.titleHtml,
-    summaryMetricsHtml: summaryParts.metricsHtml,
-    actionsHtml,
-    detailHtml,
-    itemClass: cardClass || 'bg-slate-50/50'
   });
 }
 
@@ -507,44 +447,26 @@ function renderMiscCategoryCard(state, category) {
   });
   const displayRules = getDisplayRules(displayContext);
 
-  const isListMode = displayRules.viewMode === 'list';
-  const summaryParts = renderDisplaySummaryParts({
+  return renderEntityCard({
+    moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
+    entityType: ENTITY_TYPES.CATEGORY,
+    entityId: category.id,
+    dataAttr: 'data-category-id',
+    dataValue: category.id,
+    itemClass: 'bg-slate-50/50',
     title: escapeHtml(category.name),
     meta: 'Системная категория',
-    value: isListMode ? '' : formatEntityMoney(spent, 'RUB', displayRules),
-    listMetrics: isListMode ? formatEntityMoney(spent, 'RUB', displayRules) : ''
-  });
-
-  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.CATEGORY, {
-    viewMode: displayContext.viewMode
-  });
-
-  const detailHtml = renderExpandedDetailView({
-    title: escapeHtml(category.name),
-    meta: 'Системная категория',
-    infoHtml: `<div class="text-2xl font-bold text-slate-900">${formatEntityMoney(spent, 'RUB', expandedRules)}</div>`,
-    actionsHtml: renderEntityExpandedActions({
-      entityType: ENTITY_TYPES.CATEGORY,
-      entityId: category.id,
-      viewMode: displayContext.viewMode
-    }),
-    contentHtml: `
+    currency: 'RUB',
+    rawValues: { spent: createRawMoney(spent) },
+    flags: { isMiscCategory: true },
+    viewMode: displayContext.viewMode,
+    displayRules,
+    expandedContentHtml: `
       <div>
         <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">Последние операции</p>
         ${renderExpenses(state, category)}
       </div>
     `
-  });
-
-  return renderDisplayItem({
-    moduleKey: DISPLAY_MODULE_KEYS.CATEGORIES,
-    itemId: category.id,
-    dataAttr: 'data-category-id',
-    dataValue: category.id,
-    summaryTitleHtml: summaryParts.titleHtml,
-    summaryMetricsHtml: summaryParts.metricsHtml,
-    detailHtml,
-    itemClass: 'bg-slate-50/50'
   });
 }
 

@@ -1,11 +1,13 @@
 import {
   getFinancialStorageKey,
   getLegacyProductionStorageKey,
-  allowsLegacyStorageKeyMigration
+  allowsLegacyStorageKeyMigration,
+  getLegacyMigrationDoneKey
 } from '../config/environmentConfig.js';
 
 const STORAGE_KEY = getFinancialStorageKey();
 const LEGACY_PRODUCTION_STORAGE_KEY = getLegacyProductionStorageKey();
+const LEGACY_MIGRATION_DONE_KEY = getLegacyMigrationDoneKey();
 
 const VALID_TABS = ['accounts', 'categories', 'history', 'obligations', 'savings', 'debts', 'stats'];
 
@@ -147,6 +149,61 @@ export function applySharedSnapshot(state, snapshot) {
   state.exchangeRate = merged.exchangeRate;
 }
 
+function isLegacyMigrationDone() {
+  try {
+    return localStorage.getItem(LEGACY_MIGRATION_DONE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markLegacyMigrationDone() {
+  try {
+    localStorage.setItem(LEGACY_MIGRATION_DONE_KEY, '1');
+    localStorage.removeItem(LEGACY_PRODUCTION_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearLegacyMigrationCache() {
+  try {
+    localStorage.removeItem(LEGACY_PRODUCTION_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Full authority reset from remote snapshot — replaces memory, cache, legacy, queue.
+ * Remote snapshot is normalized; no merge with prior local entities.
+ */
+export async function hardResetStateFromRemote(state, snapshot) {
+  const normalized = normalizeSharedSnapshot(snapshot ?? getEmptySharedSnapshot());
+  hardReplaceStateFromRemoteSnapshot(state, normalized);
+  saveState(state, { skipRemote: true });
+  clearLegacyMigrationCache();
+
+  if (!isLegacyMigrationDone() && allowsLegacyStorageKeyMigration()) {
+    markLegacyMigrationDone();
+  }
+
+  const { clearOfflineQueue } = await import('../lib/offlineActionsQueue.js');
+  clearOfflineQueue();
+
+  return {
+    ok: true,
+    snapshot: normalized
+  };
+}
+
+/** Full replace from remote snapshot — alias for sync pipeline step 5. */
+export async function hardResetStateFromRemoteSnapshot(state, snapshot) {
+  return hardResetStateFromRemote(state, snapshot);
+}
+
 export function saveState(state, options = {}) {
   try {
     const payload = pickPersistedFields(state);
@@ -182,7 +239,7 @@ export function loadState() {
   try {
     let raw = localStorage.getItem(STORAGE_KEY);
 
-    if (!raw && allowsLegacyStorageKeyMigration()) {
+    if (!raw && allowsLegacyStorageKeyMigration() && !isLegacyMigrationDone()) {
       const legacyRaw = localStorage.getItem(LEGACY_PRODUCTION_STORAGE_KEY);
       if (legacyRaw) {
         try {
@@ -190,6 +247,7 @@ export function loadState() {
           if (hasPersistedData(legacy)) {
             raw = legacyRaw;
             localStorage.setItem(STORAGE_KEY, legacyRaw);
+            markLegacyMigrationDone();
           }
         } catch {
           // ignore invalid legacy cache

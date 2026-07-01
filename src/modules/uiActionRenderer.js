@@ -13,8 +13,21 @@ import {
   getAllowedDetailActions,
   logUiActionRule,
   logUiMigrationPass,
-  logUiUxFix
+  logUiUxFix,
+  buildEntityDisplay,
+  validateEntityRenderContract,
+  validateModuleRawValues,
+  formatEntityMoney,
+  getDisplayRules,
+  getExpandedDisplayRules,
+  readRawMoney,
+  RAW_VALUE_KEYS
 } from './uiRulesEngine.js';
+import {
+  renderDisplayItem,
+  renderDisplaySummaryParts,
+  renderExpandedDetailView
+} from './displayMode.js';
 import { renderUiIcon } from './uiIcons.js';
 
 const ICONS = {
@@ -407,6 +420,279 @@ export function renderEntityHeaderActions({
   );
 
   return html;
+}
+
+const SHORT_MONEY_K_PATTERN = /\d[\d\s]*[kK]\b/;
+
+function formatRawMetric(metric, rules, currency = 'RUB') {
+  if (!metric) {
+    return '—';
+  }
+  if (metric.type === 'money') {
+    return formatEntityMoney(metric.value, currency, rules);
+  }
+  if (metric.type === 'percent') {
+    return metric.value != null ? `${metric.value}%` : '—';
+  }
+  if (metric.type === 'number') {
+    return metric.value != null ? String(metric.value) : '—';
+  }
+  return '—';
+}
+
+function renderMetricsInline(metrics, rules, currency) {
+  return (metrics ?? []).map((metric) => formatRawMetric(metric, rules, currency)).join(' / ');
+}
+
+function resolveDisplayMeta(meta, rules, currency, entityType) {
+  if (meta) {
+    return meta;
+  }
+  if (entityType === ENTITY_TYPES.ACCOUNT) {
+    return rules?.labelDensity === 'verbose' ? `Баланс · ${currency}` : currency;
+  }
+  return '';
+}
+
+function renderContractSummaryParts(contract, rules, currency, entityType) {
+  const listMetrics = renderMetricsInline(contract.line3?.metrics ?? [], rules, currency);
+  const reserveLine = renderMetricsInline(contract.line3?.metrics ?? [], rules, currency);
+  const limitLine = renderMetricsInline(contract.line4?.metrics ?? [], rules, currency);
+  const hasLine4 = (contract.line4?.metrics?.length ?? 0) > 0;
+  const isListMode = rules?.viewMode === VIEW_MODES.LIST;
+
+  return renderDisplaySummaryParts({
+    title: contract.line1?.title ?? '',
+    meta: resolveDisplayMeta(contract.line1?.meta ?? '', rules, currency, entityType),
+    value: isListMode ? '' : (hasLine4 ? '' : listMetrics),
+    listMetrics: isListMode ? listMetrics : '',
+    reserveLineHtml: hasLine4 && !isListMode ? reserveLine : '',
+    limitLineHtml: hasLine4 && !isListMode ? limitLine : ''
+  });
+}
+
+function renderExpandedFieldsGrid(fields, rules, currency) {
+  const cells = (fields ?? []).map((field) => {
+    const formatted = formatRawMetric(field, rules, currency);
+    if (rules?.moneyFormat === 'full' && field.type === 'money' && SHORT_MONEY_K_PATTERN.test(formatted)) {
+      if (isExperiment()) {
+        console.warn('[UI RENDER CONTRACT]', { violation: 'expanded_k_format', key: field.key });
+      }
+    }
+    return `
+      <div>
+        <span class="text-slate-500">${field.label ?? field.key}</span>
+        <div class="font-medium text-slate-900">${formatted}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `<div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">${cells}</div>`;
+}
+
+function computeLimitOverflow(rawValues) {
+  const spent = readRawMoney(rawValues, RAW_VALUE_KEYS.SPENT);
+  const limit = readRawMoney(rawValues, RAW_VALUE_KEYS.LIMIT);
+  if (limit > 0 && spent > limit) {
+    return spent - limit;
+  }
+  return 0;
+}
+
+function formatIsoDateLabel(isoDate) {
+  if (!isoDate) {
+    return '—';
+  }
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+  return date.toLocaleDateString('ru-RU');
+}
+
+function renderExpandedPrimaryBlock(entityType, contract, rules, currency, rawValues = {}, context = {}) {
+  const fields = contract.expanded?.fields ?? [];
+
+  if (entityType === ENTITY_TYPES.SAVING) {
+    const accumulatedField = fields.find((field) => field.key === RAW_VALUE_KEYS.BALANCE);
+    const goalField = fields.find((field) => field.key === RAW_VALUE_KEYS.GOAL);
+    const progressField = fields.find((field) => field.key === 'progress');
+    const progressBar = progressField?.value != null
+      ? `
+        <div class="mt-2">
+          <div class="h-2 rounded-full bg-slate-200 overflow-hidden">
+            <div class="h-full rounded-full bg-primary-500 transition-all" style="width: ${progressField.value}%"></div>
+          </div>
+        </div>
+      `
+      : '';
+    const goalHtml = goalField && goalField.type === 'money'
+      ? `<p class="text-sm text-slate-500 mt-1">Цель: ${formatRawMetric(goalField, rules, currency)}</p>`
+      : '';
+
+    return `
+      ${progressBar}
+      <div class="text-2xl font-bold text-slate-900 mt-2">${formatRawMetric(accumulatedField, rules, currency)}</div>
+      ${goalHtml}
+    `;
+  }
+
+  if (entityType === ENTITY_TYPES.DEBT) {
+    const remainingField = fields.find((field) => field.key === 'remaining');
+    const paidField = fields.find((field) => field.key === RAW_VALUE_KEYS.PAID);
+    const totalField = fields.find((field) => field.key === RAW_VALUE_KEYS.TOTAL);
+    return `
+      <div class="text-2xl font-bold text-slate-900">${formatRawMetric(remainingField, rules, currency)}</div>
+      <p class="text-sm text-slate-500 mt-2">${formatRawMetric(paidField, rules, currency)} / ${formatRawMetric(totalField, rules, currency)}</p>
+      ${context.comment ? `<p class="text-sm text-slate-500 mt-2">${escapeHtml(context.comment)}</p>` : ''}
+      ${context.eventDateIso ? `<p class="text-xs text-slate-400 mt-1">${formatIsoDateLabel(context.eventDateIso)}</p>` : ''}
+    `;
+  }
+
+  if (entityType === ENTITY_TYPES.ACCOUNT || entityType === ENTITY_TYPES.CATEGORY) {
+    const primaryField = fields[0];
+    const primaryHtml = primaryField
+      ? `<div class="text-2xl font-bold text-slate-900">${formatRawMetric(primaryField, rules, currency)}</div>`
+      : '';
+    const limitOverflow = computeLimitOverflow(rawValues);
+    const warningHtml = limitOverflow > 0
+      ? `
+        <div class="mt-3 p-2.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-sm">
+          ⚠ Вы превысили лимит категории на ${formatEntityMoney(limitOverflow, currency, rules)}. Рекомендуется увеличить лимит.
+        </div>
+      `
+      : '';
+    const gridHtml = entityType === ENTITY_TYPES.CATEGORY && fields.length > 1
+      ? renderExpandedFieldsGrid(fields, rules, currency)
+      : '';
+
+    if (entityType === ENTITY_TYPES.CATEGORY && fields.length > 1) {
+      return `${gridHtml}${warningHtml}`;
+    }
+
+    return `${primaryHtml}${warningHtml}`;
+  }
+
+  if (entityType === ENTITY_TYPES.OBLIGATION) {
+    const dueHtml = context.paidUntil
+      ? `
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mt-3">
+          <div>
+            <span class="text-slate-500">Срок</span>
+            <div class="font-medium text-slate-900">${formatIsoDateLabel(context.paidUntil)}</div>
+          </div>
+        </div>
+      `
+      : '';
+    return `${renderExpandedFieldsGrid(fields, rules, currency)}${dueHtml}`;
+  }
+
+  const primaryField = fields[0];
+  return primaryField
+    ? `<div class="text-2xl font-bold text-slate-900">${formatRawMetric(primaryField, rules, currency)}</div>`
+    : '';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Single render pipeline: rawValues → buildEntityDisplay → uiActionRenderer → DOM.
+ */
+export function renderEntityCard({
+  moduleKey,
+  entityType,
+  entityId,
+  dataAttr,
+  dataValue,
+  itemClass = '',
+  title,
+  meta = '',
+  currency = 'RUB',
+  rawValues = {},
+  flags = {},
+  context = {},
+  entityContext = {},
+  viewMode,
+  displayRules,
+  expandedContentHtml = ''
+}) {
+  const rules = displayRules ?? getDisplayRules({
+    entityType,
+    viewMode: normalizeViewMode(viewMode ?? VIEW_MODES.MEDIUM)
+  });
+  const mode = rules.viewMode;
+
+  const rawValidation = validateModuleRawValues(rawValues);
+  if (!rawValidation.ok && isExperiment()) {
+    console.warn('[UI RAW VALUES]', { violations: rawValidation.violations });
+  }
+
+  const entity = {
+    entityType,
+    title,
+    meta,
+    rawValues,
+    flags
+  };
+
+  const contract = buildEntityDisplay(entity, mode);
+  validateEntityRenderContract(contract, mode, rawValues);
+
+  const summaryParts = renderContractSummaryParts(contract, rules, currency, entityType);
+
+  const actionsHtml = renderEntityHeaderActions({
+    moduleKey,
+    entityType,
+    entityId,
+    viewMode: mode,
+    displayRules: rules,
+    entityContext
+  });
+
+  const expandedRules = getExpandedDisplayRules(entityType, {
+    viewMode: mode,
+    entityContext
+  });
+
+  const expandedInfoHtml = renderExpandedPrimaryBlock(
+    entityType,
+    contract,
+    expandedRules,
+    currency,
+    rawValues,
+    context
+  );
+
+  const detailHtml = renderExpandedDetailView({
+    title: contract.line1.title,
+    meta: resolveDisplayMeta(contract.line1.meta, expandedRules, currency, entityType),
+    infoHtml: expandedInfoHtml,
+    actionsHtml: renderEntityExpandedActions({
+      entityType,
+      entityId,
+      viewMode: mode,
+      entityContext
+    }),
+    contentHtml: expandedContentHtml
+  });
+
+  return renderDisplayItem({
+    moduleKey,
+    itemId: entityId,
+    dataAttr,
+    dataValue: dataValue ?? entityId,
+    summaryTitleHtml: summaryParts.titleHtml,
+    summaryMetricsHtml: summaryParts.metricsHtml,
+    actionsHtml,
+    detailHtml,
+    itemClass
+  });
 }
 
 /** Expanded card: all actions as visible buttons (no overflow-only). */

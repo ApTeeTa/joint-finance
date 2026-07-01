@@ -1,5 +1,9 @@
 import { supabase } from './supabase.js';
-import { exportSharedSnapshot, hardReplaceStateFromRemoteSnapshot, getEmptySharedSnapshot } from '../modules/storage.js';
+import {
+  exportSharedSnapshot,
+  getEmptySharedSnapshot,
+  normalizeSharedSnapshot
+} from '../modules/storage.js';
 import {
   assertSnapshotId,
   getActiveSnapshotId,
@@ -14,12 +18,25 @@ const PUSH_DELAY_MS = 400;
 let pushTimer = null;
 let applyingRemote = false;
 let lastRemoteUpdatedAt = null;
+let lastRemoteSnapshot = null;
 let lastPushedAt = 0;
 let initialSyncDone = false;
 let experimentSeedAttempted = false;
 
 export function markInitialSyncDone() {
   initialSyncDone = true;
+}
+
+export function isInitialSyncDone() {
+  return initialSyncDone;
+}
+
+export function getLastRemoteUpdatedAt() {
+  return lastRemoteUpdatedAt;
+}
+
+export function getLastRemoteSnapshot() {
+  return lastRemoteSnapshot ? cloneSnapshotPayload(lastRemoteSnapshot) : null;
 }
 
 function cloneSnapshotPayload(payload) {
@@ -175,39 +192,31 @@ export async function pushSharedState(state) {
   return { ok: true, updatedAt: lastRemoteUpdatedAt };
 }
 
-export async function pullSharedStateInto(state) {
+export async function fetchRemoteSharedSnapshot() {
   const snapshotResult = await resolveActiveSnapshotRow();
   if (!snapshotResult.ok) {
     return { ok: false, error: snapshotResult.error };
   }
 
   const data = snapshotResult.data;
-  if (!data?.payload || !hasSharedData(data.payload)) {
-    applyingRemote = true;
-    hardReplaceStateFromRemoteSnapshot(state, getEmptySharedSnapshot());
-    applyingRemote = false;
-    lastRemoteUpdatedAt = data?.updated_at ?? null;
-    return { ok: true, hasData: false };
-  }
+  const payload = data?.payload && hasSharedData(data.payload)
+    ? data.payload
+    : getEmptySharedSnapshot();
+  const normalized = normalizeSharedSnapshot(payload);
 
-  if (
-    !snapshotResult.seededFromProduction
-    && lastRemoteUpdatedAt
-    && data.updated_at === lastRemoteUpdatedAt
-  ) {
-    return { ok: true, hasData: true, skipped: true };
-  }
+  lastRemoteSnapshot = normalized;
+  lastRemoteUpdatedAt = data?.updated_at ?? null;
 
-  applyingRemote = true;
-  hardReplaceStateFromRemoteSnapshot(state, data.payload);
-  applyingRemote = false;
-  lastRemoteUpdatedAt = data.updated_at;
   return {
     ok: true,
-    hasData: true,
-    updatedAt: data.updated_at,
-    seededFromProduction: snapshotResult.seededFromProduction === true
+    snapshot: normalized
   };
+}
+
+/** Fetch-only remote read — does not mutate in-memory state. */
+export async function pullSharedStateInto(_state) {
+  void _state;
+  return fetchRemoteSharedSnapshot();
 }
 
 export async function clearRemoteSharedState() {
@@ -258,16 +267,7 @@ export function subscribeSharedState(state, onChange) {
         if (rowId !== activeSnapshotId) {
           return;
         }
-
-        const updatedAt = payload.new?.updated_at;
-        if (updatedAt && Date.now() - lastPushedAt < 1500) {
-          return;
-        }
-
-        const result = await pullSharedStateInto(state);
-        if (result.ok && !result.skipped) {
-          onChange(result);
-        }
+        onChange();
       }
     )
     .subscribe();

@@ -13,15 +13,24 @@ import { renderDebts, initDebtsHandlers } from './modules/debts.js';
 import { renderObligations, initObligationsHandlers } from './modules/obligations.js';
 import { renderStats, initStatsHandlers } from './modules/stats.js';
 import { reconcileLegacyTransactions } from './modules/transactions.js';
-import { saveState, loadState, clearState, getEmptySharedSnapshot, hardReplaceStateFromRemoteSnapshot } from './modules/storage.js';
+import { saveState, loadState, clearState, hardResetStateFromRemoteSnapshot } from './modules/storage.js';
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
-import { isExperiment } from './config/environmentConfig.js';
 import { validateEnvironmentIsolation } from './config/environmentConfig.js';
-import { pullSharedStateInto, subscribeSharedState, clearRemoteSharedState, markInitialSyncDone } from './lib/stateRemote.js';
+import {
+  fetchRemoteSharedSnapshot,
+  subscribeSharedState,
+  clearRemoteSharedState,
+  markInitialSyncDone,
+  getLastRemoteSnapshot
+} from './lib/stateRemote.js';
+import {
+  validateNoStaleEntities,
+  applyStatePatch,
+  hasSharedStateData
+} from './lib/stateAuthority.js';
 import {
   flushOfflineQueue,
-  hasPendingOfflineActions,
   initOfflineSyncQueue,
   loadOfflineQueue,
   clearOfflineQueue
@@ -261,49 +270,54 @@ function refreshFromRemote() {
   renderTab(state.activeTab || 'accounts');
 }
 
-function onRemoteStateMerged() {
-  reconcileLegacyTransactions(state);
-  saveState(state, { skipRemote: true });
-  refreshFromRemote();
-}
-
-function applyRemotePullResult(result) {
-  if (!result?.ok || result.skipped) {
-    return;
-  }
-
-  if (!result.hasData) {
-    hardReplaceStateFromRemoteSnapshot(state, getEmptySharedSnapshot());
-    if (isExperiment()) {
-      console.info('[UI RULE FIX]', { fix: 'empty_remote_hard_reset', status: 'applied' });
-    }
-  }
-
-  onRemoteStateMerged();
-}
-
 async function syncFromRemote() {
   try {
-    if (hasPendingOfflineActions()) {
-      const flushResult = await flushOfflineQueue(state);
-      if (!flushResult.ok || hasPendingOfflineActions()) {
-        return { ok: true, skipped: true, reason: 'offline_queue_pending' };
-      }
-      if (flushResult.flushed) {
-        saveState(state, { skipRemote: true });
-        refreshFromRemote();
-      }
-    }
-
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       return { ok: true, skipped: true, reason: 'offline' };
     }
 
-    const result = await pullSharedStateInto(state);
-    applyRemotePullResult(result);
-    return result;
-  } finally {
+    loadOfflineQueue();
+
+    const priorRemoteSnapshot = getLastRemoteSnapshot();
+    if (hasSharedStateData(state) && priorRemoteSnapshot) {
+      const bootstrapPatch = validateNoStaleEntities(state, priorRemoteSnapshot);
+      applyStatePatch(state, bootstrapPatch);
+    }
+
+    const flushResult = await flushOfflineQueue(state);
+    if (!flushResult.ok && !flushResult.skipped) {
+      return { ok: false, error: flushResult.error, reason: 'offline_queue_flush_failed' };
+    }
+
+    clearOfflineQueue();
+
+    const fetchResult = await fetchRemoteSharedSnapshot();
+    if (!fetchResult.ok) {
+      return fetchResult;
+    }
+
+    const resetResult = await hardResetStateFromRemoteSnapshot(state, fetchResult.snapshot);
+    if (!resetResult.ok) {
+      return { ok: false, error: 'hard_reset_failed' };
+    }
+
+    const patch = validateNoStaleEntities(state, fetchResult.snapshot);
+    applyStatePatch(state, patch);
+    saveState(state, { skipRemote: true });
     markInitialSyncDone();
+
+    console.log('[SYNC OK]', {
+      accounts: state.accounts.length,
+      categories: state.categories.length,
+      debts: state.debts.length,
+      obligations: state.obligations.length,
+      savings: state.savings.length
+    });
+
+    refreshFromRemote();
+    return { ok: true, snapshot: fetchResult.snapshot };
+  } catch (error) {
+    return { ok: false, error: error?.message ?? String(error) };
   }
 }
 
@@ -319,11 +333,10 @@ async function init() {
   initDisplayModeSystem();
   initDisplayModeRefresh();
   applyLoadedState(loadState());
+  reconcileLegacyTransactions(state);
   loadOfflineQueue();
   initOfflineSyncQueue(state, {
     onFlushed: async () => {
-      saveState(state, { skipRemote: true });
-      refreshFromRemote();
       await syncFromRemote();
     }
   });
@@ -333,7 +346,9 @@ async function init() {
   initTabHandlers();
   renderTab(state.activeTab || 'accounts');
 
-  subscribeSharedState(state, applyRemotePullResult);
+  subscribeSharedState(state, async () => {
+    await syncFromRemote();
+  });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;

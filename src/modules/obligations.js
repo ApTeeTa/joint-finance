@@ -13,9 +13,6 @@ import {
 import { openModal, closeModal, isWithinAppUi, relocateModals, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderDisplayItem,
-  renderDisplaySummaryParts,
-  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
@@ -24,11 +21,9 @@ import {
 import {
   ENTITY_TYPES,
   getDisplayRules,
-  buildReserveEntityDisplay,
-  formatEntityMoney,
-  getExpandedDisplayRules
+  createRawMoney
 } from './uiRulesEngine.js';
-import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
+import { renderEntityCard } from './uiActionRenderer.js';
 
 export {
   computePaidUntilFromPayments,
@@ -302,78 +297,34 @@ function renderObligationCard(state, obligation) {
     (sum, payment) => sum + (Number(payment.amount) || 0),
     0
   );
-  const primaryAmount = item.targetAmount != null && item.targetAmount > 0
-    ? item.targetAmount
-    : reservedAmount;
 
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.OBLIGATIONS, {
     entityType: ENTITY_TYPES.OBLIGATION
   });
   const displayRules = getDisplayRules(displayContext);
 
-  const reserveDisplay = buildReserveEntityDisplay({
-    limit: item.targetAmount ?? 0,
-    reserve: reservedAmount,
-    spent: paymentsTotal,
-    primaryNumeric: primaryAmount,
-    rules: displayRules,
-    entityType: ENTITY_TYPES.OBLIGATION
-  });
-
   const dueMeta = formatObligationDueMeta(item);
-  const combinedMeta = [reserveDisplay.meta, dueMeta].filter(Boolean).join(' · ');
 
-  const summaryParts = renderDisplaySummaryParts({
-    title: escapeHtml(item.name),
-    meta: combinedMeta,
-    value: reserveDisplay.value,
-    statsHtml: reserveDisplay.statsHtml,
-    listMetrics: reserveDisplay.listMetrics,
-    reserveLineHtml: reserveDisplay.reserveLineHtml,
-    limitLineHtml: reserveDisplay.limitLineHtml
-  });
-
-  const actionsHtml = renderEntityHeaderActions({
+  return renderEntityCard({
     moduleKey: DISPLAY_MODULE_KEYS.OBLIGATIONS,
     entityType: ENTITY_TYPES.OBLIGATION,
     entityId: item.id,
-    viewMode: displayContext.viewMode,
-    displayRules
-  });
-
-  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.OBLIGATION, {
-    viewMode: displayContext.viewMode
-  });
-
-  const detailHtml = renderExpandedDetailView({
-    title: escapeHtml(item.name),
-    meta: combinedMeta,
-    infoHtml: `
-      <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <div><span class="text-slate-500">Резерв</span><div class="font-medium">${formatEntityMoney(reservedAmount, 'RUB', expandedRules)}</div></div>
-        <div><span class="text-slate-500">Оплачено</span><div class="font-medium">${formatEntityMoney(paymentsTotal, 'RUB', expandedRules)}</div></div>
-        ${item.targetAmount ? `<div><span class="text-slate-500">Сумма</span><div class="font-medium">${formatEntityMoney(item.targetAmount, 'RUB', expandedRules)}</div></div>` : ''}
-        <div><span class="text-slate-500">Срок</span><div class="font-medium">${formatObligationDueMeta(item)}</div></div>
-      </div>
-    `,
-    actionsHtml: renderEntityExpandedActions({
-      entityType: ENTITY_TYPES.OBLIGATION,
-      entityId: item.id,
-      viewMode: displayContext.viewMode
-    }),
-    contentHtml: ''
-  });
-
-  return renderDisplayItem({
-    moduleKey: DISPLAY_MODULE_KEYS.OBLIGATIONS,
-    itemId: item.id,
     dataAttr: 'data-obligation-id',
     dataValue: item.id,
-    summaryTitleHtml: summaryParts.titleHtml,
-    summaryMetricsHtml: summaryParts.metricsHtml,
-    actionsHtml,
-    detailHtml,
-    itemClass: cardClass
+    itemClass: cardClass,
+    title: escapeHtml(item.name),
+    meta: dueMeta,
+    currency: 'RUB',
+    rawValues: {
+      spent: createRawMoney(paymentsTotal),
+      limit: createRawMoney(item.targetAmount ?? 0),
+      reserve: createRawMoney(reservedAmount)
+    },
+    context: {
+      paidUntil: computePaidUntilFromPayments(item)
+    },
+    viewMode: displayContext.viewMode,
+    displayRules
   });
 }
 

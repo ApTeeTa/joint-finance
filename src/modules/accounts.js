@@ -22,9 +22,6 @@ import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderDisplayItem,
-  renderDisplaySummaryParts,
-  renderExpandedDetailView,
   renderDisplayModeRoot,
   renderModuleToolbar,
   getModuleDisplayContext
@@ -32,13 +29,10 @@ import {
 import {
   ENTITY_TYPES,
   getDisplayRules,
-  getAllowedDetailActions,
-  buildAccountEntityDisplay,
-  formatEntityMoney,
-  getExpandedDisplayRules,
-  logUiRulesActive
+  logUiRulesActive,
+  createRawMoney
 } from './uiRulesEngine.js';
-import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
+import { renderEntityCard } from './uiActionRenderer.js';
 
 const OWNER_LABELS = {
   husband: 'Муж',
@@ -738,46 +732,8 @@ function resolveAccountsDisplayRules(displayContext = resolveAccountsDisplayCont
 }
 
 function formatAccountDisplayMoney(amount, currency, displayRules) {
-  return formatEntityMoney(amount, currency, displayRules ?? null);
-}
-
-function buildAccountSummaryMeta(currency, displayRules) {
-  if (!displayRules) {
-    return '';
-  }
-  if (displayRules.labelDensity === 'verbose') {
-    return `Баланс · ${currency}`;
-  }
-  if (displayRules.showSecondaryValues) {
-    return currency;
-  }
-  return '';
-}
-
-function renderAccountDetailActions(account, displayRules) {
-  const detailActions = displayRules?.allowedDetailActions
-    ?? getAllowedDetailActions(ENTITY_TYPES.ACCOUNT)
-    ?? [];
-
-  return `
-    <div class="display-item-detail-actions mb-3">
-      ${detailActions.includes('open-topup') ? `
-      <button
-        type="button"
-        data-action="open-topup"
-        data-account-id="${account.id}"
-        class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-      >Пополнить</button>
-      ` : ''}
-      ${detailActions.includes('open-transfer') ? `
-      <button
-        type="button"
-        data-action="open-transfer"
-        data-account-id="${account.id}"
-        class="px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-      >Перевести</button>
-      ` : ''}
-    </div>`;
+  void displayRules;
+  return formatMoney(amount, currency);
 }
 
 function renderAccountCard(state, account, displayContext, displayRules) {
@@ -787,60 +743,25 @@ function renderAccountCard(state, account, displayContext, displayRules) {
   const context = displayContext ?? resolveAccountsDisplayContext();
   const rules = displayRules ?? getDisplayRules(context);
 
-  const accountDisplay = buildAccountEntityDisplay({
-    balance: account.balance,
-    currency,
-    rules
-  });
-
-  const summaryParts = renderDisplaySummaryParts({
-    title: `${ownerIcon} ${escapeHtml(account.name)}`,
-    meta: buildAccountSummaryMeta(currency, rules),
-    value: accountDisplay.value,
-    listMetrics: accountDisplay.listMetrics,
-    reserveLineHtml: accountDisplay.reserveLineHtml,
-    limitLineHtml: accountDisplay.limitLineHtml
-  });
-
-  const actionsHtml = renderEntityHeaderActions({
+  return renderEntityCard({
     moduleKey: DISPLAY_MODULE_KEYS.ACCOUNTS,
     entityType: ENTITY_TYPES.ACCOUNT,
     entityId: account.id,
-    viewMode: context.viewMode,
-    displayRules: rules
-  });
-
-  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.ACCOUNT, {
-    viewMode: context.viewMode
-  });
-
-  const detailHtml = renderExpandedDetailView({
+    dataAttr: 'data-account-id',
+    dataValue: account.id,
+    itemClass: 'bg-slate-50/50',
     title: `${ownerIcon} ${escapeHtml(account.name)}`,
-    meta: buildAccountSummaryMeta(currency, expandedRules),
-    infoHtml: `<div class="text-2xl font-bold text-slate-900">${formatEntityMoney(account.balance, currency, expandedRules)}</div>`,
-    actionsHtml: renderEntityExpandedActions({
-      entityType: ENTITY_TYPES.ACCOUNT,
-      entityId: account.id,
-      viewMode: context.viewMode
-    }),
-    contentHtml: `
+    meta: currency,
+    currency,
+    rawValues: { balance: createRawMoney(account.balance ?? 0) },
+    viewMode: context.viewMode,
+    displayRules: rules,
+    expandedContentHtml: `
       <div class="min-w-0">
         <p class="text-xs font-medium text-slate-400 uppercase tracking-wide">История</p>
         ${renderOperations(state, account.id, currency)}
       </div>
     `
-  });
-
-  return renderDisplayItem({
-    moduleKey: DISPLAY_MODULE_KEYS.ACCOUNTS,
-    itemId: account.id,
-    dataAttr: 'data-account-id',
-    dataValue: account.id,
-    summaryTitleHtml: summaryParts.titleHtml,
-    summaryMetricsHtml: summaryParts.metricsHtml,
-    actionsHtml,
-    detailHtml,
-    itemClass: 'bg-slate-50/50'
   });
 }
 

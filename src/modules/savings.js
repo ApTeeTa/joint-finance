@@ -13,16 +13,13 @@ import {
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
-  renderDisplayItem,
-  renderDisplaySummaryParts,
-  renderExpandedDetailView,
   renderDisplayModeList,
   renderDisplayModeRoot,
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { ENTITY_TYPES, getDisplayRules, buildSavingEntityDisplay, formatEntityMoney, getExpandedDisplayRules } from './uiRulesEngine.js';
-import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
+import { ENTITY_TYPES, getDisplayRules, createRawMoney, createRawPercent } from './uiRulesEngine.js';
+import { renderEntityCard } from './uiActionRenderer.js';
 
 const DEADLINE_LABELS = {
   none: 'Без срока',
@@ -177,33 +174,15 @@ export function getRecommendedMonthlyPayment(saving) {
   };
 }
 
-function renderRecommendedMonthlyPaymentRow(saving, formatMoneyFn = formatMoney, rules = null) {
+function getRecommendedMonthlyPaymentRaw(saving) {
   const recommendation = getRecommendedMonthlyPayment(saving);
-  if (!recommendation) {
-    return [];
+  if (!recommendation || recommendation.kind === 'overdue') {
+    return null;
   }
-
   if (recommendation.kind === 'completed') {
-    return [{
-      label: 'Рекомендуемый платёж',
-      formattedValue: formatMoneyFn(0, 'RUB', rules),
-      numericValue: 0
-    }];
+    return 0;
   }
-
-  if (recommendation.kind === 'overdue') {
-    return [{
-      label: 'Рекомендуемый платёж',
-      formattedValue: 'Цель просрочена',
-      numericValue: null
-    }];
-  }
-
-  return [{
-    label: 'Рекомендуемый платёж',
-    formattedValue: `${formatMoneyFn(recommendation.amount, 'RUB', rules)} / мес`,
-    numericValue: recommendation.amount
-  }];
+  return recommendation.amount;
 }
 
 function isGoalReached(saving) {
@@ -397,82 +376,37 @@ function getSavingProgress(item) {
 
 function renderSavingCard(state, saving) {
   const item = normalizeSaving(saving);
-  const { accumulated, targetAmount, percent } = getSavingProgress(item);
   const goalReached = isGoalReached(item);
-  const progressBar = percent != null
-    ? `
-      <div class="mt-2">
-        <div class="h-2 rounded-full bg-slate-200 overflow-hidden">
-          <div class="h-full rounded-full bg-primary-500 transition-all" style="width: ${percent}%"></div>
-        </div>
-      </div>
-    `
-    : '';
+  const recommendedPayment = getRecommendedMonthlyPaymentRaw(item);
+  const balance = getSavingAccumulated(item);
+  const goal = item.targetAmount ?? 0;
+  const percent = goal > 0 ? Math.min(100, Math.round((balance / goal) * 100)) : null;
 
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.SAVINGS, {
     entityType: ENTITY_TYPES.SAVING
   });
   const displayRules = getDisplayRules(displayContext);
 
-  const savingDisplay = buildSavingEntityDisplay(item, null, displayRules, {
-    accumulated,
-    targetAmount,
-    percent,
-    goalReached,
-    extraStatsRows: renderRecommendedMonthlyPaymentRow(item, formatEntityMoney, displayRules)
-  });
-
-  const summaryParts = renderDisplaySummaryParts({
-    title: escapeHtml(item.name),
-    meta: savingDisplay.meta,
-    value: savingDisplay.value,
-    statsHtml: savingDisplay.statsHtml,
-    listMetrics: savingDisplay.listMetrics,
-    reserveLineHtml: savingDisplay.reserveLineHtml,
-    limitLineHtml: savingDisplay.limitLineHtml
-  });
-
-  const actionsHtml = renderEntityHeaderActions({
+  return renderEntityCard({
     moduleKey: DISPLAY_MODULE_KEYS.SAVINGS,
     entityType: ENTITY_TYPES.SAVING,
     entityId: item.id,
-    viewMode: displayContext.viewMode,
-    displayRules,
-    entityContext: { goalReached }
-  });
-
-  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.SAVING, {
-    viewMode: displayContext.viewMode,
-    entityContext: { goalReached }
-  });
-
-  const detailHtml = renderExpandedDetailView({
-    title: escapeHtml(item.name),
-    meta: savingDisplay.meta,
-    infoHtml: `
-      ${progressBar}
-      <div class="text-2xl font-bold text-slate-900 mt-2">${formatEntityMoney(accumulated, 'RUB', expandedRules)}</div>
-      ${targetAmount ? `<p class="text-sm text-slate-500 mt-1">Цель: ${formatEntityMoney(targetAmount, 'RUB', expandedRules)}</p>` : ''}
-    `,
-    actionsHtml: renderEntityExpandedActions({
-      entityType: ENTITY_TYPES.SAVING,
-      entityId: item.id,
-      viewMode: displayContext.viewMode,
-      entityContext: { goalReached }
-    }),
-    contentHtml: ''
-  });
-
-  return renderDisplayItem({
-    moduleKey: DISPLAY_MODULE_KEYS.SAVINGS,
-    itemId: item.id,
     dataAttr: 'data-saving-id',
     dataValue: item.id,
-    summaryTitleHtml: summaryParts.titleHtml,
-    summaryMetricsHtml: summaryParts.metricsHtml,
-    actionsHtml,
-    detailHtml,
-    itemClass: 'bg-slate-50/50'
+    itemClass: 'bg-slate-50/50',
+    title: escapeHtml(item.name),
+    meta: '',
+    currency: 'RUB',
+    rawValues: {
+      balance: createRawMoney(balance),
+      goal: createRawMoney(goal),
+      percent: createRawPercent(percent),
+      ...(recommendedPayment != null ? { recommendedPayment: createRawMoney(recommendedPayment) } : {})
+    },
+    flags: { goalReached },
+    entityContext: { goalReached },
+    viewMode: displayContext.viewMode,
+    displayRules
   });
 }
 
