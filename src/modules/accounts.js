@@ -29,11 +29,13 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatDisplayMoney } from './formatUi.js';
 import {
   ENTITY_TYPES,
   getDisplayRules,
   getAllowedDetailActions,
+  buildAccountEntityDisplay,
+  formatEntityMoney,
+  getExpandedDisplayRules,
   logUiRulesActive
 } from './uiRulesEngine.js';
 import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
@@ -736,7 +738,7 @@ function resolveAccountsDisplayRules(displayContext = resolveAccountsDisplayCont
 }
 
 function formatAccountDisplayMoney(amount, currency, displayRules) {
-  return formatDisplayMoney(amount, currency, displayRules ?? null);
+  return formatEntityMoney(amount, currency, displayRules ?? null);
 }
 
 function buildAccountSummaryMeta(currency, displayRules) {
@@ -785,10 +787,19 @@ function renderAccountCard(state, account, displayContext, displayRules) {
   const context = displayContext ?? resolveAccountsDisplayContext();
   const rules = displayRules ?? getDisplayRules(context);
 
+  const accountDisplay = buildAccountEntityDisplay({
+    balance: account.balance,
+    currency,
+    rules
+  });
+
   const summaryParts = renderDisplaySummaryParts({
     title: `${ownerIcon} ${escapeHtml(account.name)}`,
     meta: buildAccountSummaryMeta(currency, rules),
-    value: formatAccountDisplayMoney(account.balance, currency, rules)
+    value: accountDisplay.value,
+    listMetrics: accountDisplay.listMetrics,
+    reserveLineHtml: accountDisplay.reserveLineHtml,
+    limitLineHtml: accountDisplay.limitLineHtml
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -799,10 +810,14 @@ function renderAccountCard(state, account, displayContext, displayRules) {
     displayRules: rules
   });
 
+  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.ACCOUNT, {
+    viewMode: context.viewMode
+  });
+
   const detailHtml = renderExpandedDetailView({
     title: `${ownerIcon} ${escapeHtml(account.name)}`,
-    meta: buildAccountSummaryMeta(currency, rules),
-    infoHtml: `<div class="text-2xl font-bold text-slate-900">${formatAccountDisplayMoney(account.balance, currency, rules)}</div>`,
+    meta: buildAccountSummaryMeta(currency, expandedRules),
+    infoHtml: `<div class="text-2xl font-bold text-slate-900">${formatEntityMoney(account.balance, currency, expandedRules)}</div>`,
     actionsHtml: renderEntityExpandedActions({
       entityType: ENTITY_TYPES.ACCOUNT,
       entityId: account.id,

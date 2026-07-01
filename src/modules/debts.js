@@ -26,8 +26,7 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatDisplayMoney } from './formatUi.js';
-import { ENTITY_TYPES, getDisplayRules, buildDebtEntityDisplay } from './uiRulesEngine.js';
+import { ENTITY_TYPES, getDisplayRules, buildDebtEntityDisplay, formatEntityMoney, getExpandedDisplayRules } from './uiRulesEngine.js';
 import { renderEntityHeaderActions, renderEntityExpandedActions, closeAllOverflowMenus } from './uiActionRenderer.js';
 
 const TYPE_LABELS = {
@@ -90,13 +89,16 @@ function renderDebtCard(debt) {
     entityType: ENTITY_TYPES.DEBT
   });
   const displayRules = getDisplayRules(displayContext);
-  const debtDisplay = buildDebtEntityDisplay(item, formatDisplayMoney, displayRules);
+  const debtDisplay = buildDebtEntityDisplay(item, null, displayRules);
 
   const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(item.title),
     meta: debtDisplay.meta,
     value: debtDisplay.value,
-    statsHtml: debtDisplay.statsHtml
+    statsHtml: debtDisplay.statsHtml,
+    listMetrics: debtDisplay.listMetrics,
+    reserveLineHtml: debtDisplay.reserveLineHtml,
+    limitLineHtml: debtDisplay.limitLineHtml
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -108,11 +110,17 @@ function renderDebtCard(debt) {
     entityContext: { isOwedToUs, isManualDebt: isManual }
   });
 
+  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.DEBT, {
+    viewMode: displayContext.viewMode,
+    entityContext: { isOwedToUs, isManualDebt: isManual }
+  });
+
   const detailHtml = renderExpandedDetailView({
     title: escapeHtml(item.title),
     meta: debtDisplay.meta,
     infoHtml: `
-      <div class="text-2xl font-bold text-slate-900">${debtDisplay.value}</div>
+      <div class="text-2xl font-bold text-slate-900">${formatEntityMoney(item.remainingAmount, 'RUB', expandedRules)}</div>
+      <p class="text-sm text-slate-500 mt-2">${formatEntityMoney(item.paidAmount, 'RUB', expandedRules)} / ${formatEntityMoney(item.amount, 'RUB', expandedRules)}</p>
       ${item.comment ? `<p class="text-sm text-slate-500 mt-2">${escapeHtml(item.comment)}</p>` : ''}
       ${isManual && item.eventDate ? `<p class="text-xs text-slate-400 mt-1">${new Date(item.eventDate).toLocaleDateString('ru-RU')}</p>` : ''}
     `,

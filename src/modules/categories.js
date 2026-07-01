@@ -17,11 +17,13 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatDisplayMoney } from './formatUi.js';
 import {
   ENTITY_TYPES,
   getDisplayRules,
-  buildReserveEntityDisplay
+  buildReserveEntityDisplay,
+  buildAccountEntityDisplay,
+  formatEntityMoney,
+  getExpandedDisplayRules
 } from './uiRulesEngine.js';
 import { renderEntityHeaderActions, renderEntityExpandedActions, closeAllOverflowMenus } from './uiActionRenderer.js';
 
@@ -424,8 +426,8 @@ function renderCategoryCard(state, category) {
     reserve: category.reserved ?? 0,
     spent,
     primaryNumeric: available,
-    formatMoney: formatDisplayMoney,
-    rules: displayRules
+    rules: displayRules,
+    entityType: ENTITY_TYPES.CATEGORY
   });
 
   const summaryParts = renderDisplaySummaryParts({
@@ -433,9 +435,9 @@ function renderCategoryCard(state, category) {
     meta: reserveDisplay.meta,
     value: reserveDisplay.value,
     statsHtml: reserveDisplay.statsHtml,
+    listMetrics: reserveDisplay.listMetrics,
     reserveLineHtml: reserveDisplay.reserveLineHtml,
-    limitLineHtml: reserveDisplay.limitLineHtml,
-    listMetrics: reserveDisplay.listMetrics
+    limitLineHtml: reserveDisplay.limitLineHtml
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -453,12 +455,16 @@ function renderCategoryCard(state, category) {
     entityContext: {}
   });
 
+  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.CATEGORY, {
+    viewMode: displayContext.viewMode
+  });
+
   const expandedInfoHtml = `
     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-      <div><span class="text-slate-500">Потрачено</span><div class="font-medium text-slate-900">${formatDisplayMoney(spent, 'RUB', displayRules)}</div></div>
-      <div><span class="text-slate-500">Резерв</span><div class="font-medium text-slate-900">${formatDisplayMoney(category.reserved ?? 0, 'RUB', displayRules)}</div></div>
-      <div><span class="text-slate-500">Лимит</span><div class="font-medium text-slate-900">${formatDisplayMoney(limit, 'RUB', displayRules)}</div></div>
-      <div><span class="text-slate-500">Доступно</span><div class="font-medium text-slate-900">${formatDisplayMoney(available, 'RUB', displayRules)}</div></div>
+      <div><span class="text-slate-500">Потрачено</span><div class="font-medium text-slate-900">${formatEntityMoney(spent, 'RUB', expandedRules)}</div></div>
+      <div><span class="text-slate-500">Резерв</span><div class="font-medium text-slate-900">${formatEntityMoney(category.reserved ?? 0, 'RUB', expandedRules)}</div></div>
+      <div><span class="text-slate-500">Лимит</span><div class="font-medium text-slate-900">${formatEntityMoney(limit, 'RUB', expandedRules)}</div></div>
+      <div><span class="text-slate-500">Доступно</span><div class="font-medium text-slate-900">${formatEntityMoney(available, 'RUB', expandedRules)}</div></div>
     </div>
     ${overLimit ? `
       <div class="mt-3 p-2.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-sm">
@@ -501,15 +507,22 @@ function renderMiscCategoryCard(state, category) {
   });
   const displayRules = getDisplayRules(displayContext);
 
+  const isListMode = displayRules.viewMode === 'list';
   const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(category.name),
     meta: 'Системная категория',
-    value: formatDisplayMoney(spent, 'RUB', displayRules)
+    value: isListMode ? '' : formatEntityMoney(spent, 'RUB', displayRules),
+    listMetrics: isListMode ? formatEntityMoney(spent, 'RUB', displayRules) : ''
+  });
+
+  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.CATEGORY, {
+    viewMode: displayContext.viewMode
   });
 
   const detailHtml = renderExpandedDetailView({
     title: escapeHtml(category.name),
     meta: 'Системная категория',
+    infoHtml: `<div class="text-2xl font-bold text-slate-900">${formatEntityMoney(spent, 'RUB', expandedRules)}</div>`,
     actionsHtml: renderEntityExpandedActions({
       entityType: ENTITY_TYPES.CATEGORY,
       entityId: category.id,

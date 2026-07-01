@@ -21,8 +21,13 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatDisplayMoney } from './formatUi.js';
-import { ENTITY_TYPES, getDisplayRules, buildReserveEntityDisplay } from './uiRulesEngine.js';
+import {
+  ENTITY_TYPES,
+  getDisplayRules,
+  buildReserveEntityDisplay,
+  formatEntityMoney,
+  getExpandedDisplayRules
+} from './uiRulesEngine.js';
 import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
 
 export {
@@ -311,8 +316,8 @@ function renderObligationCard(state, obligation) {
     reserve: reservedAmount,
     spent: paymentsTotal,
     primaryNumeric: primaryAmount,
-    formatMoney: formatDisplayMoney,
-    rules: displayRules
+    rules: displayRules,
+    entityType: ENTITY_TYPES.OBLIGATION
   });
 
   const dueMeta = formatObligationDueMeta(item);
@@ -323,9 +328,9 @@ function renderObligationCard(state, obligation) {
     meta: combinedMeta,
     value: reserveDisplay.value,
     statsHtml: reserveDisplay.statsHtml,
+    listMetrics: reserveDisplay.listMetrics,
     reserveLineHtml: reserveDisplay.reserveLineHtml,
-    limitLineHtml: reserveDisplay.limitLineHtml,
-    listMetrics: reserveDisplay.listMetrics
+    limitLineHtml: reserveDisplay.limitLineHtml
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -336,14 +341,18 @@ function renderObligationCard(state, obligation) {
     displayRules
   });
 
+  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.OBLIGATION, {
+    viewMode: displayContext.viewMode
+  });
+
   const detailHtml = renderExpandedDetailView({
     title: escapeHtml(item.name),
     meta: combinedMeta,
     infoHtml: `
       <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <div><span class="text-slate-500">Резерв</span><div class="font-medium">${formatDisplayMoney(reservedAmount, 'RUB', displayRules)}</div></div>
-        <div><span class="text-slate-500">Оплачено</span><div class="font-medium">${formatDisplayMoney(paymentsTotal, 'RUB', displayRules)}</div></div>
-        ${item.targetAmount ? `<div><span class="text-slate-500">Сумма</span><div class="font-medium">${formatDisplayMoney(item.targetAmount, 'RUB', displayRules)}</div></div>` : ''}
+        <div><span class="text-slate-500">Резерв</span><div class="font-medium">${formatEntityMoney(reservedAmount, 'RUB', expandedRules)}</div></div>
+        <div><span class="text-slate-500">Оплачено</span><div class="font-medium">${formatEntityMoney(paymentsTotal, 'RUB', expandedRules)}</div></div>
+        ${item.targetAmount ? `<div><span class="text-slate-500">Сумма</span><div class="font-medium">${formatEntityMoney(item.targetAmount, 'RUB', expandedRules)}</div></div>` : ''}
         <div><span class="text-slate-500">Срок</span><div class="font-medium">${formatObligationDueMeta(item)}</div></div>
       </div>
     `,

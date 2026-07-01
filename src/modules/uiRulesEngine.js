@@ -7,6 +7,7 @@
  *
  * UI = f(state, uiRulesEngine) — modules must not embed display policy.
  */
+import { formatFullMoney, formatUiMoney } from './formatUi.js';
 import { isExperiment } from '../config/environmentConfig.js';
 
 export const ENTITY_TYPES = Object.freeze({
@@ -20,7 +21,8 @@ export const ENTITY_TYPES = Object.freeze({
 export const VIEW_MODES = Object.freeze({
   LIST: 'list',
   MEDIUM: 'medium',
-  FULL: 'full'
+  FULL: 'full',
+  EXPANDED: 'expanded'
 });
 
 export const SCREEN_SIZES = Object.freeze({
@@ -55,13 +57,63 @@ export const GLOBAL_ENTITY_LAYOUT_RULE = Object.freeze({
 });
 
 /**
- * RULE 5: list → compact money; medium/full → full money with currency.
+ * RULE 5: single money formatting policy for all entity display modes.
+ * Modules MUST use formatEntityMoney() — never formatUiMoney/formatFullMoney directly.
  */
 export const GLOBAL_MONEY_FORMAT_RULE = Object.freeze({
   list: 'short',
-  medium: 'full',
-  full: 'full'
+  medium: 'short',
+  full: 'full',
+  expanded: 'full'
 });
+
+/** Fallback when validateEntityDisplay detects violations. */
+export const GLOBAL_DISPLAY_RULE = Object.freeze({
+  listRequiresMetrics: true,
+  mediumRequiresActions: true,
+  mediumRequiresMetrics: true,
+  expandedRequiresFullFormat: true
+});
+
+/** Central money formatter — the ONLY entry point for entity card metrics. */
+export function formatEntityMoney(amount, currency = 'RUB', rules = null) {
+  const format = rules?.moneyFormat ?? GLOBAL_MONEY_FORMAT_RULE.medium;
+  if (format === 'full' || format === 'expanded') {
+    return formatFullMoney(amount, currency);
+  }
+  return formatUiMoney(amount, currency);
+}
+
+function formatMetricsPair(left, right, currency, rules) {
+  return [
+    formatEntityMoney(left, currency, rules),
+    formatEntityMoney(right, currency, rules)
+  ].join(' / ');
+}
+
+function formatMetricsTriple(a, b, c, currency, rules) {
+  return [
+    formatEntityMoney(a, currency, rules),
+    formatEntityMoney(b, currency, rules),
+    formatEntityMoney(c, currency, rules)
+  ].join(' / ');
+}
+
+function finalizeEntityDisplay(entityType, mode, displayPayload) {
+  const validation = validateEntityDisplay(entityType, displayPayload, mode);
+  if (validation.ok) {
+    return displayPayload;
+  }
+  if (isExperiment()) {
+    console.warn('[UI DISPLAY VALIDATION]', {
+      entityType,
+      mode,
+      violations: validation.violations,
+      fallback: GLOBAL_DISPLAY_RULE
+    });
+  }
+  return displayPayload;
+}
 
 /**
  * RULE 6: primary card value must not repeat in secondary stats rows.
@@ -240,37 +292,42 @@ export function renderStatsRowsHtml(rows) {
 }
 
 /** List mode: spent / limit / reserve — always 3 values, short format. */
-export function formatListTripleMetrics(spent, limit, reserve, formatMoney, rules = null) {
-  return [
-    formatMoney(spent, 'RUB', rules),
-    formatMoney(limit, 'RUB', rules),
-    formatMoney(reserve, 'RUB', rules)
-  ].join(' / ');
+export function formatListTripleMetrics(spent, limit, reserve, currency = 'RUB', rules = null) {
+  return formatMetricsTriple(spent, limit, reserve, currency, rules);
 }
 
-function renderMetricPair(label, formattedValue) {
-  return `<span class="display-metric-pair"><span class="text-slate-500">${label}:</span> <span class="text-slate-900 font-medium">${formattedValue}</span></span>`;
+function renderReserveLimitLines({ spent, limit, reserve, available, currency = 'RUB', rules }) {
+  return {
+    reserveLineHtml: formatMetricsPair(spent, reserve, currency, rules),
+    limitLineHtml: formatMetricsPair(limit, available, currency, rules)
+  };
 }
 
-function renderReserveLimitLines({
-  spent,
-  limit,
-  reserve,
-  available,
-  formatMoney,
-  rules
-}) {
-  const reserveLineHtml = [
-    renderMetricPair('Потрачено', formatMoney(spent, 'RUB', rules)),
-    renderMetricPair('Резерв', formatMoney(reserve, 'RUB', rules))
-  ].join('<span class="text-slate-300 mx-1">·</span>');
+export function buildAccountEntityDisplay({ balance, currency = 'RUB', rules = null }) {
+  const balanceNum = normalizeMoneyAmount(balance);
+  const isListMode = rules?.viewMode === VIEW_MODES.LIST;
 
-  const limitLineHtml = [
-    renderMetricPair('Лимит', formatMoney(limit, 'RUB', rules)),
-    renderMetricPair('Доступно', formatMoney(available, 'RUB', rules))
-  ].join('<span class="text-slate-300 mx-1">·</span>');
+  const display = isListMode
+    ? {
+      meta: '',
+      value: '',
+      statsHtml: '',
+      listMetrics: formatEntityMoney(balanceNum, currency, rules),
+      reserveLineHtml: '',
+      limitLineHtml: '',
+      primaryNumeric: balanceNum
+    }
+    : {
+      meta: '',
+      value: formatEntityMoney(balanceNum, currency, rules),
+      statsHtml: '',
+      listMetrics: '',
+      reserveLineHtml: '',
+      limitLineHtml: '',
+      primaryNumeric: balanceNum
+    };
 
-  return { reserveLineHtml, limitLineHtml };
+  return finalizeEntityDisplay(ENTITY_TYPES.ACCOUNT, rules?.viewMode ?? VIEW_MODES.MEDIUM, display);
 }
 
 /**
@@ -282,15 +339,17 @@ export function buildReserveEntityDisplay({
   reserve,
   spent = 0,
   primaryNumeric,
-  primaryLabel = null,
-  formatMoney,
-  rules = null
+  formatMoney: _legacyFormatMoney,
+  rules = null,
+  currency = 'RUB',
+  entityType = ENTITY_TYPES.CATEGORY
 }) {
+  void _legacyFormatMoney;
   const limitNum = normalizeMoneyAmount(limit);
   const reserveNum = normalizeMoneyAmount(reserve);
   const spentNum = normalizeMoneyAmount(spent);
   const available = primaryNumeric != null ? normalizeMoneyAmount(primaryNumeric) : limitNum - spentNum;
-  const isListMode = rules?.viewMode === VIEW_MODES.LIST || rules?.moneyFormat === 'short';
+  const isListMode = rules?.viewMode === VIEW_MODES.LIST;
 
   const warnings = [];
   if (spentNum > limitNum && limitNum > 0) {
@@ -300,21 +359,18 @@ export function buildReserveEntityDisplay({
     warnings.push(GLOBAL_RESERVE_DISPLAY_RULE.insufficientReserveLabel);
   }
 
-  const metaParts = [];
-  if (warnings.length) {
-    metaParts.push(warnings.join(' · '));
-  }
+  const meta = warnings.length ? warnings.join(' · ') : '';
 
   if (isListMode) {
-    return {
-      meta: metaParts.join(' · '),
+    return finalizeEntityDisplay(entityType, rules?.viewMode, {
+      meta,
       value: '',
       statsHtml: '',
-      listMetrics: formatListTripleMetrics(spentNum, limitNum, reserveNum, formatMoney, rules),
+      listMetrics: formatListTripleMetrics(spentNum, limitNum, reserveNum, currency, rules),
       reserveLineHtml: '',
       limitLineHtml: '',
       primaryNumeric: available
-    };
+    });
   }
 
   const { reserveLineHtml, limitLineHtml } = renderReserveLimitLines({
@@ -322,69 +378,105 @@ export function buildReserveEntityDisplay({
     limit: limitNum,
     reserve: reserveNum,
     available,
-    formatMoney,
+    currency,
     rules
   });
 
-  return {
-    meta: metaParts.join(' · '),
+  return finalizeEntityDisplay(entityType, rules?.viewMode, {
+    meta,
     value: '',
     statsHtml: '',
     listMetrics: '',
     reserveLineHtml,
     limitLineHtml,
     primaryNumeric: available
-  };
+  });
 }
 
-export function buildDebtEntityDisplay(item, formatMoney, rules) {
+export function buildDebtEntityDisplay(item, formatMoney, rules, entityType = ENTITY_TYPES.DEBT) {
+  void formatMoney;
   const remaining = normalizeMoneyAmount(item.remainingAmount);
+  const paid = normalizeMoneyAmount(item.paidAmount);
+  const total = normalizeMoneyAmount(item.amount);
   const viewMode = rules?.viewMode ?? VIEW_MODES.MEDIUM;
+  const isListMode = viewMode === VIEW_MODES.LIST;
 
   let meta = '';
   if (item.type === 'manual_debt_event' && item.category) {
     meta = MANUAL_DEBT_CATEGORY_LABELS[item.category] ?? MANUAL_DEBT_CATEGORY_LABELS.other;
-  } else if (viewMode === VIEW_MODES.FULL && rules?.labelDensity === 'verbose') {
-    meta = `Погашено ${formatMoney(item.paidAmount, 'RUB', rules)}`;
+  }
+
+  if (isListMode) {
+    return finalizeEntityDisplay(entityType, viewMode, {
+      meta,
+      value: '',
+      statsHtml: '',
+      listMetrics: formatMetricsPair(paid, total, 'RUB', rules),
+      reserveLineHtml: '',
+      limitLineHtml: '',
+      primaryNumeric: remaining
+    });
   }
 
   const statsRows = viewMode === VIEW_MODES.FULL && rules?.labelDensity === 'verbose'
     ? buildDedupedStatsRows([
       {
         label: 'Из суммы',
-        formattedValue: formatMoney(item.amount, 'RUB', rules),
-        numericValue: item.amount
+        formattedValue: formatEntityMoney(total, 'RUB', rules),
+        numericValue: total
       },
       {
         label: 'Погашено',
-        formattedValue: formatMoney(item.paidAmount, 'RUB', rules),
-        numericValue: item.paidAmount
+        formattedValue: formatEntityMoney(paid, 'RUB', rules),
+        numericValue: paid
       }
     ], remaining, rules)
     : [];
 
-  return {
+  return finalizeEntityDisplay(entityType, viewMode, {
     meta,
-    value: formatMoney(remaining, 'RUB', rules),
+    value: '',
     statsHtml: renderStatsRowsHtml(statsRows),
     listMetrics: '',
-    reserveLineHtml: '',
-    limitLineHtml: '',
+    reserveLineHtml: formatMetricsPair(paid, total, 'RUB', rules),
+    limitLineHtml: formatMetricsPair(remaining, total, 'RUB', rules),
     primaryNumeric: remaining
-  };
+  });
 }
 
-export function buildSavingEntityDisplay(item, formatMoney, rules, extras = {}) {
+export function buildSavingEntityDisplay(item, formatMoney, rules, extras = {}, entityType = ENTITY_TYPES.SAVING) {
+  void formatMoney;
   const accumulated = normalizeMoneyAmount(extras.accumulated ?? item.accumulated);
-  const targetAmount = extras.targetAmount;
+  const targetAmount = extras.targetAmount != null ? normalizeMoneyAmount(extras.targetAmount) : null;
   const percent = extras.percent;
+  const viewMode = rules?.viewMode ?? VIEW_MODES.MEDIUM;
+  const isListMode = viewMode === VIEW_MODES.LIST;
+
+  const progressLabel = percent != null
+    ? `${percent}%`
+    : (extras.goalReached ? '100%' : '—');
+  const goalLabel = targetAmount != null && targetAmount > 0
+    ? formatEntityMoney(targetAmount, 'RUB', rules)
+    : '—';
+
+  if (isListMode) {
+    return finalizeEntityDisplay(entityType, viewMode, {
+      meta: '',
+      value: '',
+      statsHtml: '',
+      listMetrics: `${progressLabel} / ${formatEntityMoney(accumulated, 'RUB', rules)} / ${goalLabel}`,
+      reserveLineHtml: '',
+      limitLineHtml: '',
+      primaryNumeric: accumulated
+    });
+  }
 
   const statsRows = buildDedupedStatsRows(
     [
       targetAmount != null && targetAmount > 0
         ? {
           label: 'Цель',
-          formattedValue: formatMoney(targetAmount, 'RUB', rules),
+          formattedValue: formatEntityMoney(targetAmount, 'RUB', rules),
           numericValue: targetAmount
         }
         : null,
@@ -401,15 +493,19 @@ export function buildSavingEntityDisplay(item, formatMoney, rules, extras = {}) 
     meta = 'Цель достигнута';
   }
 
-  return {
+  const goalFormatted = targetAmount != null && targetAmount > 0
+    ? formatEntityMoney(targetAmount, 'RUB', rules)
+    : '—';
+
+  return finalizeEntityDisplay(entityType, viewMode, {
     meta,
-    value: formatMoney(accumulated, 'RUB', rules),
+    value: '',
     statsHtml: renderStatsRowsHtml(statsRows),
     listMetrics: '',
-    reserveLineHtml: '',
-    limitLineHtml: '',
+    reserveLineHtml: formatMetricsPair(accumulated, targetAmount ?? 0, 'RUB', rules),
+    limitLineHtml: `${progressLabel} / ${goalFormatted}`,
     primaryNumeric: accumulated
-  };
+  });
 }
 
 const MANUAL_DEBT_CATEGORY_LABELS = Object.freeze({
@@ -568,7 +664,10 @@ export function getDisplayRules(displayContext) {
   const entityType = displayContext.entityType ?? ENTITY_TYPES.ACCOUNT;
   const expanded = displayContext.expanded === true;
 
-  const moneyFormat = GLOBAL_MONEY_FORMAT_RULE[viewMode] ?? 'full';
+  const expanded = displayContext.expanded === true;
+  const moneyFormat = expanded
+    ? GLOBAL_MONEY_FORMAT_RULE.expanded
+    : (GLOBAL_MONEY_FORMAT_RULE[viewMode] ?? GLOBAL_MONEY_FORMAT_RULE.full);
 
   const actionMode = viewMode === VIEW_MODES.LIST
     ? 'compact'
@@ -586,10 +685,52 @@ export function getDisplayRules(displayContext) {
       : (viewMode === VIEW_MODES.FULL ? 'verbose' : 'normal'),
     badgeRules: getBadgeRules(entityType, viewMode),
     clickBehavior: viewMode === VIEW_MODES.FULL && !expanded ? 'navigate' : 'expand',
-    viewMode
+    viewMode,
+    expanded
   };
 
   return rules;
+}
+
+export function getExpandedDisplayRules(entityType, options = {}) {
+  return getDisplayRules(createDisplayContext({
+    entityType,
+    viewMode: options.viewMode ?? VIEW_MODES.MEDIUM,
+    expanded: true,
+    entityContext: options.entityContext ?? {}
+  }));
+}
+
+export function validateEntityDisplay(entityType, displayPayload, mode) {
+  void entityType;
+  const viewMode = normalizeViewMode(mode);
+  const violations = [];
+
+  const hasListMetrics = Boolean(displayPayload?.listMetrics);
+  const hasCardMetrics = Boolean(
+    displayPayload?.value
+    || displayPayload?.reserveLineHtml
+    || displayPayload?.limitLineHtml
+    || displayPayload?.statsHtml
+  );
+
+  if (GLOBAL_DISPLAY_RULE.listRequiresMetrics && viewMode === VIEW_MODES.LIST && !hasListMetrics) {
+    violations.push('list_missing_metrics');
+  }
+
+  if (GLOBAL_DISPLAY_RULE.mediumRequiresMetrics && viewMode === VIEW_MODES.MEDIUM && !hasCardMetrics) {
+    violations.push('medium_missing_metrics');
+  }
+
+  if (displayPayload?.expandedFormat === 'short') {
+    violations.push('expanded_must_use_full_format');
+  }
+
+  return {
+    ok: violations.length === 0,
+    violations,
+    fallback: GLOBAL_DISPLAY_RULE
+  };
 }
 
 export function logUiRulesActive(moduleKey, displayContext, rules) {
@@ -641,5 +782,3 @@ export function logUiRuleFix(fix, meta = {}) {
   }
   console.info('[UI RULE FIX]', { fix, ...meta });
 }
-
-export { formatDisplayMoney as formatMoneyByRules } from './formatUi.js';

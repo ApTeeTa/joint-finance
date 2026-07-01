@@ -21,8 +21,7 @@ import {
   renderModuleToolbar,
   getModuleDisplayContext
 } from './displayMode.js';
-import { formatDisplayMoney } from './formatUi.js';
-import { ENTITY_TYPES, getDisplayRules, buildSavingEntityDisplay } from './uiRulesEngine.js';
+import { ENTITY_TYPES, getDisplayRules, buildSavingEntityDisplay, formatEntityMoney, getExpandedDisplayRules } from './uiRulesEngine.js';
 import { renderEntityHeaderActions, renderEntityExpandedActions } from './uiActionRenderer.js';
 
 const DEADLINE_LABELS = {
@@ -415,19 +414,22 @@ function renderSavingCard(state, saving) {
   });
   const displayRules = getDisplayRules(displayContext);
 
-  const savingDisplay = buildSavingEntityDisplay(item, formatDisplayMoney, displayRules, {
+  const savingDisplay = buildSavingEntityDisplay(item, null, displayRules, {
     accumulated,
     targetAmount,
     percent,
     goalReached,
-    extraStatsRows: renderRecommendedMonthlyPaymentRow(item, formatDisplayMoney, displayRules)
+    extraStatsRows: renderRecommendedMonthlyPaymentRow(item, formatEntityMoney, displayRules)
   });
 
   const summaryParts = renderDisplaySummaryParts({
     title: escapeHtml(item.name),
     meta: savingDisplay.meta,
     value: savingDisplay.value,
-    statsHtml: savingDisplay.statsHtml
+    statsHtml: savingDisplay.statsHtml,
+    listMetrics: savingDisplay.listMetrics,
+    reserveLineHtml: savingDisplay.reserveLineHtml,
+    limitLineHtml: savingDisplay.limitLineHtml
   });
 
   const actionsHtml = renderEntityHeaderActions({
@@ -439,13 +441,18 @@ function renderSavingCard(state, saving) {
     entityContext: { goalReached }
   });
 
+  const expandedRules = getExpandedDisplayRules(ENTITY_TYPES.SAVING, {
+    viewMode: displayContext.viewMode,
+    entityContext: { goalReached }
+  });
+
   const detailHtml = renderExpandedDetailView({
     title: escapeHtml(item.name),
     meta: savingDisplay.meta,
     infoHtml: `
       ${progressBar}
-      <div class="text-2xl font-bold text-slate-900 mt-2">${savingDisplay.value}</div>
-      ${targetAmount ? `<p class="text-sm text-slate-500 mt-1">Цель: ${formatDisplayMoney(targetAmount, 'RUB', displayRules)}</p>` : ''}
+      <div class="text-2xl font-bold text-slate-900 mt-2">${formatEntityMoney(accumulated, 'RUB', expandedRules)}</div>
+      ${targetAmount ? `<p class="text-sm text-slate-500 mt-1">Цель: ${formatEntityMoney(targetAmount, 'RUB', expandedRules)}</p>` : ''}
     `,
     actionsHtml: renderEntityExpandedActions({
       entityType: ENTITY_TYPES.SAVING,

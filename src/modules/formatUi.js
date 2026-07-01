@@ -57,7 +57,7 @@ export function formatDisplayMoney(amount, currency = 'RUB', rules = null) {
     return '';
   }
 
-  if (rules.moneyFormat === 'full') {
+  if (rules.moneyFormat === 'full' || rules.moneyFormat === 'expanded') {
     return formatFullMoney(amount, currency);
   }
 
