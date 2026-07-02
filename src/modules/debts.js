@@ -39,13 +39,6 @@ const TYPE_LABELS = {
   manual_debt_event: 'Учётные обязательства'
 };
 
-const MANUAL_DEBT_CATEGORY_LABELS = {
-  emergency: 'Экстренные расходы',
-  rent: 'Аренда / задержка',
-  fees: 'Комиссии / штрафы',
-  other: 'Другое'
-};
-
 function formatMoney(amount) {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
