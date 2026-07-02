@@ -382,7 +382,7 @@ async function init() {
     });
 
     syncFromRemote();
-    console.log('[BOOT OK]', { build: '597c011', branch: 'experiment-full-sync' });
+    console.log('[BOOT OK]', { build: '8b3ffb9', branch: 'experiment-full-sync' });
   } catch (error) {
     const bootError = document.getElementById('boot-error');
     if (bootError) {
