@@ -151,6 +151,7 @@ function resetAllData() {
 function finishTabRender() {
   closeAllModals();
   relocateModals(tabContent);
+  syncHeaderHeight();
   onStateChange();
 }
 
@@ -265,6 +266,29 @@ function initTabHandlers() {
   });
 }
 
+function syncHeaderHeight() {
+  const header = document.getElementById('app-header');
+  if (!header) return;
+  const height = Math.ceil(header.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--header-height', `${height}px`);
+}
+
+function initHeaderHeightSync() {
+  const header = document.getElementById('app-header');
+  if (!header) return;
+
+  syncHeaderHeight();
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(() => {
+      syncHeaderHeight();
+    });
+    observer.observe(header);
+  }
+
+  window.addEventListener('resize', syncHeaderHeight);
+}
+
 function refreshFromRemote() {
   updateCounters();
   renderTab(state.activeTab || 'accounts');
@@ -344,6 +368,7 @@ async function init() {
   updateCounters();
   initProfileHandlers();
   initTabHandlers();
+  initHeaderHeightSync();
   renderTab(state.activeTab || 'accounts');
 
   subscribeSharedState(state, async () => {

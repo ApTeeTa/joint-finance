@@ -10,19 +10,44 @@ export function isWithinAppUi(target, container) {
   return container.contains(target) || Boolean(root?.contains(target));
 }
 
+const MODAL_SELECTOR = '[data-modal]';
 const MODAL_OVERLAY_SELECTOR = 'div[data-modal].fixed.inset-0';
+
+function queryModals(scope = document) {
+  return scope.querySelectorAll(MODAL_SELECTOR);
+}
+
+function setModalHidden(modal, hidden) {
+  modal.classList.toggle('hidden', hidden);
+  modal.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+}
 
 export function relocateModals(fromContainer) {
   const root = getModalRoot();
   if (!root || !fromContainer) return;
 
-  fromContainer.querySelectorAll(MODAL_OVERLAY_SELECTOR).forEach((modal) => {
+  const incoming = fromContainer.querySelectorAll(MODAL_OVERLAY_SELECTOR);
+  const incomingNames = new Set(
+    [...incoming].map((modal) => modal.dataset.modal).filter(Boolean)
+  );
+
+  queryModals(root).forEach((existing) => {
+    const name = existing.dataset.modal;
+    if (name && !incomingNames.has(name)) {
+      existing.remove();
+    }
+  });
+
+  incoming.forEach((modal) => {
     const name = modal.dataset.modal;
     if (name) {
-      root.querySelectorAll(`${MODAL_OVERLAY_SELECTOR}[data-modal="${name}"]`).forEach((existing) => {
-        if (existing !== modal) existing.remove();
+      root.querySelectorAll(`${MODAL_SELECTOR}[data-modal="${name}"]`).forEach((existing) => {
+        if (existing !== modal) {
+          existing.remove();
+        }
       });
     }
+    setModalHidden(modal, true);
     root.appendChild(modal);
   });
 }
@@ -62,8 +87,12 @@ export function findAppModal(modalName, container) {
 }
 
 function syncBodyModalState() {
-  const hasOpen = Boolean(getModalRoot()?.querySelector(`${MODAL_OVERLAY_SELECTOR}:not(.hidden)`));
+  const hasOpen = Boolean(document.querySelector(`${MODAL_SELECTOR}:not(.hidden)`));
   document.body.classList.toggle('modal-open', hasOpen);
+  const root = getModalRoot();
+  if (root) {
+    root.setAttribute('aria-hidden', hasOpen ? 'false' : 'true');
+  }
 }
 
 export function openModal(modalName) {
@@ -77,19 +106,21 @@ export function openModal(modalName) {
     root.appendChild(modal);
   }
 
-  modal.classList.remove('hidden');
+  setModalHidden(modal, false);
   syncBodyModalState();
 }
 
 export function closeModal(modalName) {
   const modal = findModal(modalName);
-  if (modal) modal.classList.add('hidden');
+  if (modal) {
+    setModalHidden(modal, true);
+  }
   syncBodyModalState();
 }
 
 export function closeAllModals() {
-  getModalRoot()?.querySelectorAll(MODAL_OVERLAY_SELECTOR).forEach((modal) => {
-    modal.classList.add('hidden');
+  queryModals(document).forEach((modal) => {
+    setModalHidden(modal, true);
   });
   syncBodyModalState();
 }
