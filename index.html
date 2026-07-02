@@ -691,19 +691,35 @@
         <button type="button" data-tab="debts" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Долги</button>
         <button type="button" data-tab="stats" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center col-span-3 sm:col-span-4 md:col-span-1">Статистика</button>
       </nav>
+      <p id="build-stamp" class="mt-2 text-[10px] text-slate-400 text-center">build 597c011 · experiment-full-sync</p>
     </div>
   </header>
+
+  <div
+    id="boot-error"
+    class="hidden max-w-4xl mx-auto px-4 py-3 mt-3 rounded-lg bg-red-50 text-red-800 text-sm border border-red-200"
+    role="alert"
+  ></div>
 
   <main id="tab-content" class="max-w-4xl mx-auto px-4 py-6 min-w-0 overflow-x-hidden">
   </main>
 
   <div id="modal-root" aria-hidden="true"></div>
 
-  <script type="module" src="src/app.js"></script>
+  <script type="module">
+    import('./src/app.js?v=597c011').catch((error) => {
+      const el = document.getElementById('boot-error');
+      if (el) {
+        el.classList.remove('hidden');
+        el.textContent = `Не удалось загрузить приложение: ${error?.message ?? error}. Удалите PWA с экрана, очистите данные сайта и откройте experiment preview заново.`;
+      }
+      console.error('[BOOT FAILED]', error);
+    });
+  </script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch((err) => {
+        navigator.serviceWorker.register('/sw.js?v=597c011').catch((err) => {
           console.warn('Service worker registration failed:', err);
         });
       });

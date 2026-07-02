@@ -353,34 +353,44 @@ async function init() {
 
   if (!tabContent) return;
 
-  validateEnvironmentIsolation();
-  initDisplayModeSystem();
-  initDisplayModeRefresh();
-  applyLoadedState(loadState());
-  reconcileLegacyTransactions(state);
-  loadOfflineQueue();
-  initOfflineSyncQueue(state, {
-    onFlushed: async () => {
+  try {
+    validateEnvironmentIsolation();
+    initDisplayModeSystem();
+    initDisplayModeRefresh();
+    applyLoadedState(loadState());
+    reconcileLegacyTransactions(state);
+    loadOfflineQueue();
+    initOfflineSyncQueue(state, {
+      onFlushed: async () => {
+        await syncFromRemote();
+      }
+    });
+    renderProfile();
+    updateCounters();
+    initProfileHandlers();
+    initTabHandlers();
+    initHeaderHeightSync();
+    renderTab(state.activeTab || 'accounts');
+
+    subscribeSharedState(state, async () => {
       await syncFromRemote();
-    }
-  });
-  renderProfile();
-  updateCounters();
-  initProfileHandlers();
-  initTabHandlers();
-  initHeaderHeightSync();
-  renderTab(state.activeTab || 'accounts');
+    });
 
-  subscribeSharedState(state, async () => {
-    await syncFromRemote();
-  });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      syncFromRemote();
+    });
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
     syncFromRemote();
-  });
-
-  syncFromRemote();
+    console.log('[BOOT OK]', { build: '597c011', branch: 'experiment-full-sync' });
+  } catch (error) {
+    const bootError = document.getElementById('boot-error');
+    if (bootError) {
+      bootError.classList.remove('hidden');
+      bootError.textContent = `Ошибка инициализации: ${error?.message ?? error}`;
+    }
+    console.error('[INIT FAILED]', error);
+  }
 }
 
 if (document.readyState === 'loading') {
