@@ -7,6 +7,13 @@
  *
  * UI = f(state, uiRulesEngine) — modules must not embed display policy.
  */
+/*
+PHASE 3 COMPLETE:
+- Expanded is DOM-independent subtree
+- Display mode affects only collapsed UI
+- CardState controls visibility only
+- No cross-dependency between mode and expanded
+*/
 import { formatFullMoney, formatUiMoney } from './formatUi.js';
 import { isExperiment } from '../config/environmentConfig.js';
 
@@ -24,6 +31,16 @@ export const VIEW_MODES = Object.freeze({
   FULL: 'full',
   EXPANDED: 'expanded'
 });
+
+/** Card interaction state — independent from display mode (list / medium / large). */
+export const CARD_STATE = Object.freeze({
+  COLLAPSED: 'collapsed',
+  EXPANDED: 'expanded'
+});
+
+export function getDefaultCardState() {
+  return CARD_STATE.COLLAPSED;
+}
 
 export const SCREEN_SIZES = Object.freeze({
   MOBILE: 'mobile',
@@ -445,6 +462,13 @@ function buildExpandedFields(entityType, rawValues, entity = {}) {
   return fields;
 }
 
+/** Entity-centric expanded body context — independent from display mode. */
+export function buildExpandedContext(entity) {
+  const entityType = entity?.entityType;
+  const rawValues = entity?.rawValues ?? {};
+  return buildExpandedFields(entityType, rawValues, entity ?? {});
+}
+
 /**
  * Strict entity display contract — structure only, no formatting.
  * @param {{ entityType: string, title?: string, meta?: string, rawValues?: object, flags?: object }} entity
@@ -672,13 +696,15 @@ export function createDisplayContext({
   entityType,
   viewMode,
   screenSize = SCREEN_SIZES.DESKTOP,
-  expanded = false
+  cardState = CARD_STATE.COLLAPSED,
+  entityContext = {}
 }) {
   return {
     viewMode: normalizeViewMode(viewMode),
     entityType,
     screenSize,
-    expanded: expanded === true
+    cardState,
+    entityContext
   };
 }
 
@@ -879,7 +905,8 @@ export function getDisplayRules(displayContext) {
 
   const viewMode = normalizeViewMode(displayContext.viewMode);
   const entityType = displayContext.entityType ?? ENTITY_TYPES.ACCOUNT;
-  const isExpanded = displayContext.expanded === true;
+  const cardState = displayContext.cardState ?? CARD_STATE.COLLAPSED;
+  const isExpanded = cardState === CARD_STATE.EXPANDED;
 
   const moneyFormat = isExpanded
     ? GLOBAL_MONEY_FORMAT_RULE.expanded
@@ -902,19 +929,37 @@ export function getDisplayRules(displayContext) {
     badgeRules: getBadgeRules(entityType, viewMode),
     clickBehavior: viewMode === VIEW_MODES.FULL && !isExpanded ? 'navigate' : 'expand',
     viewMode,
-    expanded: isExpanded
+    cardState,
+    isReadOnlyLayout: false
   };
 
   return rules;
 }
 
+const EXPANDED_DISPLAY_RULES = Object.freeze({
+  actionMode: 'expanded',
+  labelDensity: 'full',
+  moneyFormat: 'full',
+  clickBehavior: 'none',
+  isReadOnlyLayout: true
+});
+
+/**
+ * Fixed display rules for expanded card state — entity-driven only.
+ * @param {string} entityType
+ * @param {{ entity?: object, rawValues?: object, entityContext?: object }} [options]
+ */
 export function getExpandedDisplayRules(entityType, options = {}) {
-  return getDisplayRules(createDisplayContext({
+  const entityContext = options.entityContext ?? {};
+  return {
+    ...EXPANDED_DISPLAY_RULES,
     entityType,
-    viewMode: options.viewMode ?? VIEW_MODES.MEDIUM,
-    expanded: true,
-    entityContext: options.entityContext ?? {}
-  }));
+    cardState: CARD_STATE.EXPANDED,
+    showSecondaryValues: true,
+    allowedActions: getAllowedActions(entityType, null, entityContext)
+      ?? { primary: [], secondary: [], overflow: false },
+    allowedDetailActions: getAllowedDetailActions(entityType) ?? []
+  };
 }
 
 /** @deprecated Use validateEntityRenderContract */

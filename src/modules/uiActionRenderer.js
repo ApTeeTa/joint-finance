@@ -1,10 +1,18 @@
 /**
  * Standard entity header action renderer — enforces GLOBAL_ACTION_RULE from uiRulesEngine.
  */
+/*
+PHASE 3 COMPLETE:
+- Expanded is DOM-independent subtree
+- Display mode affects only collapsed UI
+- CardState controls visibility only
+- No cross-dependency between mode and expanded
+*/
 import { isExperiment } from '../config/environmentConfig.js';
 import {
   ENTITY_TYPES,
   VIEW_MODES,
+  CARD_STATE,
   getAllowedActions,
   getActionRenderClass,
   normalizeViewMode,
@@ -15,11 +23,13 @@ import {
   logUiMigrationPass,
   logUiUxFix,
   buildEntityDisplay,
+  buildExpandedContext,
   validateEntityRenderContract,
   validateModuleRawValues,
   formatEntityMoney,
   getDisplayRules,
   getExpandedDisplayRules,
+  createDisplayContext,
   readRawMoney,
   RAW_VALUE_KEYS
 } from './uiRulesEngine.js';
@@ -698,6 +708,75 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
+/** Collapsed card header — display mode only. */
+export function renderCardHeader({
+  mode,
+  contract,
+  rules,
+  currency,
+  entityType,
+  moduleKey,
+  entityId,
+  entityContext = {}
+}) {
+  const summaryParts = renderContractSummaryParts(contract, rules, currency, entityType);
+  const actionsHtml = renderEntityHeaderActions({
+    moduleKey,
+    entityType,
+    entityId,
+    viewMode: mode,
+    displayRules: rules,
+    entityContext
+  });
+
+  return { summaryParts, actionsHtml };
+}
+
+/** Expanded card body — entity data only, mode-agnostic. */
+export function renderExpandedBody({
+  entity,
+  rawValues = {},
+  expanded,
+  entityId,
+  entityContext = {},
+  currency = 'RUB',
+  context = {},
+  expandedContentHtml = ''
+}) {
+  const entityType = entity.entityType;
+  const expandedFields = expanded ?? buildExpandedContext(entity);
+  const expandedRules = getExpandedDisplayRules(entityType, {
+    entity,
+    rawValues,
+    entityContext
+  });
+
+  const expandedInfoHtml = renderExpandedPrimaryBlock(
+    entityType,
+    { expanded: { fields: expandedFields } },
+    expandedRules,
+    currency,
+    rawValues,
+    context
+  );
+
+  return `
+    <div class="display-item-expanded-body">
+      ${renderExpandedDetailView({
+        title: entity.title ?? '',
+        meta: resolveDisplayMeta(entity.meta ?? '', expandedRules, currency, entityType),
+        infoHtml: expandedInfoHtml,
+        actionsHtml: renderEntityExpandedActions({
+          entityType,
+          entityId,
+          entityContext
+        }),
+        contentHtml: expandedContentHtml
+      })}
+    </div>
+  `;
+}
+
 /**
  * Single render pipeline: rawValues → buildEntityDisplay → uiActionRenderer → DOM.
  */
@@ -719,10 +798,12 @@ export function renderEntityCard({
   displayRules,
   expandedContentHtml = ''
 }) {
-  const rules = displayRules ?? getDisplayRules({
+  const rules = displayRules ?? getDisplayRules(createDisplayContext({
     entityType,
-    viewMode: normalizeViewMode(viewMode ?? VIEW_MODES.MEDIUM)
-  });
+    viewMode: normalizeViewMode(viewMode ?? VIEW_MODES.MEDIUM),
+    cardState: CARD_STATE.COLLAPSED,
+    entityContext
+  }));
   const mode = rules.viewMode;
 
   const rawValidation = validateModuleRawValues(rawValues);
@@ -741,42 +822,27 @@ export function renderEntityCard({
   const contract = buildEntityDisplay(entity, mode);
   validateEntityRenderContract(contract, mode, rawValues);
 
-  const summaryParts = renderContractSummaryParts(contract, rules, currency, entityType);
-
-  const actionsHtml = renderEntityHeaderActions({
-    moduleKey,
-    entityType,
-    entityId,
-    viewMode: mode,
-    displayRules: rules,
-    entityContext
-  });
-
-  const expandedRules = getExpandedDisplayRules(entityType, {
-    viewMode: mode,
-    entityContext
-  });
-
-  const expandedInfoHtml = renderExpandedPrimaryBlock(
-    entityType,
+  const { summaryParts, actionsHtml } = renderCardHeader({
+    mode,
     contract,
-    expandedRules,
+    rules,
     currency,
-    rawValues,
-    context
-  );
+    entityType,
+    moduleKey,
+    entityId,
+    entityContext
+  });
 
-  const detailHtml = renderExpandedDetailView({
-    title: contract.line1.title,
-    meta: resolveDisplayMeta(contract.line1.meta, expandedRules, currency, entityType),
-    infoHtml: expandedInfoHtml,
-    actionsHtml: renderEntityExpandedActions({
-      entityType,
-      entityId,
-      viewMode: mode,
-      entityContext
-    }),
-    contentHtml: expandedContentHtml
+  const expandedFields = buildExpandedContext(entity);
+  const detailHtml = renderExpandedBody({
+    entity,
+    rawValues,
+    expanded: expandedFields,
+    entityId,
+    entityContext,
+    currency,
+    context,
+    expandedContentHtml
   });
 
   return renderDisplayItem({
@@ -796,13 +862,12 @@ export function renderEntityCard({
 export function renderEntityExpandedActions({
   entityType,
   entityId,
-  viewMode,
   entityContext = {}
 }) {
   const groups = normalizeActionGroups(
     resolveEntityActionGroups(entityType, entityContext),
     entityType,
-    viewMode,
+    null,
     entityContext
   );
   const detailActions = getAllowedDetailActions(entityType) ?? [];

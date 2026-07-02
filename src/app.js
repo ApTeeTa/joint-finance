@@ -1,3 +1,11 @@
+/*
+BACKUP SNAPSHOT:
+- UI Architecture: Phase 3 (DOM separation complete)
+- Expanded: entity-only rendering, mode-agnostic
+- Display Mode: collapsed-only system
+- State: CARD_STATE controls expanded visibility
+- Stable build checkpoint created for rollback
+*/
 import './lib/supabase.js';
 
 import {

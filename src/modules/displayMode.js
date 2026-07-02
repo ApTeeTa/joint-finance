@@ -1,9 +1,19 @@
 import {
   createDisplayContext,
   resolveEntityTypeFromModuleKey,
-  getEntityHeaderLayoutClass
+  getEntityHeaderLayoutClass,
+  CARD_STATE,
+  getDefaultCardState
 } from './uiRulesEngine.js';
 import { initOverflowMenuHandlers } from './uiActionRenderer.js';
+
+/*
+PHASE 3 COMPLETE:
+- Expanded is DOM-independent subtree
+- Display mode affects only collapsed UI
+- CardState controls visibility only
+- No cross-dependency between mode and expanded
+*/
 
 export const DISPLAY_MODES = {
   COMPACT: 'compact',
@@ -184,7 +194,7 @@ export function renderDisplaySummary({ title, meta = '', value = '', statsHtml =
   `;
 }
 
-/** Full-detail expanded view — replaces compact card when open. */
+/** Expanded detail panel — independent subtree inside .display-item-detail. */
 export function renderExpandedDetailView({
   title = '',
   meta = '',
@@ -203,10 +213,9 @@ export function renderExpandedDetailView({
 }
 
 /**
- * Three-layer item shell:
- * - layout: summary inside .display-item-body
- * - actions: .display-item-actions (always visible)
- * - interaction: .display-item-detail (toggle on body click)
+ * Card shell with two isolated regions:
+ * - .display-item-compact — collapsed header/summary/actions (display-mode styled)
+ * - .display-item-detail — expanded body (mode-agnostic visibility)
  */
 export function renderDisplayItem({
   moduleKey,
@@ -269,6 +278,7 @@ export function renderDisplayItem({
         <div
           class="display-item-detail"
           data-display-detail
+          data-card-region="expanded"
           data-display-item-id="${escapeAttr(itemId)}"
           hidden
         >${detailHtml}</div>
@@ -299,50 +309,65 @@ function closeAllDisplayDetails(container) {
   if (!container) {
     return;
   }
-  container.querySelectorAll('[data-display-detail]').forEach((detail) => {
-    detail.hidden = true;
-    detail.classList.remove('is-open');
-  });
-  container.querySelectorAll('[data-action="toggle-display-detail"]').forEach((button) => {
-    button.setAttribute('aria-expanded', 'false');
-  });
-  container.querySelectorAll('.display-item-open').forEach((item) => {
-    item.classList.remove('display-item-open');
+  container.querySelectorAll('.display-item').forEach((item) => {
+    setCardState(item, CARD_STATE.COLLAPSED);
   });
 }
 
-function toggleDisplayDetail(button) {
-  const article = button.closest('.display-item');
-  const detail = article?.querySelector('[data-display-detail]');
-  if (!article || !detail) {
+export function getCardState(cardElement) {
+  if (!cardElement?.classList) {
+    return getDefaultCardState();
+  }
+  const detail = cardElement.querySelector('[data-display-detail]');
+  if (!detail) {
+    return getDefaultCardState();
+  }
+  return !detail.hidden && detail.classList.contains('is-open')
+    ? CARD_STATE.EXPANDED
+    : CARD_STATE.COLLAPSED;
+}
+
+export function setCardState(cardElement, state) {
+  if (!cardElement) {
+    return;
+  }
+  const detail = cardElement.querySelector('[data-display-detail]');
+  if (!detail) {
     return;
   }
 
-  const willOpen = detail.hidden;
-  const root = article.closest('[data-display-mode-root]');
-  if (root) {
-    root.querySelectorAll('[data-display-detail]').forEach((other) => {
-      if (other !== detail) {
-        other.hidden = true;
-        other.classList.remove('is-open');
-      }
-    });
-    root.querySelectorAll('[data-action="toggle-display-detail"]').forEach((otherBtn) => {
-      otherBtn.setAttribute('aria-expanded', 'false');
-    });
-    root.querySelectorAll('.display-item-open').forEach((item) => {
-      if (item !== article) {
-        item.classList.remove('display-item-open');
+  const isExpanded = state === CARD_STATE.EXPANDED;
+  detail.hidden = !isExpanded;
+  detail.classList.toggle('is-open', isExpanded);
+  cardElement.querySelectorAll('[data-action="toggle-display-detail"]').forEach((toggleBtn) => {
+    toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+  });
+}
+
+function toggleCardState(cardElement) {
+  if (!cardElement) {
+    return;
+  }
+  const detail = cardElement.querySelector('[data-display-detail]');
+  if (!detail) {
+    return;
+  }
+
+  const willOpen = getCardState(cardElement) === CARD_STATE.COLLAPSED;
+  const root = cardElement.closest('[data-display-mode-root]');
+  if (root && willOpen) {
+    root.querySelectorAll('.display-item').forEach((item) => {
+      if (item !== cardElement) {
+        setCardState(item, CARD_STATE.COLLAPSED);
       }
     });
   }
 
-  detail.hidden = !willOpen;
-  detail.classList.toggle('is-open', willOpen);
-  article.querySelectorAll('[data-action="toggle-display-detail"]').forEach((toggleBtn) => {
-    toggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-  });
-  article.classList.toggle('display-item-open', willOpen);
+  setCardState(cardElement, willOpen ? CARD_STATE.EXPANDED : CARD_STATE.COLLAPSED);
+}
+
+function toggleDisplayDetail(button) {
+  toggleCardState(button.closest('.display-item'));
 }
 
 export function applyDisplayMode(container, moduleKey, mode) {
