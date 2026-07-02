@@ -64,10 +64,12 @@
     }
 
     #modal-root {
-      position: fixed;
-      inset: 0;
-      z-index: 50;
       pointer-events: none;
+    }
+
+    #app-header {
+      position: relative;
+      z-index: 30;
     }
 
     #tab-nav {
@@ -97,12 +99,18 @@
     }
 
     [data-modal] {
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+
+    [data-modal]:not(.hidden) {
       position: fixed !important;
       top: var(--header-height) !important;
       right: 0 !important;
       bottom: 0 !important;
       left: 0 !important;
-      z-index: 50 !important;
+      z-index: 100 !important;
       display: flex !important;
       flex-direction: column !important;
       align-items: center !important;
@@ -113,10 +121,18 @@
       padding: 1rem;
       padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
       touch-action: manipulation;
+      pointer-events: auto !important;
+      visibility: visible !important;
     }
 
-    [data-modal]::before,
-    [data-modal]::after {
+    [data-modal].hidden {
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+
+    [data-modal]:not(.hidden)::before,
+    [data-modal]:not(.hidden)::after {
       content: '';
       flex: 1 1 0;
       width: 100%;
@@ -124,7 +140,7 @@
       pointer-events: none;
     }
 
-    [data-modal] > * {
+    [data-modal]:not(.hidden) > * {
       flex: 0 0 auto;
       width: 100%;
       max-width: 28rem;
@@ -135,10 +151,6 @@
       display: none !important;
       pointer-events: none !important;
       visibility: hidden !important;
-    }
-
-    [data-modal]:not(.hidden) {
-      pointer-events: auto !important;
     }
 
     .overflow-x-auto {

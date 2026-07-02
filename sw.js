@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'joint-finance-v3';
+const CACHE_VERSION = 'joint-finance-v4';
 
 const PRECACHE_URLS = [
   '/',

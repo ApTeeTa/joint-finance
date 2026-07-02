@@ -732,12 +732,6 @@ function normalizeMoneyAmount(value) {
   return Number.isFinite(num) ? num : 0;
 }
 
-  emergency: 'Экстренные расходы',
-  rent: 'Аренда / задержка',
-  fees: 'Комиссии / штрафы',
-  other: 'Другое'
-});
-
 export function resolveEntityActionGroups(entityType, entityContext = {}) {
   const catalog = ENTITY_ACTION_CATALOG[entityType];
   if (!catalog) {
