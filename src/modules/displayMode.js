@@ -127,6 +127,7 @@ export function renderDisplaySummaryParts({
   reserveLineHtml = '',
   limitLineHtml = '',
   listMetrics = '',
+  metricLinesHtml = '',
   badgesHtml = ''
 }) {
   const titleHtml = `
@@ -138,20 +139,23 @@ export function renderDisplaySummaryParts({
   `;
 
   const metricsParts = [];
-  if (listMetrics) {
+  if (metricLinesHtml) {
+    metricsParts.push(metricLinesHtml);
+  } else if (listMetrics) {
     metricsParts.push(`<div class="display-item-line display-item-line--list-metrics"><span class="display-item-list-metrics">${listMetrics}</span></div>`);
-  }
-  if (reserveLineHtml) {
-    metricsParts.push(`<div class="display-item-line display-item-line--reserve">${reserveLineHtml}</div>`);
-  }
-  if (limitLineHtml) {
-    metricsParts.push(`<div class="display-item-line display-item-line--limit">${limitLineHtml}</div>`);
-  }
-  if (statsHtml) {
-    metricsParts.push(`<div class="display-item-line display-item-line--stats"><div class="display-item-stats">${statsHtml}</div></div>`);
-  }
-  if (value) {
-    metricsParts.push(`<div class="display-item-line display-item-line--value"><span class="display-item-value">${value}</span></div>`);
+  } else {
+    if (reserveLineHtml) {
+      metricsParts.push(`<div class="display-item-line display-item-line--reserve">${reserveLineHtml}</div>`);
+    }
+    if (limitLineHtml) {
+      metricsParts.push(`<div class="display-item-line display-item-line--limit">${limitLineHtml}</div>`);
+    }
+    if (statsHtml) {
+      metricsParts.push(`<div class="display-item-line display-item-line--stats"><div class="display-item-stats">${statsHtml}</div></div>`);
+    }
+    if (value) {
+      metricsParts.push(`<div class="display-item-line display-item-line--value"><span class="display-item-value">${value}</span></div>`);
+    }
   }
 
   return {

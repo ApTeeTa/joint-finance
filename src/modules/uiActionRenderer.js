@@ -444,6 +444,89 @@ function renderMetricsInline(metrics, rules, currency) {
   return (metrics ?? []).map((metric) => formatRawMetric(metric, rules, currency)).join(' / ');
 }
 
+function flattenContractMetrics(contract) {
+  const seen = new Set();
+  const metrics = [];
+
+  for (const metric of [
+    ...(contract.line3?.metrics ?? []),
+    ...(contract.line4?.metrics ?? [])
+  ]) {
+    if (!metric || seen.has(metric.key)) {
+      continue;
+    }
+    seen.add(metric.key);
+    metrics.push(metric);
+  }
+
+  return metrics;
+}
+
+function resolveMetricDisplayLabel(metric, entityType) {
+  if (metric.label) {
+    return metric.label;
+  }
+
+  const key = metric.key;
+
+  if (entityType === ENTITY_TYPES.ACCOUNT && key === RAW_VALUE_KEYS.BALANCE) {
+    return 'Баланс';
+  }
+  if (entityType === ENTITY_TYPES.SAVING && key === RAW_VALUE_KEYS.BALANCE) {
+    return 'Накоплено';
+  }
+  if (entityType === ENTITY_TYPES.OBLIGATION && key === RAW_VALUE_KEYS.SPENT) {
+    return 'Оплачено';
+  }
+  if (entityType === ENTITY_TYPES.DEBT && key === RAW_VALUE_KEYS.PAID) {
+    return 'Погашено';
+  }
+  if (entityType === ENTITY_TYPES.DEBT && key === RAW_VALUE_KEYS.TOTAL) {
+    return 'Сумма';
+  }
+  if (entityType === ENTITY_TYPES.DEBT && key === 'remaining') {
+    return 'Остаток';
+  }
+  if (key === RAW_VALUE_KEYS.SPENT) {
+    return 'Потрачено';
+  }
+  if (key === RAW_VALUE_KEYS.RESERVE) {
+    return 'Резерв';
+  }
+  if (key === RAW_VALUE_KEYS.LIMIT) {
+    return entityType === ENTITY_TYPES.OBLIGATION ? 'Сумма' : 'Лимит';
+  }
+  if (key === 'available') {
+    return 'Доступно';
+  }
+  if (key === RAW_VALUE_KEYS.GOAL) {
+    return 'Цель';
+  }
+  if (key === 'progress') {
+    return 'Прогресс';
+  }
+
+  return key;
+}
+
+function renderMetricLine(metric, rules, currency, entityType) {
+  const label = resolveMetricDisplayLabel(metric, entityType);
+  const value = formatRawMetric(metric, rules, currency);
+
+  return `
+    <div class="display-item-line display-item-line--metric">
+      <span class="display-item-metric-label">${escapeHtml(label)}:</span>
+      <span class="display-item-metric-value">${escapeHtml(value)}</span>
+    </div>
+  `;
+}
+
+function renderMetricLines(metrics, rules, currency, entityType) {
+  return (metrics ?? [])
+    .map((metric) => renderMetricLine(metric, rules, currency, entityType))
+    .join('');
+}
+
 function resolveDisplayMeta(meta, rules, currency, entityType) {
   if (meta) {
     return meta;
@@ -460,6 +543,20 @@ function renderContractSummaryParts(contract, rules, currency, entityType) {
   const limitLine = renderMetricsInline(contract.line4?.metrics ?? [], rules, currency);
   const hasLine4 = (contract.line4?.metrics?.length ?? 0) > 0;
   const isListMode = rules?.viewMode === VIEW_MODES.LIST;
+  const isMediumMode = rules?.viewMode === VIEW_MODES.MEDIUM;
+
+  if (isMediumMode) {
+    return renderDisplaySummaryParts({
+      title: contract.line1?.title ?? '',
+      meta: resolveDisplayMeta(contract.line1?.meta ?? '', rules, currency, entityType),
+      metricLinesHtml: renderMetricLines(
+        flattenContractMetrics(contract),
+        rules,
+        currency,
+        entityType
+      )
+    });
+  }
 
   return renderDisplaySummaryParts({
     title: contract.line1?.title ?? '',
