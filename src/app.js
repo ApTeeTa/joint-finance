@@ -13,6 +13,7 @@ import {
   calculateReservedBalance,
   calculateFreeBalance
 } from './modules/financeEngine.js';
+import { checkFinancialInvariants } from './modules/financeCoreInvariants.js';
 import { renderAccounts, initAccountsHandlers } from './modules/accounts.js';
 import { renderCategories, initCategoriesHandlers } from './modules/categories.js';
 import { renderHistory, initHistoryHandlers } from './modules/history.js';
@@ -90,6 +91,45 @@ let tabContent;
 let totalBalanceEl;
 let freeBalanceEl;
 let reservedBalanceEl;
+let lastValidState = null;
+
+const INVARIANT_ROLLBACK_ALERT = 'Операция отменена: свободный баланс не может быть отрицательным!';
+
+function captureLastValidState() {
+  return {
+    accounts: structuredClone(state.accounts ?? []),
+    categories: structuredClone(state.categories ?? []),
+    savings: structuredClone(state.savings ?? []),
+    obligations: structuredClone(state.obligations ?? []),
+    debts: structuredClone(state.debts ?? []),
+    exchangeRate: state.exchangeRate
+  };
+}
+
+function restoreFromLastValidState() {
+  if (!lastValidState) {
+    return false;
+  }
+
+  state.accounts = structuredClone(lastValidState.accounts);
+  state.categories = structuredClone(lastValidState.categories);
+  state.savings = structuredClone(lastValidState.savings);
+  state.obligations = structuredClone(lastValidState.obligations);
+  state.debts = structuredClone(lastValidState.debts);
+  state.exchangeRate = lastValidState.exchangeRate;
+  return true;
+}
+
+function initLastValidStateIfValid() {
+  const invariantResult = checkFinancialInvariants(state);
+  if (invariantResult.ok) {
+    lastValidState = captureLastValidState();
+    return true;
+  }
+
+  console.warn('[INVARIANT GUARD] baseline not captured', invariantResult.errors);
+  return false;
+}
 
 function formatMoney(amount) {
   return new Intl.NumberFormat('ru-RU', {
@@ -141,6 +181,24 @@ function applyLoadedState(loaded) {
 }
 
 function onStateChange() {
+  const invariantResult = checkFinancialInvariants(state);
+
+  if (!invariantResult.ok) {
+    console.error('[INVARIANT GUARD] mutation rejected', invariantResult.errors);
+
+    if (lastValidState) {
+      restoreFromLastValidState();
+      updateCounters();
+      renderTab(state.activeTab || 'accounts');
+    } else {
+      updateCounters();
+    }
+
+    alert(INVARIANT_ROLLBACK_ALERT);
+    return;
+  }
+
+  lastValidState = captureLastValidState();
   updateCounters();
   saveState(state);
 }
@@ -337,6 +395,7 @@ async function syncFromRemote() {
     applyStatePatch(state, patch);
     saveState(state, { skipRemote: true });
     markInitialSyncDone();
+    initLastValidStateIfValid();
 
     console.log('[SYNC OK]', {
       accounts: state.accounts.length,
@@ -367,6 +426,7 @@ async function init() {
     initDisplayModeRefresh();
     applyLoadedState(loadState());
     reconcileLegacyTransactions(state);
+    initLastValidStateIfValid();
     loadOfflineQueue();
     initOfflineSyncQueue(state, {
       onFlushed: async () => {
