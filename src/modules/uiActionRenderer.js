@@ -22,6 +22,7 @@ import {
   logUiActionRule,
   logUiMigrationPass,
   logUiUxFix,
+  OVERFLOW_MENU_LAYER_RULE,
   buildEntityDisplay,
   buildExpandedContext,
   validateEntityRenderContract,
@@ -308,8 +309,10 @@ export function renderOverflowMenuActions({
         >${icon}<span>${label}</span></button>`;
   }).join('');
 
+  const { menuRootClass, panelClass, menuRootLayerClasses, panelSurfaceClasses } = OVERFLOW_MENU_LAYER_RULE;
+
   return `
-    <div class="relative display-overflow-menu">
+    <div class="${menuRootLayerClasses} ${menuRootClass}">
       <button
         type="button"
         data-action="toggle-overflow-menu"
@@ -320,7 +323,7 @@ export function renderOverflowMenuActions({
       >${ICONS.dots}</button>
       <div
         data-overflow-menu="${entityId}"
-        class="display-overflow-menu-panel hidden"
+        class="${panelClass} hidden ${panelSurfaceClasses}"
       >
         ${menuItems}
       </div>
@@ -903,10 +906,26 @@ export function renderEntityExpandedActions({
   return buttons;
 }
 
+function clearOverflowMenuHostElevation() {
+  document.querySelectorAll(`.${OVERFLOW_MENU_LAYER_RULE.hostOpenClass}`).forEach((item) => {
+    item.classList.remove(OVERFLOW_MENU_LAYER_RULE.hostOpenClass);
+  });
+}
+
+function openOverflowMenu(menu) {
+  closeAllOverflowMenus();
+  menu.classList.remove('hidden');
+  const hostItem = menu.closest('.display-item');
+  if (hostItem) {
+    hostItem.classList.add(OVERFLOW_MENU_LAYER_RULE.hostOpenClass);
+  }
+}
+
 export function closeAllOverflowMenus() {
   document.querySelectorAll('[data-overflow-menu]').forEach((menu) => {
     menu.classList.add('hidden');
   });
+  clearOverflowMenuHostElevation();
 }
 
 let overflowUxFixLogged = false;
@@ -919,7 +938,7 @@ export function initOverflowMenuHandlers() {
   document.body.dataset.overflowMenuHandlersBound = 'true';
 
   if (!overflowUxFixLogged) {
-    logUiUxFix('overflow_menu');
+    logUiUxFix('overflow_menu_layer');
     overflowUxFixLogged = true;
   }
 
@@ -931,9 +950,10 @@ export function initOverflowMenuHandlers() {
       const menu = document.querySelector(`[data-overflow-menu="${menuId}"]`);
       if (menu) {
         const isHidden = menu.classList.contains('hidden');
-        closeAllOverflowMenus();
         if (isHidden) {
-          menu.classList.remove('hidden');
+          openOverflowMenu(menu);
+        } else {
+          closeAllOverflowMenus();
         }
       }
       return;

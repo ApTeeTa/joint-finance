@@ -57,6 +57,19 @@ export const GLOBAL_ACTION_RULE = Object.freeze({
   overflowViewModeInvariant: true
 });
 
+/**
+ * RULE — overflow menu must fully cover sibling rows (opaque surface + host elevation).
+ * Applied globally via uiActionRenderer template + index.html display CSS + menu handlers.
+ */
+export const OVERFLOW_MENU_LAYER_RULE = Object.freeze({
+  id: 'OVERFLOW_MENU_LAYER_RULE',
+  hostOpenClass: 'display-item--overflow-open',
+  menuRootClass: 'display-overflow-menu',
+  panelClass: 'display-overflow-menu-panel',
+  menuRootLayerClasses: 'relative z-[100]',
+  panelSurfaceClasses: 'z-[110] bg-white border border-slate-200 rounded-lg shadow-lg'
+});
+
 /** RULE 2: modules must not compose actions — only uiRulesEngine catalogs + filters. */
 export const UI_ACTION_SOURCE_RULE = Object.freeze({
   source: 'uiRulesEngine',
