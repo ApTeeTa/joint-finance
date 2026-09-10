@@ -99,6 +99,7 @@ function captureLastValidState() {
   return {
     accounts: structuredClone(state.accounts ?? []),
     categories: structuredClone(state.categories ?? []),
+    transactions: structuredClone(state.transactions ?? []),
     savings: structuredClone(state.savings ?? []),
     obligations: structuredClone(state.obligations ?? []),
     debts: structuredClone(state.debts ?? []),
@@ -113,6 +114,7 @@ function restoreFromLastValidState() {
 
   state.accounts = structuredClone(lastValidState.accounts);
   state.categories = structuredClone(lastValidState.categories);
+  state.transactions = structuredClone(lastValidState.transactions ?? []);
   state.savings = structuredClone(lastValidState.savings);
   state.obligations = structuredClone(lastValidState.obligations);
   state.debts = structuredClone(lastValidState.debts);
@@ -393,6 +395,7 @@ async function syncFromRemote() {
 
     const patch = validateNoStaleEntities(state, fetchResult.snapshot);
     applyStatePatch(state, patch);
+    reconcileLegacyTransactions(state);
     saveState(state, { skipRemote: true });
     markInitialSyncDone();
     initLastValidStateIfValid();
