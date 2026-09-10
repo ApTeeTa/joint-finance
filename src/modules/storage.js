@@ -4,6 +4,7 @@ import {
   allowsLegacyStorageKeyMigration,
   getLegacyMigrationDoneKey
 } from '../config/environmentConfig.js';
+import { checkFinancialInvariants } from './financeCoreInvariants.js';
 
 const STORAGE_KEY = getFinancialStorageKey();
 const LEGACY_PRODUCTION_STORAGE_KEY = getLegacyProductionStorageKey();
@@ -205,6 +206,12 @@ export async function hardResetStateFromRemoteSnapshot(state, snapshot) {
 }
 
 export function saveState(state, options = {}) {
+  const invariantResult = checkFinancialInvariants(state);
+  if (!invariantResult.ok) {
+    console.error('[saveState] blocked: financial invariants failed', invariantResult.errors);
+    return false;
+  }
+
   try {
     const payload = pickPersistedFields(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
