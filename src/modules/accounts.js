@@ -621,7 +621,7 @@ function renderAddAccountModal() {
       data-modal="add-account"
     >
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Новый счет</h3>
+        <h3 class="${UI.modalTitle} mb-4">Новый счет</h3>
         <form data-form="add-account" class="space-y-4">
           <div>
             <label class="${UI.label}">Название счета</label>
@@ -692,7 +692,7 @@ function renderEditAccountModal() {
       data-modal="edit-account"
     >
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование счета</h3>
+        <h3 class="${UI.modalTitle} mb-4">Редактирование счета</h3>
         <form data-form="edit-account" class="space-y-4">
           <input type="hidden" name="accountId" value="">
           <div>
@@ -745,7 +745,7 @@ function renderTransferModal() {
       data-modal="transfer"
     >
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-1">Перевод между счетами</h3>
+        <h3 class="${UI.modalTitle} mb-1">Перевод между счетами</h3>
         <p class="text-sm text-slate-500 mb-4" data-transfer-source-label>Со счета</p>
         <form data-form="transfer" class="space-y-4">
           <input type="hidden" name="sourceAccountId" value="">
@@ -821,7 +821,7 @@ function renderTopUpModal() {
       data-modal="topup"
     >
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Пополнение счета</h3>
+        <h3 class="${UI.modalTitle} mb-4">Пополнение счета</h3>
         <form data-form="topup" class="space-y-4">
           <input type="hidden" name="accountId" value="">
           <div>
@@ -876,8 +876,8 @@ function renderTopUpModal() {
 
 function renderEmptyState() {
   return `
-    <div class="text-center py-10">
-      <p class="text-slate-500 mb-4">Счетов пока нет</p>
+    <div class="${UI.emptyState}">
+      <p class="${UI.emptyTitle}">Счетов пока нет</p>
       <button
         type="button"
         data-action="open-add-account-modal"
@@ -957,8 +957,8 @@ export function renderAccounts(state, container) {
     <div class="space-y-4">
       ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.ACCOUNTS, `
       <div class="${UI.panel} ${UI.panelPadding}">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 class="text-lg font-semibold text-slate-900">Счета</h2>
+        <div class="${UI.panelHeader}">
+          <h2 class="${UI.panelTitle}">Счета</h2>
           ${renderModuleToolbar(DISPLAY_MODULE_KEYS.ACCOUNTS, accounts.length ? `
             <button
               type="button"
@@ -968,7 +968,7 @@ export function renderAccounts(state, container) {
           ` : '')}
         </div>
 
-        <div class="flex items-center gap-3 mb-6 p-3 bg-slate-50 rounded-xl">
+        <div class="${UI.inlineBar}">
           <label for="exchange-rate-input" class="text-sm font-medium text-slate-700 shrink-0">Курс USD</label>
           <input
             id="exchange-rate-input"
@@ -984,7 +984,7 @@ export function renderAccounts(state, container) {
 
         ${accountsList}
 
-        <div class="mt-6 pt-4 border-t border-slate-100 text-center">
+        <div class="${UI.listFooter}">
           <button
             type="button"
             data-action="reset-all-data"

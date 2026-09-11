@@ -381,7 +381,7 @@ function renderFormModal(key, title, submitLabel, obligation = null) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="${key}">
       <div class="${UI.modalShell} ${UI.modalBody} max-h-[90vh] overflow-y-auto">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">${title}</h3>
+        <h3 class="${UI.modalTitle} mb-4">${title}</h3>
         <form data-form="${key}" class="space-y-4">
           ${obligation ? `<input type="hidden" name="obligationId" value="${obligation.id}">` : ''}
           <div>
@@ -414,7 +414,7 @@ function renderReserveObligationModal(freeBalance) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="reserve-obligation">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Зарезервировать</h3>
+        <h3 class="${UI.modalTitle} mb-4">Зарезервировать</h3>
         <p class="text-sm text-emerald-700 mb-4">Можно зарезервировать: <strong>${formatMoney(freeBalance)}</strong></p>
         <form data-form="reserve-obligation" class="space-y-4">
           <input type="hidden" name="obligationId" value="">
@@ -436,7 +436,7 @@ function renderUnreserveObligationModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="unreserve-obligation">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Снять резерв</h3>
+        <h3 class="${UI.modalTitle} mb-4">Снять резерв</h3>
         <form data-form="unreserve-obligation" class="space-y-4">
           <input type="hidden" name="obligationId" value="">
           <div>
@@ -458,7 +458,7 @@ function renderPayModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="pay-obligation">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-1">Оплатить</h3>
+        <h3 class="${UI.modalTitle} mb-1">Оплатить</h3>
         <p class="text-sm text-slate-500 mb-4" data-pay-obligation-title></p>
         <form data-form="pay-obligation" class="space-y-4">
           <input type="hidden" name="obligationId" value="">
@@ -496,13 +496,13 @@ export function renderObligations(state, container) {
 
   const list = obligations.length
     ? renderDisplayModeList(obligations.map((item) => renderObligationCard(state, item)).join(''))
-    : '<p class="text-sm text-slate-400">Обязательств пока нет</p>';
+    : `<div class="${UI.emptyState}"><p class="${UI.emptyTitle} text-sm">Обязательств пока нет</p></div>`;
 
   container.innerHTML = `
     ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.OBLIGATIONS, `
     <div class="${UI.panel} ${UI.panelPadding}">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h2 class="text-lg font-semibold text-slate-900">Обязательства</h2>
+      <div class="${UI.panelHeader}">
+        <h2 class="${UI.panelTitle}">Обязательства</h2>
         ${renderModuleToolbar(DISPLAY_MODULE_KEYS.OBLIGATIONS, `<button type="button" data-action="open-add-obligation" class="${UI.btnPrimary}">Добавить</button>`)}
       </div>
       ${list}

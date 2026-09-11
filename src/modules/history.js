@@ -133,7 +133,7 @@ function renderEditModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-transaction">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование операции</h3>
+        <h3 class="${UI.modalTitle} mb-4">Редактирование операции</h3>
         <p class="text-xs text-slate-400 mb-4">Можно изменить только комментарий и дату.</p>
         <form data-form="edit-transaction" class="space-y-4">
           <input type="hidden" name="transactionId" value="">
@@ -186,7 +186,7 @@ export function renderHistory(state, container) {
 
   container.innerHTML = `
     <div class="${UI.panel} ${UI.panelPadding}">
-      <h2 class="text-lg font-semibold text-slate-900 mb-4">История</h2>
+      <h2 class="${UI.panelTitle} mb-4">История</h2>
       <div class="overflow-x-auto -mx-2 px-2">
         <table class="w-full min-w-[720px]">
           <thead>

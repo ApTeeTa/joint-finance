@@ -6,7 +6,11 @@ export const UI = Object.freeze({
   panel: 'bg-surface rounded-2xl border border-surface-border shadow-card',
   panelPadding: 'p-6',
   panelHeader: 'flex flex-wrap items-center justify-between gap-3 mb-4',
+  panelHeaderSpaced: 'flex flex-wrap items-center justify-between gap-3 mb-6',
   panelTitle: 'text-lg font-semibold text-slate-900 tracking-tight',
+  inlineBar:
+    'flex items-center gap-3 mb-6 p-3 bg-surface-muted rounded-xl border border-surface-border',
+  listFooter: 'mt-6 pt-4 border-t border-surface-border text-center text-sm text-slate-500',
 
   btnPrimary:
     'inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-xl bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0',

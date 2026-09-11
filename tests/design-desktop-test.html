@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: Design D3 Desktop</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Design D3 — desktop layout polish</h1>
+  <pre id="out"></pre>
+  <iframe id="app" src="../index.html" style="width:1280px;height:720px;border:1px solid #ccc"></iframe>
+  <script>
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    document.getElementById('app').addEventListener('load', async () => {
+      try {
+        const frame = document.getElementById('app');
+        const doc = frame.contentDocument;
+        const win = frame.contentWindow;
+
+        await new Promise((r) => setTimeout(r, 800));
+
+        const shell = doc.querySelector('.display-item-shell');
+        assert(shell, 'display item shell present');
+        const shellStyle = win.getComputedStyle(shell);
+        assert(parseFloat(shellStyle.paddingLeft) >= 14, 'shell desktop padding');
+        assert(shellStyle.borderRadius !== '0px', 'shell rounded corners');
+        assert(shellStyle.backgroundColor, 'shell background');
+
+        const list = doc.querySelector('.display-mode-list');
+        if (list) {
+          const listStyle = win.getComputedStyle(list);
+          assert(parseFloat(listStyle.gap) >= 10, 'list vertical gap');
+        }
+
+        const panelTitle = doc.querySelector('h2.text-lg');
+        assert(panelTitle, 'panel title in tab');
+
+        log('PASS  D3 desktop card shell and list spacing', 'pass');
+        log('Итого: PASS', 'pass');
+      } catch (e) {
+        log('FAIL  ' + e.message, 'fail');
+      }
+    });
+  </script>
+</body>
+</html>

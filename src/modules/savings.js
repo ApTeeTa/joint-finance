@@ -513,7 +513,7 @@ function renderAddSavingModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-saving">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Новая копилка</h3>
+        <h3 class="${UI.modalTitle} mb-4">Новая копилка</h3>
         <form data-form="add-saving" class="space-y-4">
           <div>
             <label class="${UI.label}">Название</label>
@@ -539,7 +539,7 @@ function renderEditSavingModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-saving">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование копилки</h3>
+        <h3 class="${UI.modalTitle} mb-4">Редактирование копилки</h3>
         <form data-form="edit-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
@@ -566,7 +566,7 @@ function renderDepositModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="deposit-saving">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Пополнить копилку</h3>
+        <h3 class="${UI.modalTitle} mb-4">Пополнить копилку</h3>
         <form data-form="deposit-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
@@ -591,7 +591,7 @@ function renderWithdrawModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="withdraw-saving">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Вернуть из копилки</h3>
+        <h3 class="${UI.modalTitle} mb-4">Вернуть из копилки</h3>
         <form data-form="withdraw-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
@@ -616,7 +616,7 @@ function renderSpendModal(state) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="spend-saving">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Потратить копилку</h3>
+        <h3 class="${UI.modalTitle} mb-4">Потратить копилку</h3>
         <form data-form="spend-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
@@ -641,8 +641,8 @@ function renderSpendModal(state) {
 
 function renderEmptyState() {
   return `
-    <div class="text-center py-10">
-      <p class="text-slate-500 mb-4">Копилок пока нет</p>
+    <div class="${UI.emptyState}">
+      <p class="${UI.emptyTitle}">Копилок пока нет</p>
       <button type="button" data-action="open-add-saving" class="${UI.btnHero}">Создать первую копилку</button>
     </div>
   `;
@@ -659,8 +659,8 @@ export function renderSavings(state, container) {
     <div class="space-y-4">
       ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.SAVINGS, `
       <div class="${UI.panel} ${UI.panelPadding}">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 class="text-lg font-semibold text-slate-900">Копилки</h2>
+        <div class="${UI.panelHeader}">
+          <h2 class="${UI.panelTitle}">Копилки</h2>
           ${renderModuleToolbar(DISPLAY_MODULE_KEYS.SAVINGS, savings.length ? `<button type="button" data-action="open-add-saving" class="${UI.btnPrimary}">Добавить копилку</button>` : '')}
         </div>
         ${list}

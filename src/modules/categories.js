@@ -528,7 +528,7 @@ function renderAddCategoryModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-category">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Новая категория</h3>
+        <h3 class="${UI.modalTitle} mb-4">Новая категория</h3>
         <form data-form="add-category" class="space-y-4">
           <div>
             <label class="${UI.label}">Название категории</label>
@@ -552,7 +552,7 @@ function renderEditCategoryModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-category">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование категории</h3>
+        <h3 class="${UI.modalTitle} mb-4">Редактирование категории</h3>
         <form data-form="edit-category" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
           <div>
@@ -577,7 +577,7 @@ function renderReserveModal(freeBalance) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="reserve">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Пополнить категорию</h3>
+        <h3 class="${UI.modalTitle} mb-4">Пополнить категорию</h3>
         <p class="text-sm text-emerald-700 mb-4">Можно добавить: <strong>${formatMoney(freeBalance)}</strong></p>
         <form data-form="reserve" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
@@ -599,7 +599,7 @@ function renderUnreserveModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="unreserve">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Вернуть из категории</h3>
+        <h3 class="${UI.modalTitle} mb-4">Вернуть из категории</h3>
         <form data-form="unreserve" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
           <div>
@@ -621,7 +621,7 @@ function renderExpenseModal(state) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="expense">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Добавить расход</h3>
+        <h3 class="${UI.modalTitle} mb-4">Добавить расход</h3>
         <form data-form="expense" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
           <div>
@@ -652,8 +652,8 @@ function renderExpenseModal(state) {
 
 function renderEmptyState() {
   return `
-    <div class="text-center py-10">
-      <p class="text-slate-500 mb-4">Категорий пока нет</p>
+    <div class="${UI.emptyState}">
+      <p class="${UI.emptyTitle}">Категорий пока нет</p>
       <button type="button" data-action="open-add-category-modal" class="${UI.btnHero}">Создать первую категорию</button>
     </div>
   `;
@@ -675,8 +675,8 @@ export function renderCategories(state, container) {
     <div class="space-y-4">
       ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.CATEGORIES, `
       <div class="${UI.panel} ${UI.panelPadding}">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 class="text-lg font-semibold text-slate-900">Категории</h2>
+        <div class="${UI.panelHeader}">
+          <h2 class="${UI.panelTitle}">Категории</h2>
           ${renderModuleToolbar(DISPLAY_MODULE_KEYS.CATEGORIES, categories.length ? `<button type="button" data-action="open-add-category-modal" class="${UI.btnPrimary}">Добавить категорию</button>` : '')}
         </div>
         ${categoriesList}

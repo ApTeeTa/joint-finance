@@ -206,7 +206,7 @@ export function renderExpandedDetailView({
 }) {
   return `
     <div class="display-item-expanded-view">
-      ${title ? `<div class="display-item-expanded-header"><h3 class="text-lg font-semibold text-slate-900">${title}</h3>${meta ? `<p class="text-sm text-slate-500 mt-1">${meta}</p>` : ''}</div>` : ''}
+      ${title ? `<div class="display-item-expanded-header"><h3 class="${UI.panelTitle}">${title}</h3>${meta ? `<p class="text-sm text-slate-500 mt-1">${meta}</p>` : ''}</div>` : ''}
       ${infoHtml ? `<div class="display-item-expanded-info">${infoHtml}</div>` : ''}
       ${actionsHtml ? `<div class="display-item-expanded-actions">${actionsHtml}</div>` : ''}
       ${contentHtml ? `<div class="display-item-expanded-content">${contentHtml}</div>` : ''}

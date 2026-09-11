@@ -151,7 +151,7 @@ function renderCreateDebtModal(type) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="${modalKey}">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">${title}</h3>
+        <h3 class="${UI.modalTitle} mb-4">${title}</h3>
         <form data-form="${modalKey}" class="space-y-4">
           <div>
             <label class="${UI.label}">Название</label>
@@ -193,7 +193,7 @@ function renderCreateManualDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-manual-debt">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-1">Учётное обязательство</h3>
+        <h3 class="${UI.modalTitle} mb-1">Учётное обязательство</h3>
         <p class="text-sm text-slate-500 mb-4">Без движения денег по счетам — только учёт долга.</p>
         <form data-form="add-manual-debt" class="space-y-4">
           <div>
@@ -232,7 +232,7 @@ function renderEditManualDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-manual-debt">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование обязательства</h3>
+        <h3 class="${UI.modalTitle} mb-4">Редактирование обязательства</h3>
         <form data-form="edit-manual-debt" class="space-y-4">
           <input type="hidden" name="debtId" value="">
           <div>
@@ -257,7 +257,7 @@ function renderRepayDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="repay-debt">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-1">Погасить долг</h3>
+        <h3 class="${UI.modalTitle} mb-1">Погасить долг</h3>
         <p class="text-sm text-slate-500 mb-4" data-repay-debt-title></p>
         <form data-form="repay-debt" class="space-y-4">
           <input type="hidden" name="debtId" value="">
@@ -294,7 +294,7 @@ function renderWriteOffDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="write-off-debt">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="text-lg font-semibold text-slate-900 mb-1">Списать долг</h3>
+        <h3 class="${UI.modalTitle} mb-1">Списать долг</h3>
         <p class="text-sm text-slate-500 mb-4" data-write-off-debt-title></p>
         <p class="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">Деньги на счёт не вернутся. Остаток долга будет списан.</p>
         <form data-form="write-off-debt" class="space-y-4">
@@ -354,8 +354,8 @@ export function renderDebts(state, container) {
   container.innerHTML = `
     ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.DEBTS, `
     <div class="${UI.panel} ${UI.panelPadding}">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h2 class="text-lg font-semibold text-slate-900">Долги</h2>
+      <div class="${UI.panelHeaderSpaced}">
+        <h2 class="${UI.panelTitle}">Долги</h2>
         ${renderModuleToolbar(DISPLAY_MODULE_KEYS.DEBTS)}
       </div>
       ${renderOverdueObligationsSection(state)}
