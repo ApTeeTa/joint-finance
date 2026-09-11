@@ -82,17 +82,27 @@ Display mode changes do **not** trigger sync.
 
 ---
 
-## 5. Mutations Through Finance Layer (Conceptual Rule)
+## 5. Mutations Through Finance Layer — **LOCKED**
 
-User actions that change money or entities should flow through established modules:
+**Lock date:** 2026-09-11 · **Tag:** `v2026-phase-5-enforcement-lock` · **Declaration:** `docs/ARCHITECTURE_LOCK_DECLARATION.md`
 
-- `financeGate.js` — gated write operations
-- `financeEngine.js` — derived balances and aggregates
-- `transactions.js` — transaction records, reconciliation helpers
+Required flow for shared snapshot fields:
 
-UI handlers call these; card renderers do not mutate state directly except through existing handler patterns.
+```text
+UI → actionRegistry.dispatch → financeGate → transactions.js → saveState → stateRemote
+```
 
-*Note: Full audit of every code path against this rule has not been completed — see open questions.*
+| Layer | Role |
+|-------|------|
+| `actionRegistry.js` | Action type routing |
+| `mutationContract.js` | dispatch + apply orchestration |
+| `financeGate.js` | Entry-point guard + record dispatch |
+| `transactions.js` | State mutation + journal |
+| `stateRemote.js` | **Only** Supabase client for financial data |
+
+UI modules (`accounts`, `categories`, `obligations`, `savings`, `debts`) must not mutate shared entities directly — use `executeMutation` + `dispatch`.
+
+Static enforcement: `scripts/architecture-lock-check.ps1` (CI: `.github/workflows/architecture-lock.yml`).
 
 ---
 
@@ -182,7 +192,7 @@ Failure in a single module import must not silently half-initialize — module g
 
 ## OPEN QUESTIONS / UNCERTAIN AREAS
 
-- **Full mutation audit:** Not every UI handler path has been verified to go exclusively through `financeGate` — rule stated as target architecture.
+- **Full mutation audit:** Lifecycle CRUD paths are locked; money ops (deposit/transfer/expense) were gate-backed before migration — periodic re-audit recommended.
 - **Conflict resolution:** remote snapshot wins on pull; local-only entities survive only until first sync
 - **Stats / History tabs:** Use rendering patterns outside display mode system — whether they must migrate is undecided.
 - **Auth / multi-household:** Current model assumes single shared snapshot per deployment; no household picker architecture yet.

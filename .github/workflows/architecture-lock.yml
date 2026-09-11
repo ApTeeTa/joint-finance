@@ -1,0 +1,16 @@
+name: Architecture Lock
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - experiment-full-sync
+
+jobs:
+  architecture-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run architecture lock checks
+        run: bash scripts/architecture-lock-check.sh
