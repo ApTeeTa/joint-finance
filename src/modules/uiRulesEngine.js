@@ -77,6 +77,30 @@ export const UI_ACTION_SOURCE_RULE = Object.freeze({
 });
 
 /**
+ * RULE — every visible data-action button must open modal / mutate state via module handlers.
+ * Modals live in #modal-root after finishTabRender → relocateModals(tabContent).
+ */
+export const UI_ACTION_BINDING_RULE = Object.freeze({
+  id: 'UI_ACTION_BINDING_RULE',
+  handlerInitOncePerModule: true,
+  actionsUseDataActionAttribute: true,
+  modalRelocateSinglePass: true,
+  modalRelocateOwner: 'finishTabRender'
+});
+
+/**
+ * RULE — modal DOM lifecycle. Modules render modals into tab-content; app.js relocates once.
+ * Never call relocateModals after modals already moved to #modal-root (empty pass wipes modals).
+ */
+export const MODAL_LIFECYCLE_RULE = Object.freeze({
+  id: 'MODAL_LIFECYCLE_RULE',
+  rootId: 'modal-root',
+  relocateFrom: 'tab-content',
+  relocateOwner: 'finishTabRender',
+  moduleRenderMustNotRelocate: true
+});
+
+/**
  * RULE 4: stacked vertical card layout — actions on dedicated row, never absolute.
  */
 export const GLOBAL_ENTITY_LAYOUT_RULE = Object.freeze({

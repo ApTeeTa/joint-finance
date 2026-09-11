@@ -1,3 +1,6 @@
+import { isExperiment } from '../config/environmentConfig.js';
+import { logUiRuleFix } from './uiRulesEngine.js';
+
 const MODAL_ROOT_ID = 'modal-root';
 
 export function getModalRoot() {
@@ -22,11 +25,19 @@ function setModalHidden(modal, hidden) {
   modal.setAttribute('aria-hidden', hidden ? 'true' : 'false');
 }
 
+/**
+ * MODAL_LIFECYCLE_RULE: relocate modals from tab container → #modal-root once per tab render.
+ * If container has no modals (already relocated), keep existing #modal-root modals intact.
+ */
 export function relocateModals(fromContainer) {
   const root = getModalRoot();
   if (!root || !fromContainer) return;
 
   const incoming = fromContainer.querySelectorAll(MODAL_OVERLAY_SELECTOR);
+  if (incoming.length === 0) {
+    return;
+  }
+
   const incomingNames = new Set(
     [...incoming].map((modal) => modal.dataset.modal).filter(Boolean)
   );
@@ -97,7 +108,13 @@ function syncBodyModalState() {
 
 export function openModal(modalName) {
   const modal = findModal(modalName);
-  if (!modal) return;
+  if (!modal) {
+    if (isExperiment()) {
+      console.error('[UI ACTION] modal not found — button action cannot run', { modalName });
+      logUiRuleFix('modal_not_found', { modalName });
+    }
+    return false;
+  }
 
   closeAllModals();
 
@@ -108,6 +125,7 @@ export function openModal(modalName) {
 
   setModalHidden(modal, false);
   syncBodyModalState();
+  return true;
 }
 
 export function closeModal(modalName) {

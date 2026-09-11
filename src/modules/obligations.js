@@ -10,7 +10,7 @@ import {
   diagnosePaidUntilShadow,
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
-import { openModal, closeModal, isWithinAppUi, relocateModals, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -470,7 +470,6 @@ export function renderObligations(state, container) {
   `;
 
   refreshSelects(state, container);
-  relocateModals(container);
 }
 
 function refreshSelects(state, container) {
@@ -536,7 +535,6 @@ export function initObligationsHandlers(state, container, onStateChange) {
       const modal = findAppModal('edit-obligation', container);
       if (!modal) return;
       modal.outerHTML = renderFormModal('edit-obligation', 'Редактирование', 'Сохранить', obligation);
-      relocateModals(container);
       openModal('edit-obligation');
       return;
     }
