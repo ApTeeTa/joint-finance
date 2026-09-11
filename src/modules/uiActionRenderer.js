@@ -9,6 +9,7 @@ PHASE 3 COMPLETE:
 - No cross-dependency between mode and expanded
 */
 import { isExperiment } from '../config/environmentConfig.js';
+import { UI } from './uiTheme.js';
 import {
   ENTITY_TYPES,
   VIEW_MODES,
@@ -890,16 +891,14 @@ export function renderEntityExpandedActions({
 
     const label = def.menuLabel ?? def.title;
     const isDestructive = actionId.startsWith('delete') || actionId.includes('write-off');
-    const btnClass = isDestructive
-      ? 'bg-red-50 text-red-700 hover:bg-red-100'
-      : 'bg-primary-600 text-white hover:bg-primary-700';
+    const btnClass = isDestructive ? UI.btnActionDestructive : UI.btnActionPrimary;
 
     return `
       <button
         type="button"
         data-action="${actionId}"
         ${binding.idAttr}="${entityId}"
-        class="px-3 py-2 text-sm font-medium rounded-lg transition-colors ${btnClass}"
+        class="${UI.btnAction} ${btnClass}"
       >${label}</button>`;
   }).join('');
 

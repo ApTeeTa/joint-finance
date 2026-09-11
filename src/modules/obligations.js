@@ -1,3 +1,4 @@
+import { UI } from './uiTheme.js';
 import { calculateFreeBalance } from './financeEngine.js';
 import { payObligation, unreserveObligation, reserveObligation } from './financeGate.js';
 import { dispatch, ACTION_TYPES } from './actionRegistry.js';
@@ -379,29 +380,29 @@ function renderFormModal(key, title, submitLabel, obligation = null) {
 
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="${key}">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+      <div class="${UI.modalShell} ${UI.modalBody} max-h-[90vh] overflow-y-auto">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">${title}</h3>
         <form data-form="${key}" class="space-y-4">
           ${obligation ? `<input type="hidden" name="obligationId" value="${obligation.id}">` : ''}
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название</label>
-            <input type="text" name="name" required maxlength="80" value="${escapeHtml(obligation?.name ?? '')}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Например, Интернет">
+            <label class="${UI.label}">Название</label>
+            <input type="text" name="name" required maxlength="80" value="${escapeHtml(obligation?.name ?? '')}" class="${UI.field}" placeholder="Например, Интернет">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="targetAmount" min="0" step="1" value="${targetAmount}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="targetAmount" min="0" step="1" value="${targetAmount}" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Срок оплаты</label>
-            <input type="date" name="paidUntil" required value="${paidUntil}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Срок оплаты</label>
+            <input type="date" name="paidUntil" required value="${paidUntil}" class="${UI.field}">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" value="${escapeHtml(obligation?.comment ?? '')}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" value="${escapeHtml(obligation?.comment ?? '')}" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="${key}" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">${submitLabel}</button>
+            <button type="button" data-action="close-modal" data-modal="${key}" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">${submitLabel}</button>
           </div>
         </form>
       </div>
@@ -412,18 +413,18 @@ function renderFormModal(key, title, submitLabel, obligation = null) {
 function renderReserveObligationModal(freeBalance) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="reserve-obligation">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Зарезервировать</h3>
         <p class="text-sm text-emerald-700 mb-4">Можно зарезервировать: <strong>${formatMoney(freeBalance)}</strong></p>
         <form data-form="reserve-obligation" class="space-y-4">
           <input type="hidden" name="obligationId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
-            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+            <label class="${UI.label}">Сумма</label>
+            <input type="number" name="amount" required min="1" step="1" class="${UI.field}" placeholder="0">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="reserve-obligation" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Зарезервировать</button>
+            <button type="button" data-action="close-modal" data-modal="reserve-obligation" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Зарезервировать</button>
           </div>
         </form>
       </div>
@@ -434,17 +435,17 @@ function renderReserveObligationModal(freeBalance) {
 function renderUnreserveObligationModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="unreserve-obligation">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Снять резерв</h3>
         <form data-form="unreserve-obligation" class="space-y-4">
           <input type="hidden" name="obligationId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
-            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+            <label class="${UI.label}">Сумма</label>
+            <input type="number" name="amount" required min="1" step="1" class="${UI.field}" placeholder="0">
           </div>
           <p class="text-xs text-slate-400" data-unreserve-obligation-hint></p>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="unreserve-obligation" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="button" data-action="close-modal" data-modal="unreserve-obligation" class="${UI.btnCancelBlock}">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-600 text-white hover:bg-slate-700">Снять резерв</button>
           </div>
         </form>
@@ -456,32 +457,32 @@ function renderUnreserveObligationModal() {
 function renderPayModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="pay-obligation">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-1">Оплатить</h3>
         <p class="text-sm text-slate-500 mb-4" data-pay-obligation-title></p>
         <form data-form="pay-obligation" class="space-y-4">
           <input type="hidden" name="obligationId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="1" step="1" class="${UI.field}">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Счёт списания</label>
-            <select name="accountId" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 obligation-account-select">
+            <label class="${UI.label}">Счёт списания</label>
+            <select name="accountId" required class="${UI.field} obligation-account-select">
               ${renderAccountSelectOptions({ accounts: [] })}
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Оплатить до</label>
-            <input type="date" name="paidUntil" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Оплатить до</label>
+            <input type="date" name="paidUntil" required class="${UI.field}">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="pay-obligation" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Оплатить</button>
+            <button type="button" data-action="close-modal" data-modal="pay-obligation" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Оплатить</button>
           </div>
         </form>
       </div>
@@ -499,10 +500,10 @@ export function renderObligations(state, container) {
 
   container.innerHTML = `
     ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.OBLIGATIONS, `
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <div class="${UI.panel} ${UI.panelPadding}">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 class="text-lg font-semibold text-slate-900">Обязательства</h2>
-        ${renderModuleToolbar(DISPLAY_MODULE_KEYS.OBLIGATIONS, `<button type="button" data-action="open-add-obligation" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить</button>`)}
+        ${renderModuleToolbar(DISPLAY_MODULE_KEYS.OBLIGATIONS, `<button type="button" data-action="open-add-obligation" class="${UI.btnPrimary}">Добавить</button>`)}
       </div>
       ${list}
     </div>

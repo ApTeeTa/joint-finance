@@ -1,3 +1,4 @@
+import { UI } from './uiTheme.js';
 import {
   createDisplayContext,
   resolveEntityTypeFromModuleKey,
@@ -84,7 +85,7 @@ export function renderDisplayModeToggle(moduleKey, currentMode = getDisplayMode(
 
   return `
     <div
-      class="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 display-mode-toggle"
+      class="${UI.displayToggle} display-mode-toggle"
       data-display-mode-toggle="${moduleKey}"
       role="group"
       aria-label="Режим отображения"
@@ -99,7 +100,7 @@ export function renderDisplayModeToggle(moduleKey, currentMode = getDisplayMode(
             data-display-mode="${mode.id}"
             title="${mode.title}"
             aria-pressed="${active ? 'true' : 'false'}"
-            class="px-2.5 py-1.5 text-sm rounded-md transition-all duration-150 ${active ? 'bg-white text-primary-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}"
+            class="${UI.displayToggleBtn} ${active ? UI.displayToggleBtnActive : ''}"
           >${mode.label}</button>
         `;
       }).join('')}

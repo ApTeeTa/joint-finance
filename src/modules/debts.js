@@ -1,3 +1,4 @@
+import { UI } from './uiTheme.js';
 import {
   createDebtOwedToUs,
   createDebtWeOwe,
@@ -133,7 +134,7 @@ function renderDebtSection(title, type, debts, options = {}) {
         <button
           type="button"
           data-action="${addAction}"
-          class="px-3 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0"
+          class="${UI.btnPrimary}"
         >${addLabel}</button>
       </div>
       ${cards}
@@ -149,34 +150,34 @@ function renderCreateDebtModal(type) {
 
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="${modalKey}">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">${title}</h3>
         <form data-form="${modalKey}" class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название</label>
-            <input type="text" name="title" required maxlength="80" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Например, Родители">
+            <label class="${UI.label}">Название</label>
+            <input type="text" name="title" required maxlength="80" class="${UI.field}" placeholder="Например, Родители">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="50000">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="1" step="1" class="${UI.field}" placeholder="50000">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Счёт</label>
-            <select name="accountId" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Счёт</label>
+            <select name="accountId" required class="${UI.field}">
               ${renderAccountSelectOptions({ accounts: [] })}
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
-            <input type="date" name="date" value="${todayIso()}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" value="${todayIso()}" class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="${modalKey}" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">${submitLabel}</button>
+            <button type="button" data-action="close-modal" data-modal="${modalKey}" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">${submitLabel}</button>
           </div>
         </form>
       </div>
@@ -191,35 +192,35 @@ function renderCreateManualDebtModal() {
 
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-manual-debt">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-1">Учётное обязательство</h3>
         <p class="text-sm text-slate-500 mb-4">Без движения денег по счетам — только учёт долга.</p>
         <form data-form="add-manual-debt" class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Описание</label>
-            <input type="text" name="description" required maxlength="120" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Например, Штраф банка">
+            <label class="${UI.label}">Описание</label>
+            <input type="text" name="description" required maxlength="120" class="${UI.field}" placeholder="Например, Штраф банка">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="15000">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="1" step="1" class="${UI.field}" placeholder="15000">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Категория</label>
-            <select name="category" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Категория</label>
+            <select name="category" class="${UI.field}">
               ${categoryOptions}
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
-            <input type="date" name="date" value="${todayIso()}" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" value="${todayIso()}" required class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="add-manual-debt" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Добавить</button>
+            <button type="button" data-action="close-modal" data-modal="add-manual-debt" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Добавить</button>
           </div>
         </form>
       </div>
@@ -230,21 +231,21 @@ function renderCreateManualDebtModal() {
 function renderEditManualDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-manual-debt">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование обязательства</h3>
         <form data-form="edit-manual-debt" class="space-y-4">
           <input type="hidden" name="debtId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название</label>
-            <input type="text" name="description" required maxlength="120" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Название</label>
+            <input type="text" name="description" required maxlength="120" class="${UI.field}">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
-            <input type="date" name="date" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" required class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="edit-manual-debt" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Сохранить</button>
+            <button type="button" data-action="close-modal" data-modal="edit-manual-debt" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Сохранить</button>
           </div>
         </form>
       </div>
@@ -255,33 +256,33 @@ function renderEditManualDebtModal() {
 function renderRepayDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="repay-debt">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-1">Погасить долг</h3>
         <p class="text-sm text-slate-500 mb-4" data-repay-debt-title></p>
         <form data-form="repay-debt" class="space-y-4">
           <input type="hidden" name="debtId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="amount" required min="1" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="1" step="1" class="${UI.field}">
             <p class="text-xs text-slate-400 mt-1" data-repay-debt-remaining></p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Счёт</label>
-            <select name="accountId" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Счёт</label>
+            <select name="accountId" required class="${UI.field}">
               ${renderAccountSelectOptions({ accounts: [] })}
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
-            <input type="date" name="date" value="${todayIso()}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" value="${todayIso()}" class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="repay-debt" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Погасить</button>
+            <button type="button" data-action="close-modal" data-modal="repay-debt" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Погасить</button>
           </div>
         </form>
       </div>
@@ -292,22 +293,22 @@ function renderRepayDebtModal() {
 function renderWriteOffDebtModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="write-off-debt">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-1">Списать долг</h3>
         <p class="text-sm text-slate-500 mb-4" data-write-off-debt-title></p>
         <p class="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">Деньги на счёт не вернутся. Остаток долга будет списан.</p>
         <form data-form="write-off-debt" class="space-y-4">
           <input type="hidden" name="debtId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
-            <input type="date" name="date" value="${todayIso()}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" value="${todayIso()}" class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="write-off-debt" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="button" data-action="close-modal" data-modal="write-off-debt" class="${UI.btnCancelBlock}">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700">Списать</button>
           </div>
         </form>
@@ -352,7 +353,7 @@ export function renderDebts(state, container) {
 
   container.innerHTML = `
     ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.DEBTS, `
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <div class="${UI.panel} ${UI.panelPadding}">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 class="text-lg font-semibold text-slate-900">Долги</h2>
         ${renderModuleToolbar(DISPLAY_MODULE_KEYS.DEBTS)}

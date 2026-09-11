@@ -1,3 +1,4 @@
+import { UI } from './uiTheme.js';
 import { calculateFreeBalance } from './financeEngine.js';
 import {
   createExpense,
@@ -526,20 +527,20 @@ function renderMiscCategoryCard(state, category) {
 function renderAddCategoryModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-category">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Новая категория</h3>
         <form data-form="add-category" class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название категории</label>
-            <input type="text" name="name" required maxlength="80" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Например, Продукты">
+            <label class="${UI.label}">Название категории</label>
+            <input type="text" name="name" required maxlength="80" class="${UI.field}" placeholder="Например, Продукты">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Лимит</label>
-            <input type="number" name="limit" min="0" step="1" value="0" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Лимит</label>
+            <input type="number" name="limit" min="0" step="1" value="0" class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="add-category" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Создать</button>
+            <button type="button" data-action="close-modal" data-modal="add-category" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Создать</button>
           </div>
         </form>
       </div>
@@ -550,21 +551,21 @@ function renderAddCategoryModal() {
 function renderEditCategoryModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-category">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование категории</h3>
         <form data-form="edit-category" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название категории</label>
-            <input type="text" name="name" required maxlength="80" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Название категории</label>
+            <input type="text" name="name" required maxlength="80" class="${UI.field}">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Лимит</label>
-            <input type="number" name="limit" min="0" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Лимит</label>
+            <input type="number" name="limit" min="0" step="1" class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="edit-category" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Сохранить</button>
+            <button type="button" data-action="close-modal" data-modal="edit-category" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Сохранить</button>
           </div>
         </form>
       </div>
@@ -575,18 +576,18 @@ function renderEditCategoryModal() {
 function renderReserveModal(freeBalance) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="reserve">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Пополнить категорию</h3>
         <p class="text-sm text-emerald-700 mb-4">Можно добавить: <strong>${formatMoney(freeBalance)}</strong></p>
         <form data-form="reserve" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
-            <input type="number" name="amount" required min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+            <label class="${UI.label}">Сумма</label>
+            <input type="number" name="amount" required min="0.01" step="0.01" class="${UI.field}" placeholder="0">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="reserve" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Пополнить</button>
+            <button type="button" data-action="close-modal" data-modal="reserve" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Пополнить</button>
           </div>
         </form>
       </div>
@@ -597,17 +598,17 @@ function renderReserveModal(freeBalance) {
 function renderUnreserveModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="unreserve">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Вернуть из категории</h3>
         <form data-form="unreserve" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
-            <input type="number" name="amount" required min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+            <label class="${UI.label}">Сумма</label>
+            <input type="number" name="amount" required min="0.01" step="0.01" class="${UI.field}" placeholder="0">
           </div>
           <p class="text-xs text-slate-400" data-unreserve-hint></p>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="unreserve" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="button" data-action="close-modal" data-modal="unreserve" class="${UI.btnCancelBlock}">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-600 text-white hover:bg-slate-700">Вернуть</button>
           </div>
         </form>
@@ -619,28 +620,28 @@ function renderUnreserveModal() {
 function renderExpenseModal(state) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="expense">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Добавить расход</h3>
         <form data-form="expense" class="space-y-4">
           <input type="hidden" name="categoryId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="amount" required min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="0.01" step="0.01" class="${UI.field}" placeholder="0">
             <p class="text-xs text-slate-400 mt-1">Сумма расхода всегда в рублях. С USD-счета спишется эквивалент по курсу.</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Счет</label>
-            <select name="accountId" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Счет</label>
+            <select name="accountId" required class="${UI.field}">
               ${renderAccountOptions(state)}
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <p class="text-xs text-slate-400">Автор: ${OWNER_LABELS[state.profile] ?? 'Муж'}</p>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="expense" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="button" data-action="close-modal" data-modal="expense" class="${UI.btnCancelBlock}">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600">Сохранить</button>
           </div>
         </form>
@@ -653,7 +654,7 @@ function renderEmptyState() {
   return `
     <div class="text-center py-10">
       <p class="text-slate-500 mb-4">Категорий пока нет</p>
-      <button type="button" data-action="open-add-category-modal" class="px-6 py-3 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Создать первую категорию</button>
+      <button type="button" data-action="open-add-category-modal" class="${UI.btnHero}">Создать первую категорию</button>
     </div>
   `;
 }
@@ -673,10 +674,10 @@ export function renderCategories(state, container) {
   container.innerHTML = `
     <div class="space-y-4">
       ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.CATEGORIES, `
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <div class="${UI.panel} ${UI.panelPadding}">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-lg font-semibold text-slate-900">Категории</h2>
-          ${renderModuleToolbar(DISPLAY_MODULE_KEYS.CATEGORIES, categories.length ? `<button type="button" data-action="open-add-category-modal" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить категорию</button>` : '')}
+          ${renderModuleToolbar(DISPLAY_MODULE_KEYS.CATEGORIES, categories.length ? `<button type="button" data-action="open-add-category-modal" class="${UI.btnPrimary}">Добавить категорию</button>` : '')}
         </div>
         ${categoriesList}
       </div>

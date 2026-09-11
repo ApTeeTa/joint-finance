@@ -1,3 +1,4 @@
+import { UI } from './uiTheme.js';
 import {
   updateSavings,
   spendSaving
@@ -424,8 +425,8 @@ function renderSavingTypeFields(prefix, saving = null) {
 
   return `
     <div>
-      <label class="block text-sm font-medium text-slate-700 mb-1">Тип копилки</label>
-      <select name="savingType" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+      <label class="${UI.label}">Тип копилки</label>
+      <select name="savingType" class="${UI.field}">
         <option value="recurring"${savingType === 'recurring' ? ' selected' : ''}>Возобновляемая</option>
         <option value="single_use"${savingType === 'single_use' ? ' selected' : ''}>Разовая</option>
       </select>
@@ -440,8 +441,8 @@ function renderDeadlineFields(prefix, saving = null) {
 
   return `
     <div>
-      <label class="block text-sm font-medium text-slate-700 mb-1">Срок</label>
-      <select name="deadlineType" data-deadline-type="${prefix}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+      <label class="${UI.label}">Срок</label>
+      <select name="deadlineType" data-deadline-type="${prefix}" class="${UI.field}">
         <option value="none"${deadlineType === 'none' ? ' selected' : ''}>Без срока</option>
         <option value="months_3"${deadlineType === 'months_3' ? ' selected' : ''}>3 месяца</option>
         <option value="months_6"${deadlineType === 'months_6' ? ' selected' : ''}>6 месяцев</option>
@@ -451,8 +452,8 @@ function renderDeadlineFields(prefix, saving = null) {
       </select>
     </div>
     <div class="${deadlineType === 'date' ? '' : 'hidden'}" data-deadline-date-wrap="${prefix}">
-      <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
-      <input type="date" name="deadlineDate" value="${deadlineDate}" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+      <label class="${UI.label}">Дата</label>
+      <input type="date" name="deadlineDate" value="${deadlineDate}" class="${UI.field}">
     </div>
   `;
 }
@@ -511,22 +512,22 @@ function renderSavingCard(state, saving) {
 function renderAddSavingModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-saving">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Новая копилка</h3>
         <form data-form="add-saving" class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название</label>
-            <input type="text" name="name" required maxlength="80" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Например, Отпуск">
+            <label class="${UI.label}">Название</label>
+            <input type="text" name="name" required maxlength="80" class="${UI.field}" placeholder="Например, Отпуск">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Цель (RUB)</label>
-            <input type="number" name="targetAmount" min="0" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Цель (RUB)</label>
+            <input type="number" name="targetAmount" min="0" step="1" class="${UI.field}" placeholder="Необязательно">
           </div>
           ${renderSavingTypeFields('add')}
           ${renderDeadlineFields('add')}
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="add-saving" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Создать</button>
+            <button type="button" data-action="close-modal" data-modal="add-saving" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Создать</button>
           </div>
         </form>
       </div>
@@ -537,23 +538,23 @@ function renderAddSavingModal() {
 function renderEditSavingModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="edit-saving">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование копилки</h3>
         <form data-form="edit-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название</label>
-            <input type="text" name="name" required maxlength="80" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Название</label>
+            <input type="text" name="name" required maxlength="80" class="${UI.field}">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Цель (RUB)</label>
-            <input type="number" name="targetAmount" min="0" step="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Цель (RUB)</label>
+            <input type="number" name="targetAmount" min="0" step="1" class="${UI.field}">
           </div>
           ${renderSavingTypeFields('edit')}
           ${renderDeadlineFields('edit')}
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="edit-saving" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Сохранить</button>
+            <button type="button" data-action="close-modal" data-modal="edit-saving" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Сохранить</button>
           </div>
         </form>
       </div>
@@ -564,21 +565,21 @@ function renderEditSavingModal() {
 function renderDepositModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="deposit-saving">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Пополнить копилку</h3>
         <form data-form="deposit-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="amount" required min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="0.01" step="0.01" class="${UI.field}" placeholder="0">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="deposit-saving" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Пополнить</button>
+            <button type="button" data-action="close-modal" data-modal="deposit-saving" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Пополнить</button>
           </div>
         </form>
       </div>
@@ -589,21 +590,21 @@ function renderDepositModal() {
 function renderWithdrawModal() {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="withdraw-saving">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Вернуть из копилки</h3>
         <form data-form="withdraw-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма (RUB)</label>
-            <input type="number" name="amount" required min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0">
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="0.01" step="0.01" class="${UI.field}" placeholder="0">
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="withdraw-saving" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700">Вернуть</button>
+            <button type="button" data-action="close-modal" data-modal="withdraw-saving" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Вернуть</button>
           </div>
         </form>
       </div>
@@ -614,22 +615,22 @@ function renderWithdrawModal() {
 function renderSpendModal(state) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="spend-saving">
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Потратить копилку</h3>
         <form data-form="spend-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Счет</label>
-            <select name="accountId" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <label class="${UI.label}">Счет</label>
+            <select name="accountId" required class="${UI.field}">
               ${renderAccountSelectOptions(state)}
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
-            <input type="text" name="comment" maxlength="200" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Необязательно">
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
           <div class="flex gap-2 pt-2">
-            <button type="button" data-action="close-modal" data-modal="spend-saving" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Отмена</button>
+            <button type="button" data-action="close-modal" data-modal="spend-saving" class="${UI.btnCancelBlock}">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Потратить</button>
           </div>
         </form>
@@ -642,7 +643,7 @@ function renderEmptyState() {
   return `
     <div class="text-center py-10">
       <p class="text-slate-500 mb-4">Копилок пока нет</p>
-      <button type="button" data-action="open-add-saving" class="px-6 py-3 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">Создать первую копилку</button>
+      <button type="button" data-action="open-add-saving" class="${UI.btnHero}">Создать первую копилку</button>
     </div>
   `;
 }
@@ -657,10 +658,10 @@ export function renderSavings(state, container) {
   container.innerHTML = `
     <div class="space-y-4">
       ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.SAVINGS, `
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <div class="${UI.panel} ${UI.panelPadding}">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-lg font-semibold text-slate-900">Копилки</h2>
-          ${renderModuleToolbar(DISPLAY_MODULE_KEYS.SAVINGS, savings.length ? `<button type="button" data-action="open-add-saving" class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0">Добавить копилку</button>` : '')}
+          ${renderModuleToolbar(DISPLAY_MODULE_KEYS.SAVINGS, savings.length ? `<button type="button" data-action="open-add-saving" class="${UI.btnPrimary}">Добавить копилку</button>` : '')}
         </div>
         ${list}
       </div>

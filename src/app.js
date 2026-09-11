@@ -7,6 +7,7 @@ BACKUP SNAPSHOT:
 - Stable build checkpoint created for rollback
 */
 import './lib/supabase.js';
+import { UI } from './modules/uiTheme.js';
 
 import {
   calculateTotalBalance,
@@ -277,7 +278,7 @@ function renderTab(tab) {
 
   const label = TAB_LABELS[tab];
   tabContent.innerHTML = `
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <div class="${UI.panel} ${UI.panelPadding}">
       <h2 class="text-lg font-semibold text-slate-900 mb-2">${label}</h2>
       <p class="text-slate-500">${TAB_MESSAGES[tab]}</p>
     </div>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: Design D2 Components</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Design D2 — uiTheme component system</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { UI, uiPanel } from '../src/modules/uiTheme.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    try {
+      const required = [
+        'panel', 'panelPadding', 'btnPrimary', 'btnPrimaryBlock', 'btnCancelBlock',
+        'field', 'label', 'modalShell', 'modalBody', 'displayToggle', 'displayToggleBtn',
+        'cardItem', 'btnHero', 'btnAction', 'btnActionPrimary'
+      ];
+      required.forEach((key) => assert(typeof UI[key] === 'string' && UI[key].length > 0, `UI.${key}`));
+
+      assert(UI.panel.includes('bg-surface'), 'panel uses surface token');
+      assert(UI.btnPrimary.includes('rounded-xl'), 'buttons use rounded-xl');
+      assert(UI.field.includes('rounded-xl'), 'fields use rounded-xl');
+
+      const html = uiPanel('<p>test</p>');
+      assert(html.includes(UI.panel) && html.includes(UI.panelPadding), 'uiPanel helper');
+
+      log('PASS  D2 uiTheme exports and tokens', 'pass');
+      log('Итого: PASS', 'pass');
+    } catch (e) {
+      log('FAIL  ' + e.message, 'fail');
+    }
+  </script>
+</body>
+</html>

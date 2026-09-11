@@ -1,3 +1,4 @@
+import { UI } from './uiTheme.js';
 import {
   getFinancialSummary,
   getExpensesByCategory,
@@ -70,7 +71,7 @@ function renderStatusBadge(status, label) {
 
 function renderFinancialSummary(summary) {
   return `
-    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+    <section class="${UI.panel} p-5">
       <h2 class="text-lg font-semibold text-slate-900 mb-4">Финансовая сводка</h2>
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         ${renderSummaryCard('Свободные деньги', summary.freeBalance, 'emerald')}
@@ -88,7 +89,7 @@ function renderFinancialSummary(summary) {
 function renderExpensesByCategory(items) {
   if (!items.length) {
     return `
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <section class="${UI.panel} p-5">
         <h2 class="text-lg font-semibold text-slate-900 mb-2">Расходы по категориям</h2>
         <p class="text-sm text-slate-500">Нет активных расходов в журнале операций.</p>
       </section>
@@ -113,7 +114,7 @@ function renderExpensesByCategory(items) {
   }).join('');
 
   return `
-    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+    <section class="${UI.panel} p-5">
       <h2 class="text-lg font-semibold text-slate-900 mb-4">Расходы по категориям</h2>
       <ul class="space-y-4">${rows}</ul>
     </section>
@@ -123,7 +124,7 @@ function renderExpensesByCategory(items) {
 function renderSavingsProgress(items) {
   if (!items.length) {
     return `
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <section class="${UI.panel} p-5">
         <h2 class="text-lg font-semibold text-slate-900 mb-2">Прогресс копилок</h2>
         <p class="text-sm text-slate-500">Копилок пока нет.</p>
       </section>
@@ -163,7 +164,7 @@ function renderSavingsProgress(items) {
   }).join('');
 
   return `
-    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+    <section class="${UI.panel} p-5">
       <h2 class="text-lg font-semibold text-slate-900 mb-4">Прогресс копилок</h2>
       <ul class="space-y-3">${rows}</ul>
     </section>
@@ -173,7 +174,7 @@ function renderSavingsProgress(items) {
 function renderObligationsOverview(items) {
   if (!items.length) {
     return `
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <section class="${UI.panel} p-5">
         <h2 class="text-lg font-semibold text-slate-900 mb-2">Обязательства</h2>
         <p class="text-sm text-slate-500">Обязательств пока нет.</p>
       </section>
@@ -191,7 +192,7 @@ function renderObligationsOverview(items) {
   `).join('');
 
   return `
-    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+    <section class="${UI.panel} p-5">
       <h2 class="text-lg font-semibold text-slate-900 mb-4">Обязательства</h2>
       <div class="overflow-x-auto -mx-2 px-2">
         <table class="w-full min-w-[640px]">

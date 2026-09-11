@@ -1,3 +1,4 @@
+import { UI } from './uiTheme.js';
 import {
   depositAccount,
   transferAccount
@@ -619,49 +620,49 @@ function renderAddAccountModal() {
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
       data-modal="add-account"
     >
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Новый счет</h3>
         <form data-form="add-account" class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название счета</label>
+            <label class="${UI.label}">Название счета</label>
             <input
               type="text"
               name="name"
               required
               maxlength="80"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
               placeholder="Например, Основной"
             >
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Валюта</label>
+            <label class="${UI.label}">Валюта</label>
             <select
               name="currency"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
             >
               <option value="RUB">RUB — рубли</option>
               <option value="USD">USD — доллары</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Начальный баланс</label>
+            <label class="${UI.label}">Начальный баланс</label>
             <input
               type="number"
               name="initialBalance"
               min="0"
               step="0.01"
               value="0"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
               placeholder="0"
             >
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
+            <label class="${UI.label}">Комментарий</label>
             <input
               type="text"
               name="comment"
               maxlength="200"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
               placeholder="Необязательно"
             >
           </div>
@@ -671,11 +672,11 @@ function renderAddAccountModal() {
               type="button"
               data-action="close-modal"
               data-modal="add-account"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200"
+              class="${UI.btnCancelBlock}"
             >Отмена</button>
             <button
               type="submit"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+              class="${UI.btnPrimaryBlock}"
             >Создать</button>
           </div>
         </form>
@@ -690,29 +691,29 @@ function renderEditAccountModal() {
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
       data-modal="edit-account"
     >
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Редактирование счета</h3>
         <form data-form="edit-account" class="space-y-4">
           <input type="hidden" name="accountId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Название счета</label>
+            <label class="${UI.label}">Название счета</label>
             <input
               type="text"
               name="name"
               required
               maxlength="80"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
             >
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Баланс</label>
+            <label class="${UI.label}">Баланс</label>
             <input
               type="number"
               name="balance"
               required
               min="0"
               step="0.01"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
             >
           </div>
           <div class="flex gap-2 pt-2">
@@ -720,11 +721,11 @@ function renderEditAccountModal() {
               type="button"
               data-action="close-modal"
               data-modal="edit-account"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200"
+              class="${UI.btnCancelBlock}"
             >Отмена</button>
             <button
               type="submit"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+              class="${UI.btnPrimaryBlock}"
             >Сохранить</button>
           </div>
         </form>
@@ -743,17 +744,17 @@ function renderTransferModal() {
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
       data-modal="transfer"
     >
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-1">Перевод между счетами</h3>
         <p class="text-sm text-slate-500 mb-4" data-transfer-source-label>Со счета</p>
         <form data-form="transfer" class="space-y-4">
           <input type="hidden" name="sourceAccountId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Счет-получатель</label>
+            <label class="${UI.label}">Счет-получатель</label>
             <select
               name="destAccountId"
               required
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
             >
               <option value="">Выберите счет</option>
             </select>
@@ -781,7 +782,7 @@ function renderTransferModal() {
             </label>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" data-transfer-amount-label>Сумма</label>
+            <label class="${UI.label}" data-transfer-amount-label>Сумма</label>
             <input
               type="number"
               name="amount"
@@ -789,7 +790,7 @@ function renderTransferModal() {
               min="0.01"
               step="0.01"
               inputmode="decimal"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
               placeholder="0"
             >
             <p class="text-xs text-slate-400 mt-1 hidden" data-transfer-rate-hint></p>
@@ -800,11 +801,11 @@ function renderTransferModal() {
               type="button"
               data-action="close-modal"
               data-modal="transfer"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200"
+              class="${UI.btnCancelBlock}"
             >Отмена</button>
             <button
               type="submit"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+              class="${UI.btnPrimaryBlock}"
             >Перевести</button>
           </div>
         </form>
@@ -819,40 +820,40 @@ function renderTopUpModal() {
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
       data-modal="topup"
     >
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-lg w-full max-w-md p-6">
+      <div class="${UI.modalShell} ${UI.modalBody}">
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Пополнение счета</h3>
         <form data-form="topup" class="space-y-4">
           <input type="hidden" name="accountId" value="">
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
+            <label class="${UI.label}">Сумма</label>
             <input
               type="number"
               name="amount"
               required
               min="0.01"
               step="0.01"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
               placeholder="0"
             >
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
+            <label class="${UI.label}">Комментарий</label>
             <input
               type="text"
               name="comment"
               maxlength="200"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
               placeholder="Необязательно"
             >
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Дата</label>
+            <label class="${UI.label}">Дата</label>
             <input
               type="date"
               name="date"
               required
               value="${todayIso()}"
-              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              class="${UI.field}"
             >
           </div>
           <div class="flex gap-2 pt-2">
@@ -860,11 +861,11 @@ function renderTopUpModal() {
               type="button"
               data-action="close-modal"
               data-modal="topup"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200"
+              class="${UI.btnCancelBlock}"
             >Отмена</button>
             <button
               type="submit"
-              class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+              class="${UI.btnPrimaryBlock}"
             >Сохранить</button>
           </div>
         </form>
@@ -880,7 +881,7 @@ function renderEmptyState() {
       <button
         type="button"
         data-action="open-add-account-modal"
-        class="px-6 py-3 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+        class="${UI.btnHero}"
       >Создать первый счет</button>
     </div>
   `;
@@ -955,14 +956,14 @@ export function renderAccounts(state, container) {
   container.innerHTML = `
     <div class="space-y-4">
       ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.ACCOUNTS, `
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <div class="${UI.panel} ${UI.panelPadding}">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 class="text-lg font-semibold text-slate-900">Счета</h2>
           ${renderModuleToolbar(DISPLAY_MODULE_KEYS.ACCOUNTS, accounts.length ? `
             <button
               type="button"
               data-action="open-add-account-modal"
-              class="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0"
+              class="${UI.btnPrimary}"
             >Добавить счет</button>
           ` : '')}
         </div>
@@ -976,7 +977,7 @@ export function renderAccounts(state, container) {
             step="0.01"
             value="${exchangeRate}"
             data-action="exchange-rate"
-            class="w-28 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            class="${UI.field} w-28"
           >
           <span class="text-xs text-slate-400">₽ за 1 $</span>
         </div>
