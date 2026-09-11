@@ -4,7 +4,7 @@
  */
 import { isExperiment } from '../config/environmentConfig.js';
 
-const REQUIRED_STRATEGY_METHODS = ['resolveEntityId', 'runFallback', 'apply'];
+const REQUIRED_STRATEGY_METHODS = ['resolveEntityId', 'apply'];
 
 let mutationPipelineDepth = 0;
 let legacyPipelineDepth = 0;

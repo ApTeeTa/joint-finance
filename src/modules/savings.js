@@ -1,9 +1,6 @@
 import {
   updateSavings,
-  spendSaving,
-  createSaving as recordSavingCreation,
-  updateSavingRecord,
-  deleteSavingRecord
+  spendSaving
 } from './financeGate.js';
 import { dispatch, ACTION_TYPES } from './actionRegistry.js';
 import {
@@ -243,14 +240,6 @@ function parseDeadlineFromForm(form, fromDate = todayIso()) {
 function registerSavingMutationStrategies() {
   registerMutationStrategy(SAVING_DOMAIN, ACTION_TYPES.SAVING_CREATE, {
     resolveEntityId: (payload) => payload.saving?.id ?? payload.savingId ?? null,
-    runFallback: (state, payload) => {
-      const { saving } = payload;
-      if (!Array.isArray(state.savings)) {
-        state.savings = [];
-      }
-      state.savings.push(saving);
-      return recordSavingCreation(state, saving, state.profile);
-    },
     apply: (result) => {
       const { state, payload } = result;
       const { saving } = payload;
@@ -264,22 +253,6 @@ function registerSavingMutationStrategies() {
 
   registerMutationStrategy(SAVING_DOMAIN, ACTION_TYPES.SAVING_UPDATE, {
     resolveEntityId: (payload) => payload.savingId ?? null,
-    runFallback: (state, payload) => {
-      const { savingId, changes, hasChanges } = payload;
-      const saving = findSaving(state, savingId);
-      if (!saving) {
-        return { ok: false, error: 'Копилка не найдена' };
-      }
-      saving.name = changes.newName;
-      saving.targetAmount = changes.newTargetAmount;
-      saving.deadlineType = changes.newDeadlineType;
-      saving.deadlineDate = changes.newDeadlineDate;
-      saving.savingType = changes.newSavingType;
-      if (hasChanges) {
-        return updateSavingRecord(state, savingId, changes, state.profile);
-      }
-      return { ok: true };
-    },
     apply: (result) => {
       const { state, entityId, payload } = result;
       const saving = findSaving(state, entityId);
@@ -299,15 +272,6 @@ function registerSavingMutationStrategies() {
 
   registerMutationStrategy(SAVING_DOMAIN, ACTION_TYPES.SAVING_DELETE, {
     resolveEntityId: (payload) => payload.savingId ?? payload.saving?.id ?? null,
-    runFallback: (state, payload) => {
-      const { saving, savingId } = payload;
-      const result = deleteSavingRecord(state, saving, state.profile);
-      if (!result.ok) {
-        return result;
-      }
-      state.savings = (state.savings ?? []).filter((item) => item.id !== savingId);
-      return { ok: true };
-    },
     apply: (result) => {
       const { state, entityId } = result;
       state.savings = (state.savings ?? []).filter((item) => item.id !== entityId);

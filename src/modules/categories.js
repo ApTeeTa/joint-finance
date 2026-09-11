@@ -2,8 +2,7 @@ import { calculateFreeBalance } from './financeEngine.js';
 import {
   createExpense,
   reserveCategory,
-  unreserveCategory,
-  deleteCategory as deleteCategoryRecord
+  unreserveCategory
 } from './financeGate.js';
 import { dispatch, ACTION_TYPES } from './actionRegistry.js';
 import {
@@ -49,13 +48,6 @@ function escapeHtml(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function createId(prefix) {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function findCategory(state, categoryId) {
@@ -136,50 +128,16 @@ function validatePositiveAmount(amount, label = 'Сумма') {
 function registerCategoryMutationStrategies() {
   registerMutationStrategy(CATEGORY_DOMAIN, ACTION_TYPES.CATEGORY_CREATE, {
     resolveEntityId: (payload) => payload.categoryId ?? null,
-    runFallback: (state, payload) => {
-      const { name, limit } = payload;
-      if (!Array.isArray(state.categories)) {
-        state.categories = [];
-      }
-      state.categories.push({
-        id: createId('category'),
-        name: String(name).trim(),
-        limit: Number(limit) || 0,
-        reserved: 0,
-        spent: 0,
-        createdAt: new Date().toISOString()
-      });
-      return { ok: true };
-    },
     apply: () => true
   });
 
   registerMutationStrategy(CATEGORY_DOMAIN, ACTION_TYPES.CATEGORY_UPDATE, {
     resolveEntityId: (payload) => payload.categoryId ?? null,
-    runFallback: (state, payload) => {
-      const { categoryId, name, limit } = payload;
-      const category = findCategory(state, categoryId);
-      if (!category) {
-        return { ok: false, error: 'Категория не найдена' };
-      }
-      category.name = String(name).trim();
-      category.limit = Number(limit) || 0;
-      return { ok: true };
-    },
     apply: () => true
   });
 
   registerMutationStrategy(CATEGORY_DOMAIN, ACTION_TYPES.CATEGORY_DELETE, {
     resolveEntityId: (payload) => payload.categoryId ?? payload.category?.id ?? null,
-    runFallback: (state, payload) => {
-      const { category, categoryId } = payload;
-      const result = deleteCategoryRecord(state, category, state.profile);
-      if (!result.ok) {
-        return result;
-      }
-      state.categories = (state.categories ?? []).filter((item) => item.id !== categoryId);
-      return { ok: true };
-    },
     apply: () => true
   });
 }

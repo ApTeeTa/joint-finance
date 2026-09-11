@@ -10,7 +10,6 @@
  * Pipeline:
  * 1. dispatch(action)
  * 2. dispatch.ok → normalizeMutationResult → applyMutationResult
- * 3. else → runLegacyFallback → normalizeMutationResult → applyMutationResult
  *
  * Architectural guard (dev-only): architectureGuard.js
  */
@@ -20,10 +19,6 @@ import {
   guardUnregisteredMutationStrategy,
   beginMutationPipeline,
   endMutationPipeline,
-  beginLegacyPipeline,
-  endLegacyPipeline,
-  beginLegacyFallbackAccess,
-  endLegacyFallbackAccess,
   guardApplyMutationResultEntry,
   beginApplyMutation,
   endApplyMutation
@@ -44,7 +39,7 @@ function strategyKey(domain, actionType) {
 
 /**
  * Register domain mutation strategy for an action type.
- * Strategy shape: { resolveEntityId, runFallback, apply }
+ * Strategy shape: { resolveEntityId, apply }
  * Strategies MUST NOT mutate state except via apply invoked by the engine.
  */
 export function registerMutationStrategy(domain, actionType, strategy) {
@@ -83,20 +78,6 @@ export function normalizeMutationResult({
     state,
     payload: { ...payload }
   };
-}
-
-export function runLegacyFallback(domain, actionType, state, payload) {
-  beginLegacyFallbackAccess({ domain, actionType });
-  try {
-    const strategy = getMutationStrategy(domain, actionType);
-    if (!strategy?.runFallback) {
-      guardUnregisteredMutationStrategy(domain, actionType);
-      return { ok: false };
-    }
-    return strategy.runFallback(state, payload);
-  } finally {
-    endLegacyFallbackAccess();
-  }
 }
 
 /**
@@ -153,34 +134,12 @@ export function executeMutation({
       meta: dispatchMeta
     });
 
-    if (dispatchResult?.ok === true) {
-      const normalized = normalizeMutationResult({
-        domain,
-        source: 'dispatch',
-        data: dispatchResult,
-        actionType,
-        entityId,
-        state,
-        payload
-      });
-      const ok = applyMutationResult(normalized);
-      logMutationExecution({
-        domain,
-        actionType,
-        entityId: normalized.entityId,
-        source: 'dispatch',
-        ok
-      });
-      return ok;
-    }
-
-    const fallbackResult = runLegacyFallback(domain, actionType, state, payload);
-    if (fallbackResult?.ok === false) {
+    if (dispatchResult?.ok !== true) {
       logMutationExecution({
         domain,
         actionType,
         entityId,
-        source: 'fallback',
+        source: 'dispatch',
         ok: false
       });
       if (dispatchResult?.error) {
@@ -191,8 +150,8 @@ export function executeMutation({
 
     const normalized = normalizeMutationResult({
       domain,
-      source: 'fallback',
-      data: fallbackResult,
+      source: 'dispatch',
+      data: dispatchResult,
       actionType,
       entityId,
       state,
@@ -203,60 +162,11 @@ export function executeMutation({
       domain,
       actionType,
       entityId: normalized.entityId,
-      source: 'fallback',
+      source: 'dispatch',
       ok
     });
-
-    if (!ok && dispatchResult?.error) {
-      alert(dispatchResult.error);
-    }
-
     return ok;
   } finally {
     endMutationPipeline();
-  }
-}
-
-export function executeLegacyMutation({
-  domain,
-  actionType,
-  entityId,
-  state,
-  payload
-}) {
-  beginLegacyPipeline();
-  try {
-    const fallbackResult = runLegacyFallback(domain, actionType, state, payload);
-    if (fallbackResult?.ok === false) {
-      logMutationExecution({
-        domain,
-        actionType,
-        entityId,
-        source: 'fallback',
-        ok: false
-      });
-      return false;
-    }
-
-    const normalized = normalizeMutationResult({
-      domain,
-      source: 'fallback',
-      data: fallbackResult,
-      actionType,
-      entityId,
-      state,
-      payload
-    });
-    const ok = applyMutationResult(normalized);
-    logMutationExecution({
-      domain,
-      actionType,
-      entityId: normalized.entityId,
-      source: 'fallback',
-      ok
-    });
-    return ok;
-  } finally {
-    endLegacyPipeline();
   }
 }

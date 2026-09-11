@@ -1,18 +1,13 @@
 import {
   depositAccount,
-  transferAccount,
-  createAccount as recordAccountCreation,
-  updateAccountRecord,
-  deleteAccountRecord
+  transferAccount
 } from './financeGate.js';
 import { dispatch, ACTION_TYPES } from './actionRegistry.js';
 import {
   MUTATION_DOMAINS,
   registerMutationStrategy,
-  executeMutation,
-  executeLegacyMutation
+  executeMutation
 } from './mutationContract.js';
-import { isExperiment } from '../config/environmentConfig.js';
 import {
   getAccountTransactions,
   renderAccountSelectOptions,
@@ -46,18 +41,6 @@ const OWNER_ICONS = {
 const DEFAULT_EXCHANGE_RATE = 92;
 const DISPATCH_SOURCE = 'accounts.js';
 const ACCOUNT_DOMAIN = MUTATION_DOMAINS.ACCOUNT;
-
-function logL1RemovedActive(action = 'account_create') {
-  if (!isExperiment()) {
-    return;
-  }
-  console.info('[accounts] L1_REMOVED_ACTIVE', {
-    legacyAccountsTableWrite: false,
-    supabaseAccountsInsertTriggered: false,
-    persistencePath: 'stateRemote → household_snapshots',
-    action
-  });
-}
 
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
@@ -102,10 +85,6 @@ function findAccount(state, accountId) {
 function registerAccountMutationStrategies() {
   registerMutationStrategy(ACCOUNT_DOMAIN, ACTION_TYPES.ACCOUNT_CREATE, {
     resolveEntityId: (payload) => payload.account?.id ?? payload.accountId ?? null,
-    runFallback: (state, payload) => {
-      const { account, balance = 0 } = payload;
-      return recordAccountCreation(state, account, balance, state.profile);
-    },
     apply: (result) => {
       const { state, payload } = result;
       const { account, balance = 0, comment } = payload;
@@ -138,13 +117,6 @@ function registerAccountMutationStrategies() {
 
   registerMutationStrategy(ACCOUNT_DOMAIN, ACTION_TYPES.ACCOUNT_UPDATE, {
     resolveEntityId: (payload) => payload.accountId ?? null,
-    runFallback: (state, payload) => {
-      const { accountId, changes, hasChanges } = payload;
-      if (!hasChanges) {
-        return { ok: true };
-      }
-      return updateAccountRecord(state, accountId, changes, state.profile);
-    },
     apply: (result) => {
       const { state, payload, entityId } = result;
       const { changes } = payload;
@@ -163,15 +135,6 @@ function registerAccountMutationStrategies() {
 
   registerMutationStrategy(ACCOUNT_DOMAIN, ACTION_TYPES.ACCOUNT_DELETE, {
     resolveEntityId: (payload) => payload.accountId ?? payload.account?.id ?? null,
-    runFallback: (state, payload) => {
-      const { account, accountId } = payload;
-      const target = account ?? findAccount(state, accountId);
-      if (!target) {
-        alert('Счет не найден');
-        return { ok: false };
-      }
-      return deleteAccountRecord(state, target, state.profile);
-    },
     apply: (result) => {
       const { state, entityId } = result;
       state.accounts = state.accounts.filter((item) => item.id !== entityId);
@@ -198,16 +161,6 @@ function executeAccountMutation({
     payload: applyContext,
     dispatchFn: dispatch,
     dispatchMeta: { source: DISPATCH_SOURCE }
-  });
-}
-
-function executeLegacyAccountMutation({ actionType, accountId, state, applyContext }) {
-  return executeLegacyMutation({
-    domain: ACCOUNT_DOMAIN,
-    actionType,
-    entityId: accountId,
-    state,
-    payload: applyContext
   });
 }
 
@@ -261,7 +214,7 @@ function validateCurrency(currency) {
   return null;
 }
 
-function createAccountLegacy(state, name, currency, initialBalance, comment, options = {}) {
+function createAccount(state, name, currency, initialBalance, comment) {
   const nameError = validateAccountName(name);
   if (nameError) {
     alert(nameError);
@@ -282,48 +235,7 @@ function createAccountLegacy(state, name, currency, initialBalance, comment, opt
 
   const balance = Number(initialBalance) || 0;
   const account = {
-    id: options.remoteId ?? createId('account'),
-    name: String(name).trim(),
-    currency,
-    balance: 0,
-    owner: state.profile,
-    createdAt: new Date().toISOString()
-  };
-
-  return executeLegacyAccountMutation({
-    actionType: ACTION_TYPES.ACCOUNT_CREATE,
-    accountId: account.id,
-    state,
-    applyContext: {
-      account,
-      balance,
-      comment
-    }
-  });
-}
-
-function createAccount(state, name, currency, initialBalance, comment, options = {}) {
-  const nameError = validateAccountName(name);
-  if (nameError) {
-    alert(nameError);
-    return false;
-  }
-
-  const currencyError = validateCurrency(currency);
-  if (currencyError) {
-    alert(currencyError);
-    return false;
-  }
-
-  const balanceError = validateBalance(initialBalance);
-  if (balanceError) {
-    alert(balanceError);
-    return false;
-  }
-
-  const balance = Number(initialBalance) || 0;
-  const account = {
-    id: options.remoteId ?? createId('account'),
+    id: createId('account'),
     name: String(name).trim(),
     currency,
     balance: 0,
@@ -345,50 +257,6 @@ function createAccount(state, name, currency, initialBalance, comment, options =
       account,
       balance,
       comment
-    }
-  });
-}
-
-function updateAccountLegacy(state, accountId, name, balance) {
-  const nameError = validateAccountName(name);
-  if (nameError) {
-    alert(nameError);
-    return false;
-  }
-
-  const balanceError = validateBalance(balance);
-  if (balanceError) {
-    alert(balanceError);
-    return false;
-  }
-
-  const account = findAccount(state, accountId);
-  if (!account) {
-    alert('Счет не найден');
-    return false;
-  }
-
-  const changes = {
-    oldName: account.name,
-    newName: String(name).trim(),
-    oldBalance: account.balance ?? 0,
-    newBalance: Number(balance) || 0,
-    oldCurrency: account.currency ?? 'RUB',
-    newCurrency: account.currency ?? 'RUB'
-  };
-
-  const hasChanges = changes.oldName !== changes.newName
-    || changes.oldBalance !== changes.newBalance
-    || changes.oldCurrency !== changes.newCurrency;
-
-  return executeLegacyAccountMutation({
-    actionType: ACTION_TYPES.ACCOUNT_UPDATE,
-    accountId,
-    state,
-    applyContext: {
-      accountId,
-      changes,
-      hasChanges
     }
   });
 }
@@ -443,26 +311,6 @@ function updateAccount(state, accountId, name, balance) {
       accountId,
       changes,
       hasChanges
-    }
-  });
-}
-
-function deleteAccountLegacy(state, accountId) {
-  if (!Array.isArray(state.accounts)) return false;
-
-  const account = findAccount(state, accountId);
-  if (!account) {
-    alert('Счет не найден');
-    return false;
-  }
-
-  return executeLegacyAccountMutation({
-    actionType: ACTION_TYPES.ACCOUNT_DELETE,
-    accountId,
-    state,
-    applyContext: {
-      accountId,
-      account
     }
   });
 }
@@ -1402,8 +1250,6 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const currency = addForm.currency.value;
       const initialBalance = addForm.initialBalance.value;
       const comment = addForm.comment.value;
-
-      logL1RemovedActive('account_create');
 
       if (createAccount(state, name, currency, initialBalance, comment)) {
         closeModal('add-account');

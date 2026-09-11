@@ -62,13 +62,6 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
-function createId(prefix) {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
 function parseLocalDate(iso) {
   const [year, month, day] = String(iso).split('-').map(Number);
   return new Date(year, month - 1, day);
@@ -220,56 +213,16 @@ function unreserveFunds(state, obligationId, amount) {
 function registerObligationMutationStrategies() {
   registerMutationStrategy(OBLIGATION_DOMAIN, ACTION_TYPES.OBLIGATION_CREATE, {
     resolveEntityId: (payload) => payload.obligationId ?? null,
-    runFallback: (state, payload) => {
-      const { data } = payload;
-      if (!Array.isArray(state.obligations)) {
-        state.obligations = [];
-      }
-      state.obligations.push(normalizeObligation({
-        id: createId('obligation'),
-        name: String(data.name).trim(),
-        reserveAmount: 0,
-        targetAmount: data.targetAmount != null && data.targetAmount !== ''
-          ? Number(data.targetAmount)
-          : null,
-        paidUntil: data.paidUntil,
-        comment: String(data.comment ?? '').trim(),
-        status: 'active',
-        createdAt: new Date().toISOString()
-      }));
-      return { ok: true };
-    },
     apply: () => true
   });
 
   registerMutationStrategy(OBLIGATION_DOMAIN, ACTION_TYPES.OBLIGATION_UPDATE, {
     resolveEntityId: (payload) => payload.obligationId ?? null,
-    runFallback: (state, payload) => {
-      const { obligationId, data } = payload;
-      const obligation = findObligation(state, obligationId);
-      if (!obligation) {
-        return { ok: false, error: 'Обязательство не найдено' };
-      }
-      obligation.name = String(data.name).trim();
-      obligation.targetAmount = data.targetAmount != null && data.targetAmount !== ''
-        ? Number(data.targetAmount)
-        : null;
-      obligation.paidUntil = data.paidUntil;
-      obligation.comment = String(data.comment ?? '').trim();
-      syncStoredStatus(obligation);
-      return { ok: true };
-    },
     apply: () => true
   });
 
   registerMutationStrategy(OBLIGATION_DOMAIN, ACTION_TYPES.OBLIGATION_DELETE, {
     resolveEntityId: (payload) => payload.obligationId ?? null,
-    runFallback: (state, payload) => {
-      state.obligations = (state.obligations ?? []).filter(
-        (item) => item.id !== payload.obligationId
-      );
-      return { ok: true };
-    },
     apply: () => true
   });
 }
