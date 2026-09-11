@@ -5,6 +5,12 @@ import {
   updateSavingRecord,
   deleteSavingRecord
 } from './financeGate.js';
+import { dispatch, ACTION_TYPES } from './actionRegistry.js';
+import {
+  MUTATION_DOMAINS,
+  registerMutationStrategy,
+  executeMutation
+} from './mutationContract.js';
 import {
   renderAccountSelectOptions,
   getSavingAccumulated,
@@ -43,6 +49,9 @@ const TARGET_MONTHS_BY_DEADLINE = {
   years_1: 12,
   months_24: 24
 };
+
+const DISPATCH_SOURCE = 'savings.js';
+const SAVING_DOMAIN = MUTATION_DOMAINS.SAVING;
 
 function formatMoney(amount) {
   return new Intl.NumberFormat('ru-RU', {
@@ -231,14 +240,107 @@ function parseDeadlineFromForm(form, fromDate = todayIso()) {
   return { ok: true, deadlineType, deadlineDate };
 }
 
+function registerSavingMutationStrategies() {
+  registerMutationStrategy(SAVING_DOMAIN, ACTION_TYPES.SAVING_CREATE, {
+    resolveEntityId: (payload) => payload.saving?.id ?? payload.savingId ?? null,
+    runFallback: (state, payload) => {
+      const { saving } = payload;
+      if (!Array.isArray(state.savings)) {
+        state.savings = [];
+      }
+      state.savings.push(saving);
+      return recordSavingCreation(state, saving, state.profile);
+    },
+    apply: (result) => {
+      const { state, payload } = result;
+      const { saving } = payload;
+      if (!Array.isArray(state.savings)) {
+        state.savings = [];
+      }
+      state.savings.push(saving);
+      return true;
+    }
+  });
+
+  registerMutationStrategy(SAVING_DOMAIN, ACTION_TYPES.SAVING_UPDATE, {
+    resolveEntityId: (payload) => payload.savingId ?? null,
+    runFallback: (state, payload) => {
+      const { savingId, changes, hasChanges } = payload;
+      const saving = findSaving(state, savingId);
+      if (!saving) {
+        return { ok: false, error: 'Копилка не найдена' };
+      }
+      saving.name = changes.newName;
+      saving.targetAmount = changes.newTargetAmount;
+      saving.deadlineType = changes.newDeadlineType;
+      saving.deadlineDate = changes.newDeadlineDate;
+      saving.savingType = changes.newSavingType;
+      if (hasChanges) {
+        return updateSavingRecord(state, savingId, changes, state.profile);
+      }
+      return { ok: true };
+    },
+    apply: (result) => {
+      const { state, entityId, payload } = result;
+      const saving = findSaving(state, entityId);
+      if (!saving) {
+        alert('Копилка не найдена');
+        return false;
+      }
+      const { changes } = payload;
+      saving.name = changes.newName;
+      saving.targetAmount = changes.newTargetAmount;
+      saving.deadlineType = changes.newDeadlineType;
+      saving.deadlineDate = changes.newDeadlineDate;
+      saving.savingType = changes.newSavingType;
+      return true;
+    }
+  });
+
+  registerMutationStrategy(SAVING_DOMAIN, ACTION_TYPES.SAVING_DELETE, {
+    resolveEntityId: (payload) => payload.savingId ?? payload.saving?.id ?? null,
+    runFallback: (state, payload) => {
+      const { saving, savingId } = payload;
+      const result = deleteSavingRecord(state, saving, state.profile);
+      if (!result.ok) {
+        return result;
+      }
+      state.savings = (state.savings ?? []).filter((item) => item.id !== savingId);
+      return { ok: true };
+    },
+    apply: (result) => {
+      const { state, entityId } = result;
+      state.savings = (state.savings ?? []).filter((item) => item.id !== entityId);
+      return true;
+    }
+  });
+}
+
+registerSavingMutationStrategies();
+
+function executeSavingMutation({
+  actionType,
+  savingId,
+  state,
+  dispatchPayload,
+  applyContext
+}) {
+  return executeMutation({
+    domain: SAVING_DOMAIN,
+    actionType,
+    entityId: savingId,
+    state,
+    dispatchPayload,
+    payload: applyContext,
+    dispatchFn: dispatch,
+    dispatchMeta: { source: DISPATCH_SOURCE }
+  });
+}
+
 function createSaving(state, name, targetAmount, deadlineType, deadlineDate, savingType) {
   if (!name || !String(name).trim()) {
     alert('Введите название копилки');
     return false;
-  }
-
-  if (!Array.isArray(state.savings)) {
-    state.savings = [];
   }
 
   const saving = normalizeSaving({
@@ -252,9 +354,17 @@ function createSaving(state, name, targetAmount, deadlineType, deadlineDate, sav
     createdAt: new Date().toISOString()
   });
 
-  state.savings.push(saving);
-  recordSavingCreation(state, saving, state.profile);
-  return true;
+  return executeSavingMutation({
+    actionType: ACTION_TYPES.SAVING_CREATE,
+    savingId: saving.id,
+    state,
+    dispatchPayload: {
+      state,
+      saving,
+      author: state.profile
+    },
+    applyContext: { saving }
+  });
 }
 
 function updateSaving(state, savingId, name, targetAmount, deadlineType, deadlineDate, savingType) {
@@ -275,6 +385,7 @@ function updateSaving(state, savingId, name, targetAmount, deadlineType, deadlin
     return false;
   }
 
+  const nextSavingType = savingType === 'single_use' ? 'single_use' : 'recurring';
   const changes = {
     oldName: saving.name,
     newName: String(name).trim(),
@@ -284,6 +395,8 @@ function updateSaving(state, savingId, name, targetAmount, deadlineType, deadlin
     newDeadlineType: deadlineType || 'none',
     oldDeadlineDate: saving.deadlineDate ?? null,
     newDeadlineDate: deadlineDate ?? null,
+    oldSavingType: saving.savingType ?? 'recurring',
+    newSavingType: nextSavingType,
     oldDeadlineLabel: formatDeadlineLabel(saving),
     newDeadlineLabel: formatDeadlineLabel({
       deadlineType: deadlineType || 'none',
@@ -291,22 +404,32 @@ function updateSaving(state, savingId, name, targetAmount, deadlineType, deadlin
     })
   };
 
-  saving.name = changes.newName;
-  saving.targetAmount = changes.newTargetAmount;
-  saving.deadlineType = changes.newDeadlineType;
-  saving.deadlineDate = changes.newDeadlineDate;
-  saving.savingType = savingType === 'single_use' ? 'single_use' : 'recurring';
-
   const hasChanges = changes.oldName !== changes.newName
     || changes.oldTargetAmount !== changes.newTargetAmount
     || changes.oldDeadlineType !== changes.newDeadlineType
-    || changes.oldDeadlineDate !== changes.newDeadlineDate;
+    || changes.oldDeadlineDate !== changes.newDeadlineDate
+    || changes.oldSavingType !== changes.newSavingType;
 
-  if (hasChanges) {
-    updateSavingRecord(state, savingId, changes, state.profile);
+  if (!hasChanges) {
+    return true;
   }
 
-  return true;
+  return executeSavingMutation({
+    actionType: ACTION_TYPES.SAVING_UPDATE,
+    savingId,
+    state,
+    dispatchPayload: {
+      state,
+      savingId,
+      changes,
+      author: state.profile
+    },
+    applyContext: {
+      savingId,
+      changes,
+      hasChanges
+    }
+  });
 }
 
 function deleteSaving(state, savingId) {
@@ -316,9 +439,20 @@ function deleteSaving(state, savingId) {
     return false;
   }
 
-  deleteSavingRecord(state, saving, state.profile);
-  state.savings = (state.savings ?? []).filter((item) => item.id !== savingId);
-  return true;
+  return executeSavingMutation({
+    actionType: ACTION_TYPES.SAVING_DELETE,
+    savingId,
+    state,
+    dispatchPayload: {
+      state,
+      saving,
+      author: state.profile
+    },
+    applyContext: {
+      savingId,
+      saving
+    }
+  });
 }
 
 function renderSavingTypeFields(prefix, saving = null) {

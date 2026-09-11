@@ -1,5 +1,11 @@
 import { calculateFreeBalance } from './financeEngine.js';
 import { payObligation, unreserveObligation, reserveObligation } from './financeGate.js';
+import { dispatch, ACTION_TYPES } from './actionRegistry.js';
+import {
+  MUTATION_DOMAINS,
+  registerMutationStrategy,
+  executeMutation
+} from './mutationContract.js';
 import {
   renderAccountSelectOptions,
   todayIso
@@ -36,6 +42,9 @@ const STATUS_CARD_CLASS = {
   current: 'border-emerald-300 bg-emerald-50/60',
   overdue: 'border-red-300 bg-red-50/60'
 };
+
+const DISPATCH_SOURCE = 'obligations.js';
+const OBLIGATION_DOMAIN = MUTATION_DOMAINS.OBLIGATION;
 
 function formatMoney(amount) {
   return new Intl.NumberFormat('ru-RU', {
@@ -208,6 +217,84 @@ function unreserveFunds(state, obligationId, amount) {
   return true;
 }
 
+function registerObligationMutationStrategies() {
+  registerMutationStrategy(OBLIGATION_DOMAIN, ACTION_TYPES.OBLIGATION_CREATE, {
+    resolveEntityId: (payload) => payload.obligationId ?? null,
+    runFallback: (state, payload) => {
+      const { data } = payload;
+      if (!Array.isArray(state.obligations)) {
+        state.obligations = [];
+      }
+      state.obligations.push(normalizeObligation({
+        id: createId('obligation'),
+        name: String(data.name).trim(),
+        reserveAmount: 0,
+        targetAmount: data.targetAmount != null && data.targetAmount !== ''
+          ? Number(data.targetAmount)
+          : null,
+        paidUntil: data.paidUntil,
+        comment: String(data.comment ?? '').trim(),
+        status: 'active',
+        createdAt: new Date().toISOString()
+      }));
+      return { ok: true };
+    },
+    apply: () => true
+  });
+
+  registerMutationStrategy(OBLIGATION_DOMAIN, ACTION_TYPES.OBLIGATION_UPDATE, {
+    resolveEntityId: (payload) => payload.obligationId ?? null,
+    runFallback: (state, payload) => {
+      const { obligationId, data } = payload;
+      const obligation = findObligation(state, obligationId);
+      if (!obligation) {
+        return { ok: false, error: 'Обязательство не найдено' };
+      }
+      obligation.name = String(data.name).trim();
+      obligation.targetAmount = data.targetAmount != null && data.targetAmount !== ''
+        ? Number(data.targetAmount)
+        : null;
+      obligation.paidUntil = data.paidUntil;
+      obligation.comment = String(data.comment ?? '').trim();
+      syncStoredStatus(obligation);
+      return { ok: true };
+    },
+    apply: () => true
+  });
+
+  registerMutationStrategy(OBLIGATION_DOMAIN, ACTION_TYPES.OBLIGATION_DELETE, {
+    resolveEntityId: (payload) => payload.obligationId ?? null,
+    runFallback: (state, payload) => {
+      state.obligations = (state.obligations ?? []).filter(
+        (item) => item.id !== payload.obligationId
+      );
+      return { ok: true };
+    },
+    apply: () => true
+  });
+}
+
+registerObligationMutationStrategies();
+
+function executeObligationMutation({
+  actionType,
+  obligationId,
+  state,
+  dispatchPayload,
+  applyContext
+}) {
+  return executeMutation({
+    domain: OBLIGATION_DOMAIN,
+    actionType,
+    entityId: obligationId,
+    state,
+    dispatchPayload,
+    payload: applyContext,
+    dispatchFn: dispatch,
+    dispatchMeta: { source: DISPATCH_SOURCE }
+  });
+}
+
 function createObligation(state, data) {
   if (!data.name || !String(data.name).trim()) {
     alert('Введите название обязательства');
@@ -218,25 +305,17 @@ function createObligation(state, data) {
     return false;
   }
 
-  if (!Array.isArray(state.obligations)) {
-    state.obligations = [];
-  }
-
-  const obligation = normalizeObligation({
-    id: createId('obligation'),
-    name: String(data.name).trim(),
-    reserveAmount: 0,
-    targetAmount: data.targetAmount != null && data.targetAmount !== ''
-      ? Number(data.targetAmount)
-      : null,
-    paidUntil: data.paidUntil,
-    comment: String(data.comment ?? '').trim(),
-    status: 'active',
-    createdAt: new Date().toISOString()
+  return executeObligationMutation({
+    actionType: ACTION_TYPES.OBLIGATION_CREATE,
+    obligationId: null,
+    state,
+    dispatchPayload: {
+      state,
+      data,
+      author: state.profile
+    },
+    applyContext: { data }
   });
-
-  state.obligations.push(obligation);
-  return true;
 }
 
 function updateObligation(state, obligationId, data) {
@@ -255,14 +334,18 @@ function updateObligation(state, obligationId, data) {
     return false;
   }
 
-  obligation.name = String(data.name).trim();
-  obligation.targetAmount = data.targetAmount != null && data.targetAmount !== ''
-    ? Number(data.targetAmount)
-    : null;
-  obligation.paidUntil = data.paidUntil;
-  obligation.comment = String(data.comment ?? '').trim();
-  syncStoredStatus(obligation);
-  return true;
+  return executeObligationMutation({
+    actionType: ACTION_TYPES.OBLIGATION_UPDATE,
+    obligationId,
+    state,
+    dispatchPayload: {
+      state,
+      obligationId,
+      data,
+      author: state.profile
+    },
+    applyContext: { obligationId, data }
+  });
 }
 
 function deleteObligation(state, obligationId) {
@@ -272,8 +355,17 @@ function deleteObligation(state, obligationId) {
     return false;
   }
 
-  state.obligations = (state.obligations ?? []).filter((item) => item.id !== obligationId);
-  return true;
+  return executeObligationMutation({
+    actionType: ACTION_TYPES.OBLIGATION_DELETE,
+    obligationId,
+    state,
+    dispatchPayload: {
+      state,
+      obligationId,
+      author: state.profile
+    },
+    applyContext: { obligationId }
+  });
 }
 
 function formatObligationDueMeta(item) {

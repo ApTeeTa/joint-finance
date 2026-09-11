@@ -3,8 +3,14 @@ import {
   createExpense,
   reserveCategory,
   unreserveCategory,
-  deleteCategory as recordCategoryDeletion
+  deleteCategory as deleteCategoryRecord
 } from './financeGate.js';
+import { dispatch, ACTION_TYPES } from './actionRegistry.js';
+import {
+  MUTATION_DOMAINS,
+  registerMutationStrategy,
+  executeMutation
+} from './mutationContract.js';
 import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LABELS, isMiscCategory, MISC_CATEGORY_NAME } from './transactions.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import {
@@ -25,6 +31,9 @@ const OWNER_LABELS = {
   husband: 'Муж',
   wife: 'Жена'
 };
+
+const DISPATCH_SOURCE = 'categories.js';
+const CATEGORY_DOMAIN = MUTATION_DOMAINS.CATEGORY;
 
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
@@ -124,6 +133,78 @@ function validatePositiveAmount(amount, label = 'Сумма') {
   return null;
 }
 
+function registerCategoryMutationStrategies() {
+  registerMutationStrategy(CATEGORY_DOMAIN, ACTION_TYPES.CATEGORY_CREATE, {
+    resolveEntityId: (payload) => payload.categoryId ?? null,
+    runFallback: (state, payload) => {
+      const { name, limit } = payload;
+      if (!Array.isArray(state.categories)) {
+        state.categories = [];
+      }
+      state.categories.push({
+        id: createId('category'),
+        name: String(name).trim(),
+        limit: Number(limit) || 0,
+        reserved: 0,
+        spent: 0,
+        createdAt: new Date().toISOString()
+      });
+      return { ok: true };
+    },
+    apply: () => true
+  });
+
+  registerMutationStrategy(CATEGORY_DOMAIN, ACTION_TYPES.CATEGORY_UPDATE, {
+    resolveEntityId: (payload) => payload.categoryId ?? null,
+    runFallback: (state, payload) => {
+      const { categoryId, name, limit } = payload;
+      const category = findCategory(state, categoryId);
+      if (!category) {
+        return { ok: false, error: 'Категория не найдена' };
+      }
+      category.name = String(name).trim();
+      category.limit = Number(limit) || 0;
+      return { ok: true };
+    },
+    apply: () => true
+  });
+
+  registerMutationStrategy(CATEGORY_DOMAIN, ACTION_TYPES.CATEGORY_DELETE, {
+    resolveEntityId: (payload) => payload.categoryId ?? payload.category?.id ?? null,
+    runFallback: (state, payload) => {
+      const { category, categoryId } = payload;
+      const result = deleteCategoryRecord(state, category, state.profile);
+      if (!result.ok) {
+        return result;
+      }
+      state.categories = (state.categories ?? []).filter((item) => item.id !== categoryId);
+      return { ok: true };
+    },
+    apply: () => true
+  });
+}
+
+registerCategoryMutationStrategies();
+
+function executeCategoryMutation({
+  actionType,
+  categoryId,
+  state,
+  dispatchPayload,
+  applyContext
+}) {
+  return executeMutation({
+    domain: CATEGORY_DOMAIN,
+    actionType,
+    entityId: categoryId,
+    state,
+    dispatchPayload,
+    payload: applyContext,
+    dispatchFn: dispatch,
+    dispatchMeta: { source: DISPATCH_SOURCE }
+  });
+}
+
 function createCategory(state, name, limit) {
   const nameError = validateCategoryName(name);
   if (nameError) {
@@ -142,20 +223,18 @@ function createCategory(state, name, limit) {
     return false;
   }
 
-  if (!Array.isArray(state.categories)) {
-    state.categories = [];
-  }
-
-  state.categories.push({
-    id: createId('category'),
-    name: String(name).trim(),
-    limit: Number(limit) || 0,
-    reserved: 0,
-    spent: 0,
-    createdAt: new Date().toISOString()
+  return executeCategoryMutation({
+    actionType: ACTION_TYPES.CATEGORY_CREATE,
+    categoryId: null,
+    state,
+    dispatchPayload: {
+      state,
+      name,
+      limit,
+      author: state.profile
+    },
+    applyContext: { name, limit }
   });
-
-  return true;
 }
 
 function updateCategory(state, categoryId, name, limit) {
@@ -182,9 +261,19 @@ function updateCategory(state, categoryId, name, limit) {
     return false;
   }
 
-  category.name = String(name).trim();
-  category.limit = Number(limit) || 0;
-  return true;
+  return executeCategoryMutation({
+    actionType: ACTION_TYPES.CATEGORY_UPDATE,
+    categoryId,
+    state,
+    dispatchPayload: {
+      state,
+      categoryId,
+      name,
+      limit,
+      author: state.profile
+    },
+    applyContext: { categoryId, name, limit }
+  });
 }
 
 function deleteCategory(state, categoryId) {
@@ -199,14 +288,20 @@ function deleteCategory(state, categoryId) {
     return false;
   }
 
-  const result = recordCategoryDeletion(state, category, state.profile);
-  if (!result.ok) {
-    alert(result.error);
-    return false;
-  }
-
-  state.categories = (state.categories ?? []).filter((item) => item.id !== categoryId);
-  return true;
+  return executeCategoryMutation({
+    actionType: ACTION_TYPES.CATEGORY_DELETE,
+    categoryId,
+    state,
+    dispatchPayload: {
+      state,
+      category,
+      author: state.profile
+    },
+    applyContext: {
+      categoryId,
+      category
+    }
+  });
 }
 
 function reserveFunds(state, categoryId, amount) {

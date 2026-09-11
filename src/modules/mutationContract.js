@@ -3,9 +3,9 @@
  *
  * SUPPORTED DOMAINS:
  * - account (reference implementation in accounts.js)
- * - category (future)
- * - saving (future)
- * - obligation (future)
+ * - category (categories.js)
+ * - obligation (obligations.js)
+ * - saving (savings.js)
  *
  * Pipeline:
  * 1. dispatch(action)
@@ -30,10 +30,10 @@ import {
 } from './architectureGuard.js';
 
 export const MUTATION_DOMAINS = Object.freeze({
-  ACCOUNT: 'account'
-  // CATEGORY: 'category',
-  // SAVING: 'saving',
-  // OBLIGATION: 'obligation'
+  ACCOUNT: 'account',
+  CATEGORY: 'category',
+  OBLIGATION: 'obligation',
+  SAVING: 'saving'
 });
 
 const strategyRegistry = new Map();

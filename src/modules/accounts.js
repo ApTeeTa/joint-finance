@@ -1361,7 +1361,22 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
         return;
       }
 
-      state.exchangeRate = Number(input.value);
+      const result = dispatch({
+        type: ACTION_TYPES.RATE_UPDATE,
+        payload: {
+          state,
+          exchangeRate: Number(input.value),
+          author: state.profile
+        },
+        meta: { source: DISPATCH_SOURCE }
+      });
+
+      if (!result.ok) {
+        alert(result.error);
+        input.value = getExchangeRate(state);
+        return;
+      }
+
       if (typeof onUpdate === 'function') {
         onUpdate();
       }
