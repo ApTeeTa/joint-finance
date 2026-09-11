@@ -14,6 +14,7 @@ export function isWithinAppUi(target, container) {
 }
 
 const MODAL_SELECTOR = '[data-modal]';
+/** Matches MODAL_OVERLAY_RULE.overlayTemplateClasses — fixed inset-0 backdrop shell. */
 const MODAL_OVERLAY_SELECTOR = 'div[data-modal].fixed.inset-0';
 
 function queryModals(scope = document) {
@@ -141,4 +142,37 @@ export function closeAllModals() {
     setModalHidden(modal, true);
   });
   syncBodyModalState();
+}
+
+let modalDismissHandlersBound = false;
+
+/**
+ * MODAL_DISMISS_RULE: click on dimmed backdrop closes the open modal.
+ * Click on the white panel (direct child) does not close.
+ */
+export function initModalDismissHandlers() {
+  if (modalDismissHandlersBound) {
+    return;
+  }
+  modalDismissHandlersBound = true;
+
+  if (isExperiment()) {
+    logUiRuleFix('modal_backdrop_dismiss');
+  }
+
+  document.addEventListener('click', (event) => {
+    const modal = event.target.closest('[data-modal]');
+    if (!modal || modal.classList.contains('hidden')) {
+      return;
+    }
+
+    if (event.target !== modal) {
+      return;
+    }
+
+    const modalName = modal.dataset.modal;
+    if (modalName) {
+      closeModal(modalName);
+    }
+  });
 }

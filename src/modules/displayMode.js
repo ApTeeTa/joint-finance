@@ -6,6 +6,7 @@ import {
   getDefaultCardState
 } from './uiRulesEngine.js';
 import { initOverflowMenuHandlers } from './uiActionRenderer.js';
+import { initModalDismissHandlers } from './modalLayer.js';
 
 /*
 PHASE 3 COMPLETE:
@@ -405,6 +406,7 @@ export function initDisplayModeSystem() {
   }
   displayModeSystemReady = true;
   initOverflowMenuHandlers();
+  initModalDismissHandlers();
 
   document.addEventListener('click', (event) => {
     const modeButton = event.target.closest('[data-action="set-display-mode"]');

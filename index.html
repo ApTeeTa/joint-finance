@@ -64,12 +64,18 @@
     }
 
     #modal-root {
+      position: relative;
+      z-index: 100;
       pointer-events: none;
     }
 
     #app-header {
       position: relative;
       z-index: 30;
+    }
+
+    body.modal-open {
+      overflow: hidden;
     }
 
     #tab-nav {
@@ -104,12 +110,10 @@
       visibility: hidden !important;
     }
 
+    /* MODAL_OVERLAY_RULE: full-viewport dim — header included */
     [data-modal]:not(.hidden) {
       position: fixed !important;
-      top: var(--header-height) !important;
-      right: 0 !important;
-      bottom: 0 !important;
-      left: 0 !important;
+      inset: 0 !important;
       z-index: 100 !important;
       display: flex !important;
       flex-direction: column !important;

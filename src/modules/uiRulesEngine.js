@@ -101,6 +101,36 @@ export const MODAL_LIFECYCLE_RULE = Object.freeze({
 });
 
 /**
+ * RULE — modal overlay covers the entire viewport (header + content), semi-transparent backdrop.
+ * Template contract for every module modal shell (accounts, categories, obligations, …).
+ */
+export const MODAL_OVERLAY_RULE = Object.freeze({
+  id: 'MODAL_OVERLAY_RULE',
+  coverFullViewport: true,
+  dimIncludesHeader: true,
+  overlayTemplateClasses: 'hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40',
+  openLayerSelector: '[data-modal]:not(.hidden)',
+  modalRootZIndex: 100,
+  headerStaysBelowOverlay: true
+});
+
+/** Use when rendering new modal shells — keeps backdrop + layout consistent app-wide. */
+export function getModalOverlayTemplateClasses() {
+  return MODAL_OVERLAY_RULE.overlayTemplateClasses;
+}
+
+/**
+ * RULE — dismiss open modal by clicking the dimmed backdrop (not the white panel).
+ * Handled centrally in modalLayer.initModalDismissHandlers().
+ */
+export const MODAL_DISMISS_RULE = Object.freeze({
+  id: 'MODAL_DISMISS_RULE',
+  dismissOnBackdropClick: true,
+  dismissOnPanelClick: false,
+  handlerOwner: 'modalLayer.initModalDismissHandlers'
+});
+
+/**
  * RULE 4: stacked vertical card layout — actions on dedicated row, never absolute.
  */
 export const GLOBAL_ENTITY_LAYOUT_RULE = Object.freeze({
