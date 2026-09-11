@@ -11,6 +11,8 @@ export const FINANCE_ENTRY_POINTS = {
   OBLIGATION_RESERVE: 'reserveObligation',
   SAVING_ADMIN: 'manageSaving',
   ACCOUNT: 'manageAccount',
+  CATEGORY: 'manageCategory',
+  SETTINGS: 'manageSettings',
   DEBT: 'manageDebt'
 };
 
@@ -33,5 +35,11 @@ export const OPERATION_TO_ENTRY_POINT = {
   createAccount: FINANCE_ENTRY_POINTS.ACCOUNT,
   updateAccount: FINANCE_ENTRY_POINTS.ACCOUNT,
   deleteAccount: FINANCE_ENTRY_POINTS.ACCOUNT,
+  createCategory: FINANCE_ENTRY_POINTS.CATEGORY,
+  updateCategory: FINANCE_ENTRY_POINTS.CATEGORY,
+  createObligation: FINANCE_ENTRY_POINTS.OBLIGATION,
+  updateObligation: FINANCE_ENTRY_POINTS.OBLIGATION,
+  deleteObligation: FINANCE_ENTRY_POINTS.OBLIGATION,
+  updateExchangeRate: FINANCE_ENTRY_POINTS.SETTINGS,
   manageDebt: FINANCE_ENTRY_POINTS.DEBT
 };

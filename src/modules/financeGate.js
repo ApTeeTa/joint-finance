@@ -6,6 +6,12 @@ import {
   recordReserve,
   recordCategoryUnreserve,
   recordCategoryDeleted,
+  recordCategoryCreated,
+  recordCategoryUpdated,
+  recordObligationCreated,
+  recordObligationUpdated,
+  recordObligationDeleted,
+  recordExchangeRateUpdated,
   recordObligationUnreserve,
   recordObligationReserve,
   recordObligationPayment,
@@ -66,6 +72,42 @@ export function unreserveCategory(state, categoryId, amount, comment, date, auth
 export function deleteCategory(state, category, author) {
   return runProtected(FINANCE_ENTRY_POINTS.CATEGORY_DELETE, () =>
     recordCategoryDeleted(state, category, author)
+  );
+}
+
+export function createCategoryRecord(state, name, limit, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.CATEGORY, () =>
+    recordCategoryCreated(state, name, limit, author)
+  );
+}
+
+export function updateCategoryRecord(state, categoryId, name, limit, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.CATEGORY, () =>
+    recordCategoryUpdated(state, categoryId, name, limit, author)
+  );
+}
+
+export function createObligationRecord(state, data, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.OBLIGATION, () =>
+    recordObligationCreated(state, data, author)
+  );
+}
+
+export function updateObligationRecord(state, obligationId, data, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.OBLIGATION, () =>
+    recordObligationUpdated(state, obligationId, data, author)
+  );
+}
+
+export function deleteObligationRecord(state, obligationId, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.OBLIGATION, () =>
+    recordObligationDeleted(state, obligationId, author)
+  );
+}
+
+export function updateExchangeRate(state, exchangeRate, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.SETTINGS, () =>
+    recordExchangeRateUpdated(state, exchangeRate, author)
   );
 }
 

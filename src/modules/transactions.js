@@ -20,7 +20,11 @@ export const TRANSACTION_TYPES = {
   DEBT_REPAY_WE_OWE: 'debt_repay_we_owe',
   DEBT_WRITE_OFF: 'debt_write_off',
   OBLIGATION_RESERVE: 'obligation_reserve',
-  OBLIGATION_UNRESERVE: 'obligation_unreserve'
+  OBLIGATION_UNRESERVE: 'obligation_unreserve',
+  OBLIGATION_CREATED: 'obligation_created',
+  OBLIGATION_UPDATED: 'obligation_updated',
+  OBLIGATION_DELETED: 'obligation_deleted',
+  EXCHANGE_RATE_UPDATED: 'exchange_rate_updated'
 };
 
 export const TRANSACTION_STATUS = {
@@ -69,7 +73,11 @@ export const TYPE_LABELS = {
   debt_repay_we_owe: 'Погашение долга',
   debt_write_off: 'Списание долга',
   obligation_reserve: 'Резерв обязательства',
-  obligation_unreserve: 'Возврат резерва обязательства'
+  obligation_unreserve: 'Возврат резерва обязательства',
+  obligation_created: 'Создание обязательства',
+  obligation_updated: 'Редактирование обязательства',
+  obligation_deleted: 'Удаление обязательства',
+  exchange_rate_updated: 'Изменение курса USD'
 };
 export const AUTHOR_LABELS = {
   husband: 'Муж',
@@ -974,9 +982,291 @@ export function recordCategoryDeleted(state, category, author) {
     author
   });
 
+  state.categories = (state.categories ?? []).filter((item) => item.id !== category.id);
+
   enforceFinancialInvariants(state, { operation: 'recordCategoryDeleted', categoryId: category.id });
 
   return { ok: true, transaction: tx };
+}
+
+function validateCategoryNameInput(name) {
+  if (!name || !String(name).trim()) {
+    return 'Введите название категории';
+  }
+  return null;
+}
+
+function validateCategoryLimitInput(limit) {
+  const value = Number(limit);
+  if (!Number.isFinite(value) || value < 0) {
+    return 'Лимит должен быть не меньше 0';
+  }
+  return null;
+}
+
+function validateExchangeRateInput(rate) {
+  const value = Number(rate);
+  if (!Number.isFinite(value) || value < 1) {
+    return 'Курс USD не может быть меньше 1';
+  }
+  return null;
+}
+
+function normalizeObligationEntity(obligation) {
+  const item = {
+    ...obligation,
+    reserveAmount: obligation.reserveAmount ?? 0,
+    targetAmount: obligation.targetAmount ?? null,
+    comment: obligation.comment ?? '',
+    payments: Array.isArray(obligation.payments) ? obligation.payments : []
+  };
+  syncObligationStatusFromPayments(item, todayIso());
+  return item;
+}
+
+export function recordCategoryCreated(state, name, limit, author) {
+  const blocked = guardFinanceEntry('createCategory');
+  if (blocked) return blocked;
+
+  const nameError = validateCategoryNameInput(name);
+  if (nameError) return { ok: false, error: nameError };
+
+  const limitError = validateCategoryLimitInput(limit);
+  if (limitError) return { ok: false, error: limitError };
+
+  if (String(name).trim() === MISC_CATEGORY_NAME) {
+    return { ok: false, error: 'Название «Прочее» зарезервировано для системной категории' };
+  }
+
+  if (!Array.isArray(state.categories)) {
+    state.categories = [];
+  }
+
+  const category = {
+    id: createId('category'),
+    name: String(name).trim(),
+    limit: Number(limit) || 0,
+    reserved: 0,
+    spent: 0,
+    createdAt: new Date().toISOString()
+  };
+
+  state.categories.push(category);
+
+  enforceFinancialInvariants(state, { operation: 'recordCategoryCreated', categoryId: category.id });
+
+  return { ok: true, entity: category };
+}
+
+export function recordCategoryUpdated(state, categoryId, name, limit, author) {
+  const blocked = guardFinanceEntry('updateCategory');
+  if (blocked) return blocked;
+
+  const nameError = validateCategoryNameInput(name);
+  if (nameError) return { ok: false, error: nameError };
+
+  const limitError = validateCategoryLimitInput(limit);
+  if (limitError) return { ok: false, error: limitError };
+
+  const category = findCategory(state, categoryId);
+  if (!category) return { ok: false, error: 'Категория не найдена' };
+
+  if (isMiscCategory(category)) {
+    return { ok: false, error: 'Системную категорию нельзя редактировать' };
+  }
+
+  if (String(name).trim() === MISC_CATEGORY_NAME) {
+    return { ok: false, error: 'Название «Прочее» зарезервировано для системной категории' };
+  }
+
+  const nextLimit = Number(limit) || 0;
+  const reserved = category.reserved ?? 0;
+  if (nextLimit < reserved) {
+    return { ok: false, error: `Лимит не может быть меньше зарезервированной суммы (${formatMoney(reserved)})` };
+  }
+
+  category.name = String(name).trim();
+  category.limit = nextLimit;
+
+  enforceFinancialInvariants(state, { operation: 'recordCategoryUpdated', categoryId });
+
+  return { ok: true, entity: category };
+}
+
+export function recordObligationCreated(state, data, author) {
+  const blocked = guardFinanceEntry('createObligation');
+  if (blocked) return blocked;
+
+  if (!data?.name || !String(data.name).trim()) {
+    return { ok: false, error: 'Введите название обязательства' };
+  }
+  if (!data.paidUntil) {
+    return { ok: false, error: 'Укажите срок оплаты' };
+  }
+
+  const targetAmount = data.targetAmount != null && data.targetAmount !== ''
+    ? Number(data.targetAmount)
+    : null;
+  if (targetAmount != null && (!Number.isFinite(targetAmount) || targetAmount < 0)) {
+    return { ok: false, error: 'Целевая сумма должна быть не меньше 0' };
+  }
+
+  if (!Array.isArray(state.obligations)) {
+    state.obligations = [];
+  }
+
+  const obligation = normalizeObligationEntity({
+    id: createId('obligation'),
+    name: String(data.name).trim(),
+    reserveAmount: 0,
+    targetAmount,
+    paidUntil: data.paidUntil,
+    comment: String(data.comment ?? '').trim(),
+    status: 'active',
+    createdAt: new Date().toISOString()
+  });
+
+  state.obligations.push(obligation);
+
+  const tx = addTransaction(state, {
+    type: TRANSACTION_TYPES.OBLIGATION_CREATED,
+    amount: 0,
+    obligationId: obligation.id,
+    obligationName: obligation.name,
+    currency: 'RUB',
+    comment: `Создано обязательство «${obligation.name}»`,
+    author
+  });
+
+  enforceFinancialInvariants(state, { operation: 'recordObligationCreated', obligationId: obligation.id });
+
+  return { ok: true, entity: obligation, transaction: tx };
+}
+
+export function recordObligationUpdated(state, obligationId, data, author) {
+  const blocked = guardFinanceEntry('updateObligation');
+  if (blocked) return blocked;
+
+  const obligation = findObligation(state, obligationId);
+  if (!obligation) return { ok: false, error: 'Обязательство не найдено' };
+
+  if (!data?.name || !String(data.name).trim()) {
+    return { ok: false, error: 'Введите название обязательства' };
+  }
+  if (!data.paidUntil) {
+    return { ok: false, error: 'Укажите срок оплаты' };
+  }
+
+  const targetAmount = data.targetAmount != null && data.targetAmount !== ''
+    ? Number(data.targetAmount)
+    : null;
+  if (targetAmount != null && (!Number.isFinite(targetAmount) || targetAmount < 0)) {
+    return { ok: false, error: 'Целевая сумма должна быть не меньше 0' };
+  }
+
+  const oldName = obligation.name;
+  obligation.name = String(data.name).trim();
+  obligation.targetAmount = targetAmount;
+  obligation.paidUntil = data.paidUntil;
+  obligation.comment = String(data.comment ?? '').trim();
+  syncObligationStatusFromPayments(obligation, todayIso());
+
+  const tx = addTransaction(state, {
+    type: TRANSACTION_TYPES.OBLIGATION_UPDATED,
+    amount: 0,
+    obligationId: obligation.id,
+    obligationName: obligation.name,
+    currency: 'RUB',
+    comment: oldName === obligation.name
+      ? `Изменено обязательство «${obligation.name}»`
+      : `Изменено обязательство: «${oldName}» → «${obligation.name}»`,
+    author
+  });
+
+  enforceFinancialInvariants(state, { operation: 'recordObligationUpdated', obligationId });
+
+  return { ok: true, entity: obligation, transaction: tx };
+}
+
+export function recordObligationDeleted(state, obligationId, author) {
+  const blocked = guardFinanceEntry('deleteObligation');
+  if (blocked) return blocked;
+
+  const obligation = findObligation(state, obligationId);
+  if (!obligation) return { ok: false, error: 'Обязательство не найдено' };
+
+  const snapshot = {
+    id: obligation.id,
+    name: obligation.name,
+    reserveAmount: obligation.reserveAmount ?? 0,
+    targetAmount: obligation.targetAmount ?? null,
+    paidUntil: obligation.paidUntil ?? null,
+    comment: obligation.comment ?? '',
+    status: obligation.status ?? 'active',
+    createdAt: obligation.createdAt ?? new Date().toISOString()
+  };
+
+  const reserveAmount = snapshot.reserveAmount;
+  if (reserveAmount > 0) {
+    const unreserveResult = withInternalFinanceContext(() =>
+      recordObligationUnreserve(
+        state,
+        obligationId,
+        reserveAmount,
+        `Автовозврат резерва при удалении: ${obligation.name}`,
+        todayIso(),
+        author
+      )
+    );
+    if (!unreserveResult.ok) {
+      return unreserveResult;
+    }
+  }
+
+  const tx = addTransaction(state, {
+    type: TRANSACTION_TYPES.OBLIGATION_DELETED,
+    amount: snapshot.reserveAmount,
+    obligationId: obligation.id,
+    obligationName: obligation.name,
+    obligationSnapshot: snapshot,
+    currency: 'RUB',
+    comment: `Удалено обязательство «${obligation.name}»`,
+    author
+  });
+
+  state.obligations = (state.obligations ?? []).filter((item) => item.id !== obligationId);
+
+  enforceFinancialInvariants(state, { operation: 'recordObligationDeleted', obligationId });
+
+  return { ok: true, transaction: tx };
+}
+
+export function recordExchangeRateUpdated(state, exchangeRate, author) {
+  const blocked = guardFinanceEntry('updateExchangeRate');
+  if (blocked) return blocked;
+
+  const rateError = validateExchangeRateInput(exchangeRate);
+  if (rateError) return { ok: false, error: rateError };
+
+  const oldRate = Number(state.exchangeRate);
+  const newRate = Number(exchangeRate);
+  state.exchangeRate = newRate;
+
+  const tx = addTransaction(state, {
+    type: TRANSACTION_TYPES.EXCHANGE_RATE_UPDATED,
+    amount: 0,
+    currency: 'RUB',
+    oldExchangeRate: Number.isFinite(oldRate) ? oldRate : null,
+    newExchangeRate: newRate,
+    comment: Number.isFinite(oldRate)
+      ? `Курс USD: ${oldRate} → ${newRate} ₽`
+      : `Курс USD установлен: ${newRate} ₽`,
+    author
+  });
+
+  enforceFinancialInvariants(state, { operation: 'recordExchangeRateUpdated' });
+
+  return { ok: true, exchangeRate: newRate, transaction: tx };
 }
 
 function cancelLinkedServiceDelete(state, spendTx) {

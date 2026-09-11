@@ -9,6 +9,12 @@ import {
   updateAccountRecord,
   deleteAccountRecord,
   deleteCategory,
+  createCategoryRecord,
+  updateCategoryRecord,
+  createObligationRecord,
+  updateObligationRecord,
+  deleteObligationRecord,
+  updateExchangeRate,
   createSaving,
   updateSavingRecord,
   deleteSavingRecord
@@ -43,13 +49,17 @@ const IMPLEMENTED_TYPES = new Set([
   ACTION_TYPES.ACCOUNT_CREATE,
   ACTION_TYPES.ACCOUNT_UPDATE,
   ACTION_TYPES.ACCOUNT_DELETE,
+  ACTION_TYPES.CATEGORY_CREATE,
+  ACTION_TYPES.CATEGORY_UPDATE,
   ACTION_TYPES.CATEGORY_DELETE,
   ACTION_TYPES.SAVING_CREATE,
   ACTION_TYPES.SAVING_UPDATE,
-  ACTION_TYPES.SAVING_DELETE
+  ACTION_TYPES.SAVING_DELETE,
+  ACTION_TYPES.OBLIGATION_CREATE,
+  ACTION_TYPES.OBLIGATION_UPDATE,
+  ACTION_TYPES.OBLIGATION_DELETE,
+  ACTION_TYPES.RATE_UPDATE
 ]);
-
-const PHASE2_PENDING_MESSAGE = 'Действие зарегистрировано, обработчик будет добавлен в Phase 2';
 
 function devLog(level, message, detail) {
   if (!DEV_LOGGING) {
@@ -65,11 +75,6 @@ function devLog(level, message, detail) {
 
 function missingPayloadError(field) {
   return { ok: false, error: `Отсутствует обязательное поле payload.${field}` };
-}
-
-function notImplementedResult(type) {
-  devLog('warn', `Phase 2 pending: ${type}`);
-  return { ok: false, error: PHASE2_PENDING_MESSAGE, pending: true, type };
 }
 
 function routeToGate(type, payload) {
@@ -98,11 +103,57 @@ function routeToGate(type, payload) {
       return deleteAccountRecord(state, account, author);
     }
 
+    case ACTION_TYPES.CATEGORY_CREATE: {
+      const { name, limit, author } = payload;
+      if (name == null) return missingPayloadError('name');
+      if (limit == null) return missingPayloadError('limit');
+      if (author == null) return missingPayloadError('author');
+      return createCategoryRecord(state, name, limit, author);
+    }
+
+    case ACTION_TYPES.CATEGORY_UPDATE: {
+      const { categoryId, name, limit, author } = payload;
+      if (!categoryId) return missingPayloadError('categoryId');
+      if (name == null) return missingPayloadError('name');
+      if (limit == null) return missingPayloadError('limit');
+      if (author == null) return missingPayloadError('author');
+      return updateCategoryRecord(state, categoryId, name, limit, author);
+    }
+
     case ACTION_TYPES.CATEGORY_DELETE: {
       const { category, author } = payload;
       if (!category) return missingPayloadError('category');
       if (author == null) return missingPayloadError('author');
       return deleteCategory(state, category, author);
+    }
+
+    case ACTION_TYPES.OBLIGATION_CREATE: {
+      const { data, author } = payload;
+      if (!data) return missingPayloadError('data');
+      if (author == null) return missingPayloadError('author');
+      return createObligationRecord(state, data, author);
+    }
+
+    case ACTION_TYPES.OBLIGATION_UPDATE: {
+      const { obligationId, data, author } = payload;
+      if (!obligationId) return missingPayloadError('obligationId');
+      if (!data) return missingPayloadError('data');
+      if (author == null) return missingPayloadError('author');
+      return updateObligationRecord(state, obligationId, data, author);
+    }
+
+    case ACTION_TYPES.OBLIGATION_DELETE: {
+      const { obligationId, author } = payload;
+      if (!obligationId) return missingPayloadError('obligationId');
+      if (author == null) return missingPayloadError('author');
+      return deleteObligationRecord(state, obligationId, author);
+    }
+
+    case ACTION_TYPES.RATE_UPDATE: {
+      const { exchangeRate, author } = payload;
+      if (exchangeRate == null) return missingPayloadError('exchangeRate');
+      if (author == null) return missingPayloadError('author');
+      return updateExchangeRate(state, exchangeRate, author);
     }
 
     case ACTION_TYPES.SAVING_CREATE: {
@@ -126,14 +177,6 @@ function routeToGate(type, payload) {
       if (author == null) return missingPayloadError('author');
       return deleteSavingRecord(state, saving, author, customComment, options);
     }
-
-    case ACTION_TYPES.CATEGORY_CREATE:
-    case ACTION_TYPES.CATEGORY_UPDATE:
-    case ACTION_TYPES.OBLIGATION_CREATE:
-    case ACTION_TYPES.OBLIGATION_UPDATE:
-    case ACTION_TYPES.OBLIGATION_DELETE:
-    case ACTION_TYPES.RATE_UPDATE:
-      return notImplementedResult(type);
 
     default:
       return null;
