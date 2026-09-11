@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1e3a5f">
+  <meta name="theme-color" content="#1e4d56">
   <meta name="description" content="Семейный учёт финансов">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,15 +12,35 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-  <title>Joint Finance</title>
+  <title>Семейные финансы</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
+          fontFamily: {
+            sans: ['Onest', 'system-ui', 'sans-serif']
+          },
           colors: {
-            primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
-            accent: { 500: '#10b981', 600: '#059669' }
+            primary: {
+              50: '#eef7f5',
+              100: '#d5ebe6',
+              500: '#3d8b7a',
+              600: '#2d6b5c',
+              700: '#1e4d56'
+            },
+            accent: { 500: '#c8956c', 600: '#a8764f' },
+            surface: {
+              DEFAULT: '#fffcf8',
+              muted: '#f4f1eb',
+              border: '#e6dfd4'
+            }
+          },
+          boxShadow: {
+            card: '0 1px 2px rgba(30, 77, 86, 0.06), 0 8px 24px rgba(30, 77, 86, 0.06)'
           }
         }
       }
@@ -36,6 +56,28 @@
   <style>
     :root {
       --header-height: 0px;
+      --color-primary: #1e4d56;
+      --color-primary-soft: #d5ebe6;
+      --color-primary-hover: #2d6b5c;
+      --color-surface: #fffcf8;
+      --color-surface-muted: #f4f1eb;
+      --color-border: #e6dfd4;
+      --color-text: #1c2b33;
+      --color-text-muted: #5c6b73;
+      --color-free: #2d6b5c;
+      --color-free-bg: #e8f3ef;
+      --color-reserved: #a8764f;
+      --color-reserved-bg: #f8efe6;
+      --radius-card: 1rem;
+      --shadow-card: 0 1px 2px rgba(30, 77, 86, 0.06), 0 8px 24px rgba(30, 77, 86, 0.06);
+    }
+
+    body {
+      font-family: 'Onest', system-ui, sans-serif;
+      color: var(--color-text);
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(213, 235, 230, 0.45), transparent 55%),
+        var(--color-surface-muted);
     }
 
     html {
@@ -43,12 +85,151 @@
       max-width: 100%;
     }
 
-    body {
+    body.app-body {
       overflow-x: hidden;
       overflow-y: auto;
       max-width: 100%;
       min-height: 100dvh;
       -webkit-overflow-scrolling: touch;
+    }
+
+    #app-header {
+      background: rgba(255, 252, 248, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--color-border);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+    }
+
+    .app-brand-title {
+      letter-spacing: -0.02em;
+    }
+
+    .app-brand-subtitle {
+      color: var(--color-text-muted);
+      font-size: 0.8125rem;
+      font-weight: 500;
+    }
+
+    .profile-btn {
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      color: var(--color-text-muted);
+      transition: background 150ms ease, color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+    }
+
+    .profile-btn:hover:not(.profile-btn-active) {
+      background: #faf7f2;
+      border-color: #d9d0c4;
+    }
+
+    .profile-btn-active {
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+      color: #fff !important;
+      box-shadow: var(--shadow-card);
+    }
+
+    .balance-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
+    .balance-card {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-card);
+      padding: 0.875rem 1rem;
+      background: var(--color-surface);
+      box-shadow: var(--shadow-card);
+      min-width: 0;
+    }
+
+    .balance-card--total {
+      background: linear-gradient(135deg, #fffcf8 0%, #f7f3ec 100%);
+    }
+
+    .balance-card--free {
+      background: var(--color-free-bg);
+      border-color: #cfe5dc;
+    }
+
+    .balance-card--reserved {
+      background: var(--color-reserved-bg);
+      border-color: #ead9c8;
+    }
+
+    .balance-card-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      margin-bottom: 0.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .balance-card-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .balance-card--free .balance-card-label { color: var(--color-free); }
+    .balance-card--free .balance-card-value { color: var(--color-free); }
+    .balance-card--reserved .balance-card-label { color: var(--color-reserved); }
+    .balance-card--reserved .balance-card-value { color: var(--color-reserved); }
+
+    #tab-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+      padding: 0.25rem;
+      border-radius: 0.875rem;
+      background: rgba(255, 252, 248, 0.8);
+      border: 1px solid var(--color-border);
+    }
+
+    .tab-btn {
+      border: 1px solid transparent;
+      color: var(--color-text-muted);
+      transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+    }
+
+    .tab-btn:hover:not(.tab-btn-active) {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: var(--color-border);
+      color: var(--color-text);
+    }
+
+    .tab-btn-active {
+      background: var(--color-primary-soft) !important;
+      border-color: #b9d9cf !important;
+      color: var(--color-primary) !important;
+      font-weight: 600;
+    }
+
+    #build-stamp {
+      opacity: 0.45;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (min-width: 1024px) {
+      .balance-card-value {
+        font-size: 1.375rem;
+      }
+
+      #tab-nav {
+        flex-wrap: nowrap;
+      }
+
+      .tab-btn {
+        flex: 1 1 0;
+        text-align: center;
+      }
     }
 
     #app-header,
@@ -664,53 +845,52 @@
     }
   </style>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-800 overflow-x-hidden">
+<body class="app-body min-h-screen overflow-x-hidden">
 
-  <header id="app-header" class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-20">
-    <div class="max-w-4xl mx-auto px-4 py-4 min-w-0">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h1 class="text-xl font-bold text-slate-900 shrink-0">Joint Finance</h1>
+  <header id="app-header" class="sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-5 py-5 min-w-0">
+      <div class="flex flex-row items-start justify-between gap-4 mb-5">
+        <div class="min-w-0">
+          <h1 class="app-brand-title text-2xl font-bold text-slate-900">Семейные финансы</h1>
+          <p class="app-brand-subtitle mt-0.5">Совместный учёт для двоих</p>
+        </div>
         <div class="flex gap-2 shrink-0" id="profile-selector">
           <button
             type="button"
             data-profile="husband"
-            class="profile-btn px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors"
+            class="profile-btn px-4 py-2 min-h-[40px] rounded-xl text-sm font-medium"
           >Муж</button>
           <button
             type="button"
             data-profile="wife"
-            class="profile-btn px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors"
+            class="profile-btn px-4 py-2 min-h-[40px] rounded-xl text-sm font-medium"
           >Жена</button>
         </div>
       </div>
 
-      <div class="grid grid-cols-3 gap-2 sm:gap-3 mb-4 min-w-0">
-        <div class="bg-slate-50 rounded-xl p-2 sm:p-3 text-center min-w-0">
-          <p class="text-xs text-slate-500 mb-1 truncate">Общий баланс</p>
-          <p id="total-balance" class="text-base sm:text-lg font-semibold text-slate-900 truncate">0 ₽</p>
+      <div class="balance-strip mb-5 min-w-0">
+        <div class="balance-card balance-card--total">
+          <p class="balance-card-label">Общий баланс</p>
+          <p id="total-balance" class="balance-card-value text-slate-900">0 ₽</p>
         </div>
-        <div class="bg-emerald-50 rounded-xl p-2 sm:p-3 text-center min-w-0">
-          <p class="text-xs text-emerald-600 mb-1 truncate">Свободно</p>
-          <p id="free-balance" class="text-base sm:text-lg font-semibold text-emerald-700 truncate">0 ₽</p>
+        <div class="balance-card balance-card--free">
+          <p class="balance-card-label">Свободно</p>
+          <p id="free-balance" class="balance-card-value">0 ₽</p>
         </div>
-        <div class="bg-amber-50 rounded-xl p-2 sm:p-3 text-center min-w-0">
-          <p class="text-xs text-amber-600 mb-1 truncate">Зарезервировано</p>
-          <p id="reserved-balance" class="text-base sm:text-lg font-semibold text-amber-700 truncate">0 ₽</p>
+        <div class="balance-card balance-card--reserved">
+          <p class="balance-card-label">Зарезервировано</p>
+          <p id="reserved-balance" class="balance-card-value">0 ₽</p>
         </div>
       </div>
 
-      <nav
-        class="grid grid-cols-3 gap-1 sm:grid-cols-4 md:flex md:flex-nowrap md:overflow-x-auto md:pb-1 -mx-1 px-1"
-        id="tab-nav"
-        aria-label="Навигация"
-      >
-        <button type="button" data-tab="accounts" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Счета</button>
-        <button type="button" data-tab="categories" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Категории</button>
-        <button type="button" data-tab="history" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">История</button>
-        <button type="button" data-tab="obligations" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Обязательства</button>
-        <button type="button" data-tab="savings" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Копилки</button>
-        <button type="button" data-tab="debts" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center">Долги</button>
-        <button type="button" data-tab="stats" class="tab-btn w-full md:w-auto whitespace-nowrap px-2 sm:px-3 py-2.5 min-h-[44px] rounded-lg text-xs sm:text-sm font-medium transition-colors text-left md:text-center col-span-3 sm:col-span-4 md:col-span-1">Статистика</button>
+      <nav id="tab-nav" aria-label="Навигация">
+        <button type="button" data-tab="accounts" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Счета</button>
+        <button type="button" data-tab="categories" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Категории</button>
+        <button type="button" data-tab="history" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">История</button>
+        <button type="button" data-tab="obligations" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Обязательства</button>
+        <button type="button" data-tab="savings" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Копилки</button>
+        <button type="button" data-tab="debts" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Долги</button>
+        <button type="button" data-tab="stats" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Статистика</button>
       </nav>
       <p id="build-stamp" class="mt-2 text-[10px] text-slate-400 text-center">build 8b3ffb9 · experiment-full-sync</p>
     </div>
@@ -722,7 +902,7 @@
     role="alert"
   ></div>
 
-  <main id="tab-content" class="max-w-4xl mx-auto px-4 py-6 min-w-0 overflow-x-hidden">
+  <main id="tab-content" class="max-w-5xl mx-auto px-5 py-6 min-w-0 overflow-x-hidden">
   </main>
 
   <div id="modal-root" aria-hidden="true"></div>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: Design D1 Shell</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Design D1 — shell tokens</h1>
+  <pre id="out"></pre>
+  <iframe id="app" src="../index.html" style="width:1px;height:1px;border:0;opacity:0"></iframe>
+  <script>
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    document.getElementById('app').addEventListener('load', () => {
+      try {
+        const doc = document.getElementById('app').contentDocument;
+        const root = doc.documentElement;
+        const styles = doc.defaultView.getComputedStyle(root);
+        assert(styles.getPropertyValue('--color-primary').trim() === '#1e4d56', 'primary token');
+        assert(doc.querySelector('.balance-strip'), 'balance strip');
+        assert(doc.querySelector('.balance-card--free'), 'free balance card');
+        assert(doc.querySelector('#tab-nav .tab-btn'), 'tab buttons');
+        assert(doc.querySelector('.app-brand-title')?.textContent.includes('Семейные'), 'russian title');
+        const font = styles.fontFamily.toLowerCase();
+        assert(font.includes('onest') || doc.querySelector('link[href*="Onest"]'), 'Onest font');
+        log('PASS  D1 shell tokens and structure', 'pass');
+        log('Итого: PASS', 'pass');
+      } catch (e) {
+        log('FAIL  ' + e.message, 'fail');
+      }
+    });
+  </script>
+</body>
+</html>

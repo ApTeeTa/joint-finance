@@ -143,13 +143,7 @@ function formatMoney(amount) {
 
 function renderProfile() {
   document.querySelectorAll('.profile-btn').forEach((btn) => {
-    const isActive = btn.dataset.profile === state.profile;
-    btn.classList.toggle('bg-primary-600', isActive);
-    btn.classList.toggle('text-white', isActive);
-    btn.classList.toggle('shadow-sm', isActive);
-    btn.classList.toggle('bg-slate-100', !isActive);
-    btn.classList.toggle('text-slate-600', !isActive);
-    btn.classList.toggle('hover:bg-slate-200', !isActive);
+    btn.classList.toggle('profile-btn-active', btn.dataset.profile === state.profile);
   });
 }
 
@@ -229,11 +223,7 @@ function renderTab(tab) {
   state.activeTab = tab;
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
-    const isActive = btn.dataset.tab === tab;
-    btn.classList.toggle('bg-primary-100', isActive);
-    btn.classList.toggle('text-primary-700', isActive);
-    btn.classList.toggle('text-slate-600', !isActive);
-    btn.classList.toggle('hover:bg-slate-100', !isActive);
+    btn.classList.toggle('tab-btn-active', btn.dataset.tab === tab);
   });
 
   if (tab === 'accounts') {
@@ -436,12 +426,6 @@ async function init() {
         await syncFromRemote();
       }
     });
-    renderProfile();
-    updateCounters();
-    initProfileHandlers();
-    initTabHandlers();
-    initHeaderHeightSync();
-    renderTab(state.activeTab || 'accounts');
 
     subscribeSharedState(state, async () => {
       await syncFromRemote();
@@ -452,8 +436,18 @@ async function init() {
       syncFromRemote();
     });
 
-    syncFromRemote();
-    console.log('[BOOT OK]', { build: '8b3ffb9', branch: 'experiment-full-sync' });
+    await syncFromRemote();
+
+    renderProfile();
+    updateCounters();
+    initProfileHandlers();
+    initTabHandlers();
+    initHeaderHeightSync();
+    renderTab(state.activeTab || 'accounts');
+    console.log('[BOOT OK]', {
+      build: '8b3ffb9',
+      branch: 'experiment-full-sync'
+    });
   } catch (error) {
     const bootError = document.getElementById('boot-error');
     if (bootError) {
