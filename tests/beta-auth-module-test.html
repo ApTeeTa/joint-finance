@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tests: Beta B1 Auth modules</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Beta B1 — auth &amp; household modules</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      buildHouseholdSnapshotId,
+      isHouseholdSnapshotId,
+      setActiveHousehold,
+      getActiveHouseholdSnapshotId,
+      clearActiveHousehold
+    } from '../src/lib/householdContext.js';
+    import {
+      isHouseholdSnapshotId as envIsHouseholdSnapshotId,
+      registerHouseholdSnapshotResolver
+    } from '../src/config/environmentConfig.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    try {
+      const id = crypto.randomUUID();
+      const snapshotId = buildHouseholdSnapshotId(id);
+      assert(snapshotId === `household_${id}`, 'snapshot id format');
+      assert(isHouseholdSnapshotId(snapshotId), 'household snapshot detect');
+      assert(envIsHouseholdSnapshotId(snapshotId), 'env household snapshot detect');
+      assert(!isHouseholdSnapshotId('shared-experiment'), 'legacy id excluded');
+
+      clearActiveHousehold();
+      assert(getActiveHouseholdSnapshotId() === null, 'no active household initially');
+
+      setActiveHousehold({
+        id,
+        snapshot_id: snapshotId,
+        name: 'Test',
+        owner_user_id: id,
+        role: 'owner'
+      });
+      assert(getActiveHouseholdSnapshotId() === snapshotId, 'active household snapshot set');
+      clearActiveHousehold();
+
+      assert(typeof registerHouseholdSnapshotResolver === 'function', 'snapshot resolver API');
+
+      log('PASS  Beta B1 module exports and household snapshot id', 'pass');
+      log('Total: PASS', 'pass');
+    } catch (e) {
+      log('FAIL  ' + e.message, 'fail');
+    }
+  </script>
+</body>
+</html>

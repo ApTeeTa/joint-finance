@@ -2,7 +2,8 @@ import {
   getFinancialStorageKey,
   getLegacyProductionStorageKey,
   allowsLegacyStorageKeyMigration,
-  getLegacyMigrationDoneKey
+  getLegacyMigrationDoneKey,
+  isLocalOnlyTestMode
 } from '../config/environmentConfig.js';
 import { checkFinancialInvariants } from './financeCoreInvariants.js';
 
@@ -215,7 +216,7 @@ export function saveState(state, options = {}) {
   try {
     const payload = pickPersistedFields(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    if (!options.skipRemote) {
+    if (!options.skipRemote && !isLocalOnlyTestMode()) {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         import('../lib/offlineActionsQueue.js').then(({ enqueueSnapshotPush }) => {
           enqueueSnapshotPush(state);

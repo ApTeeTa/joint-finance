@@ -30,6 +30,18 @@ export const ENVIRONMENT_ISOLATION_RULE = Object.freeze({
  */
 export const ACTIVE_ENVIRONMENT = 'experiment';
 
+/**
+ * TEMPORARY local-only test mode — no Supabase read/write/realtime.
+ * State persists in localStorage only (good for local UI/data experiments).
+ *
+ * MUST set to false before git push to GitHub — production relies on Supabase.
+ */
+export const LOCAL_ONLY_TEST_MODE = false;
+
+export function isLocalOnlyTestMode() {
+  return LOCAL_ONLY_TEST_MODE === true;
+}
+
 const MODE_REGISTRY = Object.freeze({
   production: Object.freeze({
     mode: 'production',
@@ -50,6 +62,26 @@ const MODE_REGISTRY = Object.freeze({
 });
 
 let validated = false;
+let householdSnapshotResolver = null;
+
+/** Registered by householdContext — returns active household snapshot id or null. */
+export function registerHouseholdSnapshotResolver(resolver) {
+  householdSnapshotResolver = typeof resolver === 'function' ? resolver : null;
+}
+
+function getRegisteredHouseholdSnapshotId() {
+  try {
+    return householdSnapshotResolver?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function isHouseholdSnapshotId(snapshotId) {
+  return typeof snapshotId === 'string'
+    && snapshotId.startsWith('household_')
+    && snapshotId.length > 'household_'.length;
+}
 
 function resolveConfig() {
   const config = MODE_REGISTRY[ACTIVE_ENVIRONMENT];
@@ -144,8 +176,9 @@ export function isProduction() {
   return validateEnvironmentIsolation().mode === 'production';
 }
 
-export function getRealtimeChannelName() {
-  return `joint-finance-shared-state-${getActiveSnapshotId()}`;
+export function getRealtimeChannelName(snapshotId = null) {
+  const id = snapshotId ?? getRegisteredHouseholdSnapshotId() ?? getActiveSnapshotId();
+  return `joint-finance-shared-state-${id}`;
 }
 
 /**
@@ -164,6 +197,14 @@ export function assertSnapshotWriteTarget(snapshotId) {
   const { production, experiment } = getSnapshotIds();
   validateEnvironmentIsolation();
 
+  const activeHouseholdSnapshotId = getRegisteredHouseholdSnapshotId();
+  if (isHouseholdSnapshotId(snapshotId)) {
+    if (snapshotId !== activeHouseholdSnapshotId) {
+      throw new Error('[ENVIRONMENT] Write target household snapshot does not match active household');
+    }
+    return;
+  }
+
   if (snapshotId === production && !isProduction()) {
     throw new Error('[ENVIRONMENT] Experiment deployment cannot write production snapshot id');
   }
@@ -180,6 +221,14 @@ export function assertSnapshotWriteTarget(snapshotId) {
 export function assertSnapshotReadTarget(snapshotId, { seedBootstrap = false } = {}) {
   const { production, experiment } = getSnapshotIds();
   validateEnvironmentIsolation();
+
+  const activeHouseholdSnapshotId = getRegisteredHouseholdSnapshotId();
+  if (isHouseholdSnapshotId(snapshotId)) {
+    if (snapshotId !== activeHouseholdSnapshotId) {
+      throw new Error('[ENVIRONMENT] Read target household snapshot does not match active household');
+    }
+    return;
+  }
 
   if (isProduction()) {
     if (snapshotId === experiment) {

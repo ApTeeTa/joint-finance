@@ -27,7 +27,7 @@ Get-ChildItem -Path 'src' -Recurse -Filter '*.js' | ForEach-Object {
     }
   }
 }
-$allowedFrom = @('src/lib/stateRemote.js')
+$allowedFrom = @('src/lib/stateRemote.js', 'src/lib/householdRemote.js')
 foreach ($hit in $supabaseFromHits) {
   $file = $hit.Split(':')[0]
   if ($allowedFrom -notcontains $file) {

@@ -7,6 +7,7 @@ BACKUP SNAPSHOT:
 - Stable build checkpoint created for rollback
 */
 import './lib/supabase.js';
+import './lib/householdContext.js';
 import { UI } from './modules/uiTheme.js';
 
 import {
@@ -26,7 +27,8 @@ import { reconcileLegacyTransactions } from './modules/transactions.js';
 import { saveState, loadState, clearState, hardResetStateFromRemoteSnapshot } from './modules/storage.js';
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
-import { validateEnvironmentIsolation } from './config/environmentConfig.js';
+import { validateEnvironmentIsolation, isLocalOnlyTestMode } from './config/environmentConfig.js';
+import { ensureBetaAccess } from './modules/betaOnboarding.js';
 import {
   fetchRemoteSharedSnapshot,
   subscribeSharedState,
@@ -353,8 +355,25 @@ function refreshFromRemote() {
   renderTab(state.activeTab || 'accounts');
 }
 
+function showLocalTestModeBanner() {
+  if (document.getElementById('local-test-banner')) {
+    return;
+  }
+
+  const banner = document.createElement('div');
+  banner.id = 'local-test-banner';
+  banner.className = 'max-w-5xl mx-auto px-5 py-2 mt-2 rounded-xl bg-amber-50 text-amber-900 text-sm border border-amber-300 text-center';
+  banner.textContent = 'Локальный тест: Supabase отключён, данные только в localStorage. Перед push на GitHub — LOCAL_ONLY_TEST_MODE = false в environmentConfig.js';
+  const main = document.getElementById('tab-content');
+  main?.parentNode?.insertBefore(banner, main);
+}
+
 async function syncFromRemote() {
   try {
+    if (isLocalOnlyTestMode()) {
+      return { ok: true, skipped: true, reason: 'local_only_test_mode' };
+    }
+
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       return { ok: true, skipped: true, reason: 'offline' };
     }
@@ -406,21 +425,18 @@ async function syncFromRemote() {
   }
 }
 
-async function init() {
-  tabContent = document.getElementById('tab-content');
-  totalBalanceEl = document.getElementById('total-balance');
-  freeBalanceEl = document.getElementById('free-balance');
-  reservedBalanceEl = document.getElementById('reserved-balance');
+async function bootFinancialApp() {
+  initDisplayModeSystem();
+  initDisplayModeRefresh();
+  applyLoadedState(loadState());
+  reconcileLegacyTransactions(state);
+  initLastValidStateIfValid();
 
-  if (!tabContent) return;
-
-  try {
-    validateEnvironmentIsolation();
-    initDisplayModeSystem();
-    initDisplayModeRefresh();
-    applyLoadedState(loadState());
-    reconcileLegacyTransactions(state);
-    initLastValidStateIfValid();
+  if (isLocalOnlyTestMode()) {
+    showLocalTestModeBanner();
+    markInitialSyncDone();
+    console.warn('[LOCAL TEST MODE] Supabase sync disabled — using localStorage only');
+  } else {
     loadOfflineQueue();
     initOfflineSyncQueue(state, {
       onFlushed: async () => {
@@ -438,17 +454,44 @@ async function init() {
     });
 
     await syncFromRemote();
+  }
 
-    renderProfile();
-    updateCounters();
-    initProfileHandlers();
-    initTabHandlers();
-    initHeaderHeightSync();
-    renderTab(state.activeTab || 'accounts');
-    console.log('[BOOT OK]', {
-      build: '8b3ffb9',
-      branch: 'experiment-full-sync'
-    });
+  renderProfile();
+  updateCounters();
+  initProfileHandlers();
+  initTabHandlers();
+  initHeaderHeightSync();
+  renderTab(state.activeTab || 'accounts');
+  console.log('[BOOT OK]', {
+    build: 'beta-b1',
+    branch: 'beta'
+  });
+}
+
+async function init() {
+  tabContent = document.getElementById('tab-content');
+  totalBalanceEl = document.getElementById('total-balance');
+  freeBalanceEl = document.getElementById('free-balance');
+  reservedBalanceEl = document.getElementById('reserved-balance');
+
+  if (!tabContent) return;
+
+  try {
+    validateEnvironmentIsolation();
+
+    if (!isLocalOnlyTestMode()) {
+      const access = await ensureBetaAccess({
+        seedState: state,
+        onReady: async () => {
+          await bootFinancialApp();
+        }
+      });
+      if (!access.ready) {
+        return;
+      }
+    }
+
+    await bootFinancialApp();
   } catch (error) {
     const bootError = document.getElementById('boot-error');
     if (bootError) {

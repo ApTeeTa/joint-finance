@@ -10,8 +10,15 @@ import {
   getRealtimeChannelName,
   getSeedReadSnapshotId,
   isExperiment,
+  isHouseholdSnapshotId,
+  isLocalOnlyTestMode,
   validateEnvironmentIsolation
 } from '../config/environmentConfig.js';
+import { resolveSnapshotIdForSync } from './householdContext.js';
+
+function getSyncSnapshotId() {
+  return resolveSnapshotIdForSync(getActiveSnapshotId());
+}
 
 const PUSH_DELAY_MS = 400;
 
@@ -118,7 +125,11 @@ async function upsertSnapshotRow(snapshotId, payload) {
 
 async function resolveActiveSnapshotRow() {
   validateEnvironmentIsolation();
-  const activeSnapshotId = getActiveSnapshotId();
+  const activeSnapshotId = getSyncSnapshotId();
+
+  if (isHouseholdSnapshotId(activeSnapshotId)) {
+    return fetchSnapshotRow(activeSnapshotId);
+  }
 
   if (!isExperiment()) {
     return fetchSnapshotRow(activeSnapshotId);
@@ -155,7 +166,7 @@ async function resolveActiveSnapshotRow() {
 }
 
 export function schedulePushSharedState(state) {
-  if (applyingRemote || !initialSyncDone) {
+  if (isLocalOnlyTestMode() || applyingRemote || !initialSyncDone) {
     return;
   }
 
@@ -166,7 +177,11 @@ export function schedulePushSharedState(state) {
 }
 
 export async function pushSharedState(state) {
-  const activeSnapshotId = getActiveSnapshotId();
+  if (isLocalOnlyTestMode()) {
+    return { ok: true, skipped: true, reason: 'local_only_test_mode' };
+  }
+
+  const activeSnapshotId = getSyncSnapshotId();
   assertSnapshotId(activeSnapshotId, 'write');
 
   const payload = exportSharedSnapshot(state);
@@ -193,6 +208,10 @@ export async function pushSharedState(state) {
 }
 
 export async function fetchRemoteSharedSnapshot() {
+  if (isLocalOnlyTestMode()) {
+    return { ok: true, skipped: true, reason: 'local_only_test_mode', snapshot: null };
+  }
+
   const snapshotResult = await resolveActiveSnapshotRow();
   if (!snapshotResult.ok) {
     return { ok: false, error: snapshotResult.error };
@@ -220,7 +239,7 @@ export async function pullSharedStateInto(_state) {
 }
 
 export async function clearRemoteSharedState() {
-  const activeSnapshotId = getActiveSnapshotId();
+  const activeSnapshotId = getSyncSnapshotId();
   assertSnapshotId(activeSnapshotId, 'write');
 
   const { error } = await supabase
@@ -249,11 +268,15 @@ export async function clearRemoteSharedState() {
 }
 
 export function subscribeSharedState(state, onChange) {
-  const activeSnapshotId = getActiveSnapshotId();
+  if (isLocalOnlyTestMode()) {
+    return () => {};
+  }
+
+  const activeSnapshotId = getSyncSnapshotId();
   validateEnvironmentIsolation();
 
   const channel = supabase
-    .channel(getRealtimeChannelName())
+    .channel(getRealtimeChannelName(activeSnapshotId))
     .on(
       'postgres_changes',
       {
