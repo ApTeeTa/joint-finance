@@ -39,6 +39,13 @@ import {
   mountJoinHouseholdModal,
   updateAccountHeaderButtons
 } from './modules/householdAccount.js';
+import { getCurrentUser } from './lib/authSession.js';
+import {
+  getProfileLabel,
+  refreshHouseholdProfileLabels,
+  findMemberByUserId,
+  resolveProfileKeyForMember
+} from './lib/householdMemberLabels.js';
 import {
   fetchRemoteSharedSnapshot,
   subscribeSharedState,
@@ -78,11 +85,6 @@ const TAB_MESSAGES = {
   savings: 'Вкладка Копилки работает',
   debts: 'Вкладка Долги работает',
   stats: 'Вкладка Статистика работает'
-};
-
-const PROFILE_LABELS = {
-  husband: 'Муж',
-  wife: 'Жена'
 };
 
 const state = {
@@ -156,8 +158,27 @@ function formatMoney(amount) {
 
 function renderProfile() {
   document.querySelectorAll('.profile-btn').forEach((btn) => {
+    const profileKey = btn.dataset.profile;
+    if (profileKey) {
+      btn.textContent = getProfileLabel(profileKey);
+    }
     btn.classList.toggle('profile-btn-active', btn.dataset.profile === state.profile);
   });
+}
+
+async function applyHouseholdProfileLabels() {
+  await refreshHouseholdProfileLabels();
+
+  if (!isLocalOnlyTestMode()) {
+    const user = await getCurrentUser();
+    const member = user?.id ? findMemberByUserId(user.id) : null;
+    const profileKey = resolveProfileKeyForMember(member);
+    if (profileKey) {
+      state.profile = profileKey;
+    }
+  }
+
+  renderProfile();
 }
 
 function updateCounters() {
@@ -466,7 +487,7 @@ async function bootFinancialApp() {
     await syncFromRemote();
   }
 
-  renderProfile();
+  await applyHouseholdProfileLabels();
   updateCounters();
   initProfileHandlers();
   initTabHandlers();
@@ -479,7 +500,7 @@ async function bootFinancialApp() {
   updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b2.1',
+    build: 'beta-b3',
     branch: 'beta'
   });
 }

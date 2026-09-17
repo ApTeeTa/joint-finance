@@ -80,3 +80,11 @@ export async function fetchHouseholdMemberCount(householdId) {
     .select('user_id', { count: 'exact', head: true })
     .eq('household_id', householdId);
 }
+
+export async function fetchHouseholdMembers(householdId) {
+  return supabase
+    .from('household_members')
+    .select('user_id, display_name, role, joined_at')
+    .eq('household_id', householdId)
+    .order('joined_at', { ascending: true });
+}

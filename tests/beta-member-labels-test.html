@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tests: Beta B3 Member labels</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Beta B3 — household member labels</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      DEFAULT_PROFILE_LABELS,
+      getProfileLabel,
+      resolveProfileKeyForMember
+    } from '../src/lib/householdMemberLabels.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    try {
+      assert(DEFAULT_PROFILE_LABELS.husband === 'Муж', 'default husband');
+      assert(getProfileLabel('husband') === 'Муж', 'fallback label');
+      assert(resolveProfileKeyForMember({ role: 'owner' }) === 'husband', 'owner slot');
+      assert(resolveProfileKeyForMember({ role: 'member' }) === 'wife', 'member slot');
+      log('PASS  Beta B3 member label helpers', 'pass');
+      log('Total: PASS', 'pass');
+    } catch (e) {
+      log('FAIL  ' + e.message, 'fail');
+    }
+  </script>
+</body>
+</html>

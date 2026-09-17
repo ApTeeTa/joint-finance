@@ -26,11 +26,7 @@ import {
   createRawMoney
 } from './uiRulesEngine.js';
 import { renderEntityCard, closeAllOverflowMenus } from './uiActionRenderer.js';
-
-const OWNER_LABELS = {
-  husband: 'Муж',
-  wife: 'Жена'
-};
+import { getProfileLabel } from '../lib/householdMemberLabels.js';
 
 const DISPATCH_SOURCE = 'categories.js';
 const CATEGORY_DOMAIN = MUTATION_DOMAINS.CATEGORY;
@@ -413,7 +409,7 @@ function getAccountLabel(state, accountId) {
   const account = findAccount(state, accountId);
   if (!account) return '—';
   const currency = account.currency ?? 'RUB';
-  const owner = OWNER_LABELS[account.owner ?? 'husband'] ?? account.owner;
+  const owner = getProfileLabel(account.owner ?? 'husband');
   return `${account.name} (${owner}) — ${formatMoney(account.balance, currency)}`;
 }
 
@@ -424,7 +420,7 @@ function renderExpenses(state, category) {
   }
 
   const items = transactions.map((tx) => {
-    const author = OWNER_LABELS[tx.author] ?? tx.author;
+    const author = getProfileLabel(tx.author);
     const comment = tx.comment ? escapeHtml(tx.comment) : 'Без комментария';
     const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
     const typeLabel = getTransactionTypeLabel(tx);
@@ -639,7 +635,7 @@ function renderExpenseModal(state) {
             <label class="${UI.label}">Комментарий</label>
             <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
-          <p class="text-xs text-slate-400">Автор: ${OWNER_LABELS[state.profile] ?? 'Муж'}</p>
+          <p class="text-xs text-slate-400">Автор: ${getProfileLabel(state.profile)}</p>
           <div class="flex gap-2 pt-2">
             <button type="button" data-action="close-modal" data-modal="expense" class="${UI.btnCancelBlock}">Отмена</button>
             <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600">Сохранить</button>
