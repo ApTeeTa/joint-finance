@@ -166,9 +166,10 @@ function renderProfile() {
       btn.textContent = getProfileLabel(profileKey);
     }
     const isOwnName = ownProfileKey && profileKey === ownProfileKey;
+    const isOwnActive = isOwnName && state.profile === ownProfileKey;
     btn.classList.toggle('profile-btn-active', profileKey === state.profile);
     btn.classList.toggle('profile-btn-own', isOwnName);
-    btn.title = isOwnName ? 'Change your name' : '';
+    btn.title = isOwnActive ? 'Change your name' : (isOwnName ? 'Select yourself' : '');
   });
 }
 
@@ -353,7 +354,8 @@ function initProfileHandlers() {
   document.querySelectorAll('.profile-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const profileKey = btn.dataset.profile;
-      if (!isLocalOnlyTestMode() && ownProfileKey && profileKey === ownProfileKey) {
+      const isOwnName = !isLocalOnlyTestMode() && ownProfileKey && profileKey === ownProfileKey;
+      if (isOwnName && state.profile === ownProfileKey) {
         await openEditDisplayName();
         return;
       }
@@ -518,7 +520,7 @@ async function bootFinancialApp() {
   updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b3.2',
+    build: 'beta-b3.3',
     branch: 'beta'
   });
 }
