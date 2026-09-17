@@ -4,7 +4,8 @@ import {
   signUpWithEmail,
   signInWithGoogle,
   signOut,
-  getSession
+  resolveSessionAfterBoot,
+  clearAuthCallbackFromUrl
 } from '../lib/authSession.js';
 import {
   createHousehold,
@@ -227,11 +228,13 @@ export async function ensureBetaAccess({ seedState = null, onReady } = {}) {
   seedStateRef = seedState;
   ensureGateHandlers();
 
-  const session = await getSession();
+  const session = await resolveSessionAfterBoot();
   if (!session?.user) {
     renderAuthView();
     return { ready: false };
   }
+
+  clearAuthCallbackFromUrl();
 
   const resolved = await resolveActiveHouseholdForUser(session.user.id);
   if (!resolved.ok) {

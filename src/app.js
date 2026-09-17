@@ -520,7 +520,7 @@ async function bootFinancialApp() {
   updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b3.3',
+    build: 'beta-b4-oauth',
     branch: 'beta'
   });
 }
