@@ -2,6 +2,8 @@
 
 Run once in Supabase SQL editor (or CLI migrate) before testing beta auth on deploy.
 
+**Smoke tests:** see [BETA_CHECKLIST.md](./BETA_CHECKLIST.md).
+
 ## 1. Apply migration
 
 File: `supabase/migrations/20250917120000_beta_auth_households.sql`
