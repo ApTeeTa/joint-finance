@@ -9,6 +9,7 @@ import {
   fetchMemberHouseholdRows,
   insertHouseholdRow,
   insertHouseholdMemberRow,
+  updateHouseholdMemberRow,
   upsertHouseholdMemberRow,
   insertHouseholdSnapshotRow,
   fetchInviteByCode,
@@ -129,12 +130,22 @@ export async function joinHouseholdByInviteCode(userId, code, displayName) {
 
   const memberName = (displayName ?? '').trim() || 'Member';
 
-  const { error: memberError } = await upsertHouseholdMemberRow({
+  // Use INSERT, not UPSERT — PostgREST upsert fails RLS on household_members for new joiners.
+  let { error: memberError } = await insertHouseholdMemberRow({
     household_id: invite.household_id,
     user_id: userId,
     display_name: memberName,
     role: 'member'
   });
+
+  if (memberError?.code === '23505') {
+    const { error: updateError } = await updateHouseholdMemberRow(
+      invite.household_id,
+      userId,
+      { display_name: memberName, role: 'member' }
+    );
+    memberError = updateError;
+  }
 
   if (memberError) {
     return { ok: false, error: memberError.message };

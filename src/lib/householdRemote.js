@@ -31,6 +31,14 @@ export async function upsertHouseholdMemberRow(row) {
   return supabase.from('household_members').upsert(row, { onConflict: 'household_id,user_id' });
 }
 
+export async function updateHouseholdMemberRow(householdId, userId, patch) {
+  return supabase
+    .from('household_members')
+    .update(patch)
+    .eq('household_id', householdId)
+    .eq('user_id', userId);
+}
+
 export async function insertHouseholdSnapshotRow(row) {
   return supabase.from('household_snapshots').insert(row);
 }
