@@ -38,6 +38,7 @@ import {
   initHouseholdAccountHandlers,
   mountJoinHouseholdModal,
   mountEditDisplayNameModal,
+  openEditDisplayName,
   updateAccountHeaderButtons
 } from './modules/householdAccount.js';
 import { getCurrentUser } from './lib/authSession.js';
@@ -108,6 +109,7 @@ let totalBalanceEl;
 let freeBalanceEl;
 let reservedBalanceEl;
 let lastValidState = null;
+let ownProfileKey = null;
 
 const INVARIANT_ROLLBACK_ALERT = 'Операция отменена: свободный баланс не может быть отрицательным!';
 
@@ -163,7 +165,10 @@ function renderProfile() {
     if (profileKey) {
       btn.textContent = getProfileLabel(profileKey);
     }
-    btn.classList.toggle('profile-btn-active', btn.dataset.profile === state.profile);
+    const isOwnName = ownProfileKey && profileKey === ownProfileKey;
+    btn.classList.toggle('profile-btn-active', profileKey === state.profile);
+    btn.classList.toggle('profile-btn-own', isOwnName);
+    btn.title = isOwnName ? 'Change your name' : '';
   });
 }
 
@@ -173,10 +178,12 @@ async function applyHouseholdProfileLabels() {
   if (!isLocalOnlyTestMode()) {
     const user = await getCurrentUser();
     const member = user?.id ? findMemberByUserId(user.id) : null;
-    const profileKey = resolveProfileKeyForMember(member);
-    if (profileKey) {
-      state.profile = profileKey;
+    ownProfileKey = resolveProfileKeyForMember(member);
+    if (ownProfileKey) {
+      state.profile = ownProfileKey;
     }
+  } else {
+    ownProfileKey = null;
   }
 
   renderProfile();
@@ -344,8 +351,13 @@ function initDisplayModeRefresh() {
 
 function initProfileHandlers() {
   document.querySelectorAll('.profile-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.profile = btn.dataset.profile;
+    btn.addEventListener('click', async () => {
+      const profileKey = btn.dataset.profile;
+      if (!isLocalOnlyTestMode() && ownProfileKey && profileKey === ownProfileKey) {
+        await openEditDisplayName();
+        return;
+      }
+      state.profile = profileKey;
       renderProfile();
       renderTab(state.activeTab);
     });
@@ -506,7 +518,7 @@ async function bootFinancialApp() {
   updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b3.1',
+    build: 'beta-b3.2',
     branch: 'beta'
   });
 }

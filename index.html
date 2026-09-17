@@ -129,6 +129,11 @@
       box-shadow: var(--shadow-card);
     }
 
+    .profile-btn-own:not(.profile-btn-active):hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+    }
+
     .balance-strip {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -893,12 +898,6 @@
             data-action="open-invite-partner"
             class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
           >Invite</button>
-          <button
-            type="button"
-            id="edit-display-name-btn"
-            data-action="open-edit-display-name"
-            class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
-          >My name</button>
           <button
             type="button"
             id="sign-out-btn"

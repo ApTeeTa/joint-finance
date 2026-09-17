@@ -83,12 +83,10 @@ export function mountEditDisplayNameModal() {
 export function updateAccountHeaderButtons() {
   const joinBtn = document.getElementById('join-household-btn');
   const signOutBtn = document.getElementById('sign-out-btn');
-  const editNameBtn = document.getElementById('edit-display-name-btn');
   const hide = isLocalOnlyTestMode();
 
   joinBtn?.classList.toggle('hidden', hide);
   signOutBtn?.classList.toggle('hidden', hide);
-  editNameBtn?.classList.toggle('hidden', hide);
 }
 
 function resetJoinModalForm(modal) {
@@ -97,7 +95,7 @@ function resetJoinModalForm(modal) {
   modal.querySelector('[data-join-status]').textContent = '';
 }
 
-async function openEditNameModal() {
+export async function openEditDisplayName() {
   mountEditDisplayNameModal();
   const modal = document.querySelector(`[data-modal="${EDIT_NAME_MODAL}"]`);
   if (!modal) return;
@@ -177,11 +175,6 @@ export function initHouseholdAccountHandlers() {
       const modal = document.querySelector(`[data-modal="${JOIN_MODAL}"]`);
       if (modal) resetJoinModalForm(modal);
       openModal(JOIN_MODAL);
-      return;
-    }
-
-    if (action === 'open-edit-display-name') {
-      await openEditNameModal();
       return;
     }
 

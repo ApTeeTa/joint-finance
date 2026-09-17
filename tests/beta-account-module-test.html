@@ -16,6 +16,7 @@
     import {
       mountJoinHouseholdModal,
       mountEditDisplayNameModal,
+      openEditDisplayName,
       updateAccountHeaderButtons,
       initHouseholdAccountHandlers
     } from '../src/modules/householdAccount.js';
@@ -34,6 +35,7 @@
     try {
       assert(typeof mountJoinHouseholdModal === 'function', 'mountJoinHouseholdModal');
       assert(typeof mountEditDisplayNameModal === 'function', 'mountEditDisplayNameModal');
+      assert(typeof openEditDisplayName === 'function', 'openEditDisplayName');
       assert(typeof updateCurrentMemberDisplayName === 'function', 'updateCurrentMemberDisplayName');
       assert(typeof updateAccountHeaderButtons === 'function', 'updateAccountHeaderButtons');
       assert(typeof initHouseholdAccountHandlers === 'function', 'initHouseholdAccountHandlers');
