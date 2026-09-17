@@ -50,9 +50,7 @@ function ensureGateHandlers() {
     const action = button.dataset.action;
 
     if (action === 'auth-sign-out') {
-      clearActiveHousehold();
-      await signOut();
-      renderAuthView();
+      await signOutToAuthGate();
       return;
     }
 
@@ -215,6 +213,12 @@ async function continueAfterAuth(user) {
 function finishOnboarding(household) {
   hideGate();
   onReadyCallback?.({ household });
+}
+
+export async function signOutToAuthGate() {
+  clearActiveHousehold();
+  await signOut();
+  renderAuthView();
 }
 
 export async function ensureBetaAccess({ seedState = null, onReady } = {}) {

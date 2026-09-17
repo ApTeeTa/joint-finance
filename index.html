@@ -883,10 +883,22 @@
         <div class="flex gap-2 shrink-0 items-center" id="header-actions">
           <button
             type="button"
+            id="join-household-btn"
+            data-action="open-join-household"
+            class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
+          >Join</button>
+          <button
+            type="button"
             id="invite-partner-btn"
             data-action="open-invite-partner"
             class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
           >Invite</button>
+          <button
+            type="button"
+            id="sign-out-btn"
+            data-action="auth-sign-out-app"
+            class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-slate-600 hover:bg-surface-muted transition-colors"
+          >Sign out</button>
         <div class="flex gap-2 shrink-0" id="profile-selector">
           <button
             type="button"

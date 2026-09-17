@@ -35,6 +35,11 @@ import {
   updateInviteHeaderButton
 } from './modules/householdInvite.js';
 import {
+  initHouseholdAccountHandlers,
+  mountJoinHouseholdModal,
+  updateAccountHeaderButtons
+} from './modules/householdAccount.js';
+import {
   fetchRemoteSharedSnapshot,
   subscribeSharedState,
   clearRemoteSharedState,
@@ -467,11 +472,14 @@ async function bootFinancialApp() {
   initTabHandlers();
   initHeaderHeightSync();
   mountInviteModal();
+  mountJoinHouseholdModal();
   initHouseholdInviteHandlers();
+  initHouseholdAccountHandlers();
   updateInviteHeaderButton();
+  updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b2',
+    build: 'beta-b2.1',
     branch: 'beta'
   });
 }

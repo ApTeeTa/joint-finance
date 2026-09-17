@@ -1,5 +1,10 @@
 import { getEmptySharedSnapshot } from '../modules/storage.js';
-import { buildHouseholdSnapshotId, loadPersistedHousehold, setActiveHousehold } from './householdContext.js';
+import {
+  buildHouseholdSnapshotId,
+  loadPersistedHousehold,
+  setActiveHousehold,
+  getActiveHousehold
+} from './householdContext.js';
 import {
   fetchMemberHouseholdRows,
   insertHouseholdRow,
@@ -115,6 +120,11 @@ export async function joinHouseholdByInviteCode(userId, code, displayName) {
   }
   if (new Date(invite.expires_at).getTime() < Date.now()) {
     return { ok: false, error: 'Invite code expired' };
+  }
+
+  const active = getActiveHousehold() ?? loadPersistedHousehold();
+  if (active?.id === invite.household_id) {
+    return { ok: false, error: 'You are already in this household' };
   }
 
   const memberName = (displayName ?? '').trim() || 'Member';

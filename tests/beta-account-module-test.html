@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tests: Beta B2.1 Account</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Beta B2.1 — account patch</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      mountJoinHouseholdModal,
+      updateAccountHeaderButtons,
+      initHouseholdAccountHandlers
+    } from '../src/modules/householdAccount.js';
+    import { signOutToAuthGate } from '../src/modules/betaOnboarding.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    try {
+      assert(typeof mountJoinHouseholdModal === 'function', 'mountJoinHouseholdModal');
+      assert(typeof updateAccountHeaderButtons === 'function', 'updateAccountHeaderButtons');
+      assert(typeof initHouseholdAccountHandlers === 'function', 'initHouseholdAccountHandlers');
+      assert(typeof signOutToAuthGate === 'function', 'signOutToAuthGate');
+      log('PASS  Beta B2.1 account exports', 'pass');
+      log('Total: PASS', 'pass');
+    } catch (e) {
+      log('FAIL  ' + e.message, 'fail');
+    }
+  </script>
+</body>
+</html>
