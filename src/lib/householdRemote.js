@@ -54,3 +54,21 @@ export async function fetchHouseholdById(householdId) {
 export async function insertHouseholdInviteRow(row) {
   return supabase.from('household_invites').insert(row).select('code, expires_at').single();
 }
+
+export async function fetchActiveInviteForHousehold(householdId) {
+  return supabase
+    .from('household_invites')
+    .select('code, expires_at')
+    .eq('household_id', householdId)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+}
+
+export async function fetchHouseholdMemberCount(householdId) {
+  return supabase
+    .from('household_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('household_id', householdId);
+}

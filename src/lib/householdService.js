@@ -8,7 +8,9 @@ import {
   insertHouseholdSnapshotRow,
   fetchInviteByCode,
   fetchHouseholdById,
-  insertHouseholdInviteRow
+  insertHouseholdInviteRow,
+  fetchActiveInviteForHousehold,
+  fetchHouseholdMemberCount
 } from './householdRemote.js';
 
 const INVITE_TTL_DAYS = 14;
@@ -153,6 +155,25 @@ export async function createInviteCode(householdId, inviterUserId) {
   }
 
   return { ok: true, code: data.code, expiresAt: data.expires_at };
+}
+
+export async function getOrCreateInviteCode(householdId, inviterUserId) {
+  const { data: existing, error: fetchError } = await fetchActiveInviteForHousehold(householdId);
+  if (fetchError) {
+    return { ok: false, error: fetchError.message };
+  }
+  if (existing?.code) {
+    return { ok: true, code: existing.code, expiresAt: existing.expires_at, reused: true };
+  }
+  return createInviteCode(householdId, inviterUserId);
+}
+
+export async function getHouseholdMemberStats(householdId) {
+  const { count, error } = await fetchHouseholdMemberCount(householdId);
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, memberCount: count ?? 0 };
 }
 
 export async function resolveActiveHouseholdForUser(userId) {

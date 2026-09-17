@@ -30,6 +30,11 @@ import { initDisplayModeSystem } from './modules/displayMode.js';
 import { validateEnvironmentIsolation, isLocalOnlyTestMode } from './config/environmentConfig.js';
 import { ensureBetaAccess } from './modules/betaOnboarding.js';
 import {
+  initHouseholdInviteHandlers,
+  mountInviteModal,
+  updateInviteHeaderButton
+} from './modules/householdInvite.js';
+import {
   fetchRemoteSharedSnapshot,
   subscribeSharedState,
   clearRemoteSharedState,
@@ -461,9 +466,12 @@ async function bootFinancialApp() {
   initProfileHandlers();
   initTabHandlers();
   initHeaderHeightSync();
+  mountInviteModal();
+  initHouseholdInviteHandlers();
+  updateInviteHeaderButton();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b1',
+    build: 'beta-b2',
     branch: 'beta'
   });
 }
