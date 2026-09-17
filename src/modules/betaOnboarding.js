@@ -5,7 +5,8 @@ import {
   signInWithGoogle,
   signOut,
   resolveSessionAfterBoot,
-  clearAuthCallbackFromUrl
+  clearAuthCallbackFromUrl,
+  getOAuthCallbackError
 } from '../lib/authSession.js';
 import {
   createHousehold,
@@ -220,6 +221,16 @@ export async function signOutToAuthGate() {
   clearActiveHousehold();
   await signOut();
   renderAuthView();
+  setMessage('');
+}
+
+function renderAuthLoadingView() {
+  showGate();
+  gateEl.innerHTML = `
+    <div class="max-w-md mx-auto ${UI.panel} ${UI.panelPadding} mt-10 text-center">
+      <p class="text-sm text-slate-500">Signing you in…</p>
+    </div>
+  `;
 }
 
 export async function ensureBetaAccess({ seedState = null, onReady } = {}) {
@@ -227,10 +238,15 @@ export async function ensureBetaAccess({ seedState = null, onReady } = {}) {
   onReadyCallback = onReady ?? null;
   seedStateRef = seedState;
   ensureGateHandlers();
+  renderAuthLoadingView();
 
   const session = await resolveSessionAfterBoot();
   if (!session?.user) {
     renderAuthView();
+    const oauthError = getOAuthCallbackError();
+    if (oauthError) {
+      setMessage(oauthError, true);
+    }
     return { ready: false };
   }
 

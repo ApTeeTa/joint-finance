@@ -3,7 +3,8 @@ import {
   buildHouseholdSnapshotId,
   loadPersistedHousehold,
   setActiveHousehold,
-  getActiveHousehold
+  getActiveHousehold,
+  clearActiveHousehold
 } from './householdContext.js';
 import {
   fetchMemberHouseholdRows,
@@ -233,6 +234,7 @@ export async function resolveActiveHouseholdForUser(userId) {
       setActiveHousehold(match);
       return { ok: true, household: match };
     }
+    clearActiveHousehold();
   }
 
   if (result.households.length >= 1) {
