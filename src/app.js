@@ -37,6 +37,7 @@ import {
 import {
   initHouseholdAccountHandlers,
   mountJoinHouseholdModal,
+  mountEditDisplayNameModal,
   updateAccountHeaderButtons
 } from './modules/householdAccount.js';
 import { getCurrentUser } from './lib/authSession.js';
@@ -328,6 +329,10 @@ const DISPLAY_MODE_TAB_MAP = {
 };
 
 function initDisplayModeRefresh() {
+  document.addEventListener('joint-finance:profile-labels-changed', () => {
+    renderProfile();
+  });
+
   document.addEventListener('joint-finance:display-mode-changed', (event) => {
     const moduleKey = event.detail?.moduleKey;
     const tab = DISPLAY_MODE_TAB_MAP[moduleKey];
@@ -494,13 +499,14 @@ async function bootFinancialApp() {
   initHeaderHeightSync();
   mountInviteModal();
   mountJoinHouseholdModal();
+  mountEditDisplayNameModal();
   initHouseholdInviteHandlers();
   initHouseholdAccountHandlers();
   updateInviteHeaderButton();
   updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b3',
+    build: 'beta-b3.1',
     branch: 'beta'
   });
 }

@@ -15,9 +15,11 @@
   <script type="module">
     import {
       mountJoinHouseholdModal,
+      mountEditDisplayNameModal,
       updateAccountHeaderButtons,
       initHouseholdAccountHandlers
     } from '../src/modules/householdAccount.js';
+    import { updateCurrentMemberDisplayName } from '../src/lib/householdService.js';
     import { signOutToAuthGate } from '../src/modules/betaOnboarding.js';
 
     const out = document.getElementById('out');
@@ -31,6 +33,8 @@
 
     try {
       assert(typeof mountJoinHouseholdModal === 'function', 'mountJoinHouseholdModal');
+      assert(typeof mountEditDisplayNameModal === 'function', 'mountEditDisplayNameModal');
+      assert(typeof updateCurrentMemberDisplayName === 'function', 'updateCurrentMemberDisplayName');
       assert(typeof updateAccountHeaderButtons === 'function', 'updateAccountHeaderButtons');
       assert(typeof initHouseholdAccountHandlers === 'function', 'initHouseholdAccountHandlers');
       assert(typeof signOutToAuthGate === 'function', 'signOutToAuthGate');

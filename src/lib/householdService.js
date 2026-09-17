@@ -189,6 +189,29 @@ export async function getOrCreateInviteCode(householdId, inviterUserId) {
   return createInviteCode(householdId, inviterUserId);
 }
 
+export async function updateCurrentMemberDisplayName(userId, displayName) {
+  const household = getActiveHousehold();
+  if (!household?.id) {
+    return { ok: false, error: 'No active household' };
+  }
+
+  const memberName = (displayName ?? '').trim();
+  if (!memberName) {
+    return { ok: false, error: 'Enter your name' };
+  }
+
+  const { error } = await updateHouseholdMemberRow(household.id, userId, {
+    display_name: memberName
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  setActiveHousehold({ ...household, display_name: memberName });
+  return { ok: true, displayName: memberName };
+}
+
 export async function getHouseholdMemberStats(householdId) {
   const { count, error } = await fetchHouseholdMemberCount(householdId);
   if (error) {

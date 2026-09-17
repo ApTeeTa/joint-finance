@@ -72,3 +72,15 @@ export function resolveProfileKeyForMember(member) {
 export function findMemberByUserId(userId) {
   return cachedMembers.find((member) => member.user_id === userId) ?? null;
 }
+
+export function getCurrentMemberDisplayName(userId) {
+  const member = findMemberByUserId(userId);
+  if (member?.display_name?.trim()) {
+    return member.display_name.trim();
+  }
+  const household = getActiveHousehold();
+  if (household?.display_name?.trim()) {
+    return household.display_name.trim();
+  }
+  return '';
+}
