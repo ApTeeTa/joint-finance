@@ -5,21 +5,20 @@ let lastAuthBootstrapError = null;
 
 function readOAuthCallbackParams() {
   if (typeof window === 'undefined') {
-    return { code: null, flowId: null, error: null, errorDescription: null };
+    return { error: null, errorDescription: null, hasCode: false };
   }
   const params = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
   return {
-    code: params.get('code'),
-    flowId: params.get('sb_flow_id'),
     error: params.get('error'),
-    errorDescription: params.get('error_description')
+    errorDescription: params.get('error_description'),
+    hasCode: Boolean(params.get('code') || hash.includes('access_token'))
   };
 }
 
 function hasOAuthCallbackParams() {
-  const { code, error } = readOAuthCallbackParams();
-  const hash = typeof window !== 'undefined' ? window.location.hash : '';
-  return Boolean(code || error || hash.includes('access_token'));
+  const { error, hasCode } = readOAuthCallbackParams();
+  return Boolean(error || hasCode);
 }
 
 export function clearAuthCallbackFromUrl() {
@@ -27,68 +26,7 @@ export function clearAuthCallbackFromUrl() {
   window.history.replaceState({}, document.title, window.location.pathname);
 }
 
-async function exchangeOAuthCallbackIfPresent() {
-  lastAuthBootstrapError = null;
-  const { code, flowId, error, errorDescription } = readOAuthCallbackParams();
-
-  if (error) {
-    const message = errorDescription || error;
-    lastAuthBootstrapError = message;
-    console.error('[AUTH] OAuth callback error', message);
-    clearAuthCallbackFromUrl();
-    return { session: null, error: message };
-  }
-
-  if (!code) {
-    return { session: null, error: null };
-  }
-
-  console.log('[AUTH] Exchanging OAuth code for session…', flowId ? { flowId } : {});
-  const exchangeOptions = flowId ? { flowId } : undefined;
-  const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(
-    code,
-    exchangeOptions
-  );
-
-  if (exchangeError) {
-    lastAuthBootstrapError = exchangeError.message;
-    console.error('[AUTH] exchangeCodeForSession failed', exchangeError);
-    clearAuthCallbackFromUrl();
-    return { session: null, error: exchangeError.message };
-  }
-
-  clearAuthCallbackFromUrl();
-  return { session: data.session ?? null, error: null };
-}
-
-/**
- * After OAuth redirect, wait for PKCE exchange before the auth gate runs.
- */
-export async function resolveSessionAfterBoot() {
-  if (hasOAuthCallbackParams()) {
-    const exchanged = await exchangeOAuthCallbackIfPresent();
-    if (exchanged.session) {
-      return exchanged.session;
-    }
-    if (exchanged.error) {
-      return null;
-    }
-  }
-
-  const { data, error } = await supabase.auth.getSession();
-  if (error) {
-    console.error('[AUTH] getSession failed', error);
-  }
-  if (data.session) {
-    return data.session;
-  }
-
-  if (!hasOAuthCallbackParams()) {
-    return null;
-  }
-
-  console.log('[AUTH] OAuth callback detected — waiting for session…');
-
+function waitForOAuthSession(timeoutMs) {
   return new Promise((resolve) => {
     let settled = false;
     let subscription = null;
@@ -104,24 +42,60 @@ export async function resolveSessionAfterBoot() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
-        clearAuthCallbackFromUrl();
         finish(session);
       }
     });
     subscription = listener.subscription;
 
+    const poll = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        finish(data.session);
+      }
+    };
+
+    poll();
     timer = setTimeout(async () => {
-      const { data: retry } = await supabase.auth.getSession();
-      finish(retry.session ?? null);
-    }, OAUTH_WAIT_MS);
+      await poll();
+      finish(null);
+    }, timeoutMs);
   });
 }
 
-export function getOAuthCallbackError() {
-  const { error, errorDescription } = readOAuthCallbackParams();
+/**
+ * After OAuth redirect, let the Supabase client exchange the PKCE code (detectSessionInUrl).
+ * Do NOT call exchangeCodeForSession manually — that causes "code verifier should be non-empty".
+ */
+export async function resolveSessionAfterBoot() {
+  lastAuthBootstrapError = null;
+
+  const { error, errorDescription, hasCode } = readOAuthCallbackParams();
   if (error) {
-    return errorDescription || error;
+    lastAuthBootstrapError = errorDescription || error;
+    clearAuthCallbackFromUrl();
+    return null;
   }
+
+  if (hasCode) {
+    console.log('[AUTH] OAuth callback — waiting for Supabase PKCE exchange…');
+    const session = await waitForOAuthSession(OAUTH_WAIT_MS);
+    if (session) {
+      clearAuthCallbackFromUrl();
+      return session;
+    }
+    lastAuthBootstrapError = 'Sign-in link expired or invalid. Please try Google again.';
+    clearAuthCallbackFromUrl();
+    return null;
+  }
+
+  const { data, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    console.error('[AUTH] getSession failed', sessionError);
+  }
+  return data.session ?? null;
+}
+
+export function getOAuthCallbackError() {
   return lastAuthBootstrapError;
 }
 
@@ -173,6 +147,7 @@ export async function signInWithEmail(email, password) {
 }
 
 export async function signInWithGoogle() {
+  clearAuthCallbackFromUrl();
   const redirectTo = typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname || '/'}`
     : undefined;
@@ -189,7 +164,7 @@ export async function signInWithGoogle() {
   if (data?.url) {
     window.location.assign(data.url);
   }
-  return { ok: true, redirecting: true, flowId: data.flowId ?? null };
+  return { ok: true, redirecting: true };
 }
 
 export async function signOut() {
