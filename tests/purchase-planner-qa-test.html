@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase planner QA</title>
+  <style>
+    body { font-family: ui-monospace, monospace; padding: 1rem; }
+    .fail { color: #b91c1c; font-weight: bold; }
+    .ok { color: #047857; }
+    #summary { margin-top: 1rem; padding: 0.75rem; border-radius: 0.5rem; }
+    #summary.pass { background: #ecfdf5; border: 1px solid #6ee7b7; }
+    #summary.fail { background: #fef2f2; border: 1px solid #fca5a5; }
+  </style>
+</head>
+<body>
+  <h1>Purchase planner QA</h1>
+  <pre id="out"></pre>
+  <div id="summary"></div>
+  <script type="module">
+    import { simulatePurchase, listReserveSources } from '../src/modules/purchaseSimulation.js';
+    import {
+      calculateFreeBalance,
+      calculateTotalBalance,
+      calculateReservedBalance
+    } from '../src/modules/financeEngine.js';
+
+    const out = document.getElementById('out');
+    const summary = document.getElementById('summary');
+    const lines = [];
+    let failed = 0;
+
+    function assert(condition, message) {
+      lines.push(`${condition ? 'OK' : 'FAIL'}: ${message}`);
+      if (!condition) failed += 1;
+    }
+
+    function deepEqual(a, b) {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+
+    function snapshotFinanceState(state) {
+      return {
+        free: calculateFreeBalance(state),
+        total: calculateTotalBalance(state),
+        reserved: calculateReservedBalance(state),
+        accounts: (state.accounts ?? []).map((a) => ({ id: a.id, balance: a.balance ?? 0 })),
+        categories: (state.categories ?? []).map((c) => ({ id: c.id, reserved: c.reserved ?? 0 })),
+        savings: (state.savings ?? []).map((s) => ({
+          id: s.id,
+          accumulated: s.accumulated ?? s.amount ?? 0
+        })),
+        obligations: (state.obligations ?? []).map((o) => ({
+          id: o.id,
+          reserveAmount: o.reserveAmount ?? 0
+        })),
+        debts: (state.debts ?? []).map((d) => ({
+          id: d.id,
+          reserved: d.reserved ?? 0
+        }))
+      };
+    }
+
+    function assertStateUnchanged(before, after, label) {
+      assert(deepEqual(before, after), `${label}: state unchanged after simulation`);
+    }
+
+    function baseState(overrides = {}) {
+      return {
+        exchangeRate: 92,
+        accounts: [{ id: 'a1', balance: 10000, currency: 'RUB', owner: 'husband' }],
+        categories: [
+          { id: 'c1', name: 'Food', reserved: 800, limit: 1000, spent: 0 },
+          { id: 'c2', name: 'Car maintenance', reserved: 1000, limit: 1000, spent: 0 }
+        ],
+        savings: [{
+          id: 's1', name: 'Vacation', accumulated: 4000, targetAmount: 5000,
+          deadlineType: 'date', deadlineDate: '2026-05-01'
+        }],
+        obligations: [{ id: 'o1', name: 'Rent', reserveAmount: 0, targetAmount: 3000 }],
+        debts: [{ id: 'd1', direction: 'we_owe', title: 'Loan', reserved: 0, amount: 5000 }],
+        transactions: [],
+        ...overrides
+      };
+    }
+
+    function stateWithFree(freeTarget) {
+      const reservedTotal = 5800;
+      const total = freeTarget + reservedTotal;
+      return baseState({
+        accounts: [{ id: 'a1', balance: total, currency: 'RUB', owner: 'husband' }]
+      });
+    }
+
+    function runSimulationImmutabilityCheck(state, params, label) {
+      const before = snapshotFinanceState(state);
+      const clone = structuredClone(state);
+      const simulation = simulatePurchase(clone, params);
+      const after = snapshotFinanceState(state);
+      assertStateUnchanged(before, after, label);
+      assert(
+        deepEqual(before, snapshotFinanceState(clone)),
+        `${label}: clone unchanged (simulatePurchase is read-only)`
+      );
+      return simulation;
+    }
+
+    try {
+      // Smoke (purchase-simulation-test.html)
+      {
+        const state = baseState();
+        assert(calculateFreeBalance(state) === 4200, `smoke: free=4200 (got ${calculateFreeBalance(state)})`);
+        const fits = runSimulationImmutabilityCheck(state, { name: 'Headphones', amount: 200 }, 'smoke fits');
+        assert(fits.ok && fits.fitsInFree, 'smoke: fits in free');
+        assert(fits.freeAfter === 4000, `smoke: freeAfter=${fits.freeAfter}`);
+        assert(fits.impacts.length === 0, 'smoke: no impacts');
+        const short = runSimulationImmutabilityCheck(state, { name: 'Laptop', amount: 5000 }, 'smoke short');
+        assert(short.shortfall === 800, `smoke: shortfall=${short.shortfall}`);
+        assert(short.impacts.length === 3, `smoke: impacts=${short.impacts.length}`);
+        assert(listReserveSources(state).length === 3, 'smoke: three sources');
+      }
+
+      // S1: Free=500, purchase=200
+      {
+        const state = stateWithFree(500);
+        assert(calculateFreeBalance(state) === 500, 's1: free=500');
+        const sim = runSimulationImmutabilityCheck(state, { amount: 200 }, 's1');
+        assert(sim.fitsInFree, 's1: succeeds');
+        assert(sim.freeAfter === 300, `s1: freeAfter=${sim.freeAfter}`);
+        assert(sim.impacts.length === 0, 's1: no reserve impact');
+      }
+
+      // S2: Free=0, purchase=200
+      {
+        const state = stateWithFree(0);
+        const sim = runSimulationImmutabilityCheck(state, { name: 'Headphones', amount: 200 }, 's2');
+        assert(sim.shortfall === 200, `s2: shortfall=${sim.shortfall}`);
+        assert(sim.impacts.length >= 2, `s2: reserves listed (${sim.impacts.length})`);
+      }
+
+      // S3: Free=100, purchase=200
+      {
+        const state = stateWithFree(100);
+        const sim = runSimulationImmutabilityCheck(state, { amount: 200 }, 's3');
+        assert(sim.shortfall === 100, `s3: shortfall=${sim.shortfall}`);
+        assert(sim.freeBefore === 100, `s3: freeBefore=${sim.freeBefore}`);
+        assert(sim.impacts.every((i) => i.withdrawal === 100), 's3: impact uses shortfall');
+      }
+
+      // S4: Free=purchase=200
+      {
+        const state = stateWithFree(200);
+        const sim = runSimulationImmutabilityCheck(state, { amount: 200 }, 's4');
+        assert(sim.fitsInFree && sim.freeAfter === 0, `s4: freeAfter=${sim.freeAfter}`);
+        assert(sim.impacts.length === 0, 's4: no reserve impact');
+      }
+
+      // S5: purchase > all money
+      {
+        const state = stateWithFree(0);
+        const total = calculateTotalBalance(state);
+        const sim = runSimulationImmutabilityCheck(state, { amount: total + 5000 }, 's5');
+        assert(sim.ok, 's5: simulation ok');
+        assert(sim.impacts.every((i) => i.remaining >= 0), 's5: no negative remaining in projections');
+        assert(snapshotFinanceState(state).free >= 0, 's5: state free not negative');
+      }
+
+      // Read-only repeated
+      {
+        const state = stateWithFree(500);
+        const snap = snapshotFinanceState(state);
+        simulatePurchase(state, { amount: 100 });
+        simulatePurchase(state, { amount: 99999 });
+        assert(deepEqual(snap, snapshotFinanceState(state)), 'read-only: repeated sims unchanged');
+      }
+
+      window.__QA_RESULT__ = { failed, total: lines.length, passed: failed === 0 };
+    } catch (error) {
+      lines.push(`FAIL: uncaught ${error.message}`);
+      failed += 1;
+      window.__QA_RESULT__ = { failed, total: lines.length, passed: false, error: error.message };
+    }
+
+    out.innerHTML = lines.map((line) => {
+      const cls = line.startsWith('FAIL') ? 'fail' : 'ok';
+      return `<span class="${cls}">${line}</span>`;
+    }).join('\n');
+
+    summary.id = failed === 0 ? 'summary pass' : 'summary fail';
+    summary.textContent = failed === 0
+      ? `ALL PASSED (${lines.length} checks)`
+      : `${failed} FAILED (${lines.length} checks)`;
+  </script>
+</body>
+</html>

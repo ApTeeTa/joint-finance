@@ -41,6 +41,11 @@ import {
   openEditDisplayName,
   updateAccountHeaderButtons
 } from './modules/householdAccount.js';
+import {
+  mountPurchasePlannerModal,
+  initPurchasePlannerHandlers
+} from './modules/purchasePlanner.js';
+import { openAddSavingPrefilled } from './modules/savings.js';
 import { getCurrentUser } from './lib/authSession.js';
 import {
   getProfileLabel,
@@ -514,8 +519,15 @@ async function bootFinancialApp() {
   mountInviteModal();
   mountJoinHouseholdModal();
   mountEditDisplayNameModal();
+  mountPurchasePlannerModal();
   initHouseholdInviteHandlers();
   initHouseholdAccountHandlers();
+  initPurchasePlannerHandlers(state, {
+    onSaveForPurchase: ({ name, targetAmount }) => {
+      renderTab('savings');
+      openAddSavingPrefilled(tabContent, { name, targetAmount });
+    }
+  });
   updateInviteHeaderButton();
   updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');

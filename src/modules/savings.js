@@ -682,6 +682,25 @@ function toggleDeadlineDateField(container, prefix, deadlineType) {
   }
 }
 
+export function openAddSavingPrefilled(container, { name = '', targetAmount = '' } = {}) {
+  const form = findAppForm('add-saving', container);
+  if (!form) return false;
+
+  form.reset();
+  if (name) {
+    form.name.value = name;
+  }
+  if (targetAmount !== '' && targetAmount != null) {
+    form.targetAmount.value = targetAmount;
+  }
+  if (form.deadlineType) {
+    form.deadlineType.value = 'none';
+  }
+  toggleDeadlineDateField(container, 'add', 'none');
+  openModal('add-saving');
+  return true;
+}
+
 function fillEditSavingForm(state, container, savingId) {
   const saving = findSaving(state, savingId);
   const form = findAppForm('edit-saving', container);

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase simulation test</title>
+</head>
+<body>
+  <pre id="out"></pre>
+  <script type="module">
+    import { simulatePurchase, listReserveSources } from '../src/modules/purchaseSimulation.js';
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+
+    const out = document.getElementById('out');
+    const lines = [];
+    const assert = (condition, message) => {
+      lines.push(`${condition ? 'OK' : 'FAIL'}: ${message}`);
+      if (!condition) throw new Error(message);
+    };
+
+    const state = {
+      exchangeRate: 92,
+      accounts: [{ id: 'a1', balance: 10000, currency: 'RUB', owner: 'husband' }],
+      categories: [
+        { id: 'c1', name: 'Food', reserved: 800, limit: 1000, spent: 0 },
+        { id: 'c2', name: 'Car maintenance', reserved: 1000, limit: 1000, spent: 0 }
+      ],
+      savings: [
+        {
+          id: 's1',
+          name: 'Vacation',
+          accumulated: 4000,
+          targetAmount: 5000,
+          deadlineType: 'date',
+          deadlineDate: '2026-05-01'
+        }
+      ],
+      obligations: [],
+      debts: [],
+      transactions: []
+    };
+
+    state.categories.push({ id: 'misc', name: 'Разное', reserved: 0, isMisc: true });
+
+    const free = calculateFreeBalance(state);
+    assert(free === 4200, `free=${free}`);
+
+    const fits = simulatePurchase(state, { name: 'Headphones', amount: 200 });
+    assert(fits.ok && fits.fitsInFree, 'fits in free');
+    assert(fits.freeAfter === 4000, `freeAfter=${fits.freeAfter}`);
+    assert(fits.impacts.length === 0, 'no impacts when fits');
+
+    const short = simulatePurchase(state, { name: 'Laptop', amount: 5000 });
+    assert(short.ok && !short.fitsInFree, 'does not fit');
+    assert(short.shortfall === 800, `shortfall=${short.shortfall}`);
+    assert(short.impacts.length === 3, `impacts=${short.impacts.length}`);
+    assert(short.impacts.every((item) => item.withdrawal === 800), 'each impact uses shortfall');
+
+    const sources = listReserveSources(state);
+    assert(sources.length === 3, `sources=${sources.length}`);
+
+    const failed = lines.filter((line) => line.startsWith('FAIL')).length;
+    out.textContent = lines.join('\n') + `\n\n${failed === 0 ? 'ALL PASSED' : `${failed} FAILED`}`;
+    console.log(out.textContent);
+    window.__QA_RESULT__ = { failed, passed: failed === 0 };
+  </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Save for purchase prefill test</title>
+</head>
+<body>
+  <div id="tab-content">
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-saving">
+      <form data-form="add-saving">
+        <input type="text" name="name">
+        <input type="number" name="targetAmount">
+        <select name="deadlineType"><option value="none">none</option><option value="date">date</option></select>
+        <input type="date" name="deadlineDate" data-deadline-date-wrap="add">
+      </form>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import { openAddSavingPrefilled } from '../src/modules/savings.js';
+    import { relocateModals } from '../src/modules/modalLayer.js';
+    import { calculateFreeBalance, calculateReservedBalance } from '../src/modules/financeEngine.js';
+
+    const out = document.getElementById('out');
+    const lines = [];
+    let failed = 0;
+    const assert = (c, m) => { lines.push(`${c ? 'OK' : 'FAIL'}: ${m}`); if (!c) failed++; };
+
+    const state = {
+      accounts: [{ balance: 10000, currency: 'RUB' }],
+      categories: [{ reserved: 5000 }],
+      savings: [{ accumulated: 5000 }],
+      obligations: [],
+      debts: []
+    };
+
+    const snapBefore = {
+      free: calculateFreeBalance(state),
+      reserved: calculateReservedBalance(state),
+      savings: structuredClone(state.savings)
+    };
+
+    const container = document.getElementById('tab-content');
+    relocateModals(container);
+
+    const opened = openAddSavingPrefilled(container, { name: 'Headphones', targetAmount: 200 });
+    assert(opened, 'openAddSavingPrefilled returned true');
+
+    const form = document.querySelector('[data-form="add-saving"]');
+    assert(form?.name?.value === 'Headphones', `name=${form?.name?.value}`);
+    assert(form?.targetAmount?.value === '200', `targetAmount=${form?.targetAmount?.value}`);
+
+    const snapAfter = {
+      free: calculateFreeBalance(state),
+      reserved: calculateReservedBalance(state),
+      savings: structuredClone(state.savings)
+    };
+    assert(JSON.stringify(snapBefore) === JSON.stringify(snapAfter), 'financial state unchanged before saving submit');
+
+    window.__SAVE_PREFILL_QA__ = { failed, passed: failed === 0 };
+    out.textContent = lines.join('\n') + `\n\n${failed === 0 ? 'ALL PASSED' : `${failed} FAILED`}`;
+  </script>
+</body>
+</html>

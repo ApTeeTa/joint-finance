@@ -185,6 +185,72 @@
 
     .balance-card--free .balance-card-label { color: var(--color-free); }
     .balance-card--free .balance-card-value { color: var(--color-free); }
+
+    .balance-card-label-row {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      margin-bottom: 0.25rem;
+      min-width: 0;
+    }
+
+    .balance-help-btn {
+      flex-shrink: 0;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 9999px;
+      border: 1px solid #9ec5b5;
+      background: #fff;
+      color: var(--color-free);
+      font-size: 0.625rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .balance-help-btn:hover {
+      background: var(--color-free-bg);
+    }
+
+    #free-help-popover {
+      position: absolute;
+      z-index: 30;
+      top: calc(100% + 0.35rem);
+      left: 0;
+      right: 0;
+      font-size: 0.6875rem;
+      line-height: 1.35;
+      color: var(--color-text);
+      background: #fff;
+      border: 1px solid var(--color-border);
+      border-radius: 0.625rem;
+      padding: 0.5rem 0.625rem;
+      box-shadow: var(--shadow-card);
+    }
+
+    .balance-card--free {
+      position: relative;
+    }
+
+    .purchase-planner-btn {
+      width: 100%;
+      margin-bottom: 1.25rem;
+      padding: 0.625rem 1rem;
+      min-height: 2.5rem;
+      border-radius: 0.875rem;
+      border: 1px solid #b9d9cf;
+      background: linear-gradient(135deg, #f3fbf7 0%, #e8f5ef 100%);
+      color: var(--color-primary);
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: background 150ms ease, border-color 150ms ease;
+    }
+
+    .purchase-planner-btn:hover {
+      background: #e3f3eb;
+      border-color: #9ec5b5;
+    }
     .balance-card--reserved .balance-card-label { color: var(--color-reserved); }
     .balance-card--reserved .balance-card-value { color: var(--color-reserved); }
 
@@ -925,14 +991,31 @@
           <p id="total-balance" class="balance-card-value text-slate-900">0 ₽</p>
         </div>
         <div class="balance-card balance-card--free">
-          <p class="balance-card-label">Свободно</p>
+          <div class="balance-card-label-row">
+            <p class="balance-card-label mb-0">Free</p>
+            <button
+              type="button"
+              class="balance-help-btn"
+              data-action="toggle-free-help"
+              aria-label="What is Free?"
+              title="What is Free?"
+            >?</button>
+          </div>
           <p id="free-balance" class="balance-card-value">0 ₽</p>
+          <div id="free-help-popover" class="hidden" role="tooltip">
+            Free is money with no future task assigned yet. If Free is $0, all current money is already allocated to goals, obligations, or reserves.
+            <button type="button" data-action="dismiss-free-help" class="block mt-1 text-primary-700 hover:text-primary-800 font-medium">Got it</button>
+          </div>
         </div>
         <div class="balance-card balance-card--reserved">
           <p class="balance-card-label">Зарезервировано</p>
           <p id="reserved-balance" class="balance-card-value">0 ₽</p>
         </div>
       </div>
+
+      <button type="button" data-action="open-purchase-planner" class="purchase-planner-btn">
+        Plan a purchase
+      </button>
 
       <nav id="tab-nav" aria-label="Навигация">
         <button type="button" data-tab="accounts" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Счета</button>

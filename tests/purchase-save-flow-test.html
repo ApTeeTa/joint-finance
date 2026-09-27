@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Save for purchase flow test</title>
+</head>
+<body>
+  <div id="tab-content">
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="add-saving">
+      <form data-form="add-saving">
+        <input type="text" name="name">
+        <input type="number" name="targetAmount">
+        <select name="deadlineType"><option value="none">none</option></select>
+      </form>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import { mountPurchasePlannerModal, initPurchasePlannerHandlers, openPurchasePlanner } from '../src/modules/purchasePlanner.js';
+    import { relocateModals } from '../src/modules/modalLayer.js';
+    import { calculateFreeBalance, calculateReservedBalance } from '../src/modules/financeEngine.js';
+
+    const lines = [];
+    let failed = 0;
+    const assert = (c, m) => { lines.push(`${c ? 'OK' : 'FAIL'}: ${m}`); if (!c) failed++; };
+    const wait = () => new Promise((r) => setTimeout(r, 50));
+
+    const state = {
+      accounts: [{ balance: 5800, currency: 'RUB' }],
+      categories: [{ reserved: 800 }, { reserved: 1000 }],
+      savings: [{ accumulated: 4000 }],
+      obligations: [],
+      debts: []
+    };
+
+    const snap = () => JSON.stringify({
+      free: calculateFreeBalance(state),
+      reserved: calculateReservedBalance(state),
+      savings: state.savings.map((s) => s.accumulated)
+    });
+
+    const before = snap();
+    const container = document.getElementById('tab-content');
+    relocateModals(container);
+
+    mountPurchasePlannerModal();
+    initPurchasePlannerHandlers(state, {
+      onSaveForPurchase: ({ name, targetAmount }) => {
+        const form = document.querySelector('[data-form="add-saving"]');
+        form.reset();
+        form.name.value = name;
+        form.targetAmount.value = targetAmount;
+        form.closest('[data-modal="add-saving"]').classList.remove('hidden');
+      }
+    });
+
+    async function run() {
+      openPurchasePlanner();
+      const modal = document.querySelector('[data-modal="purchase-planner"]');
+      const form = modal.querySelector('[data-form="purchase-planner"]');
+      form.purchaseName.value = 'Headphones';
+      form.purchaseAmount.value = '200';
+      form.requestSubmit();
+      await wait();
+
+      modal.querySelector('[data-action="save-for-purchase"]')?.click();
+      await wait();
+
+      const addForm = document.querySelector('[data-form="add-saving"]');
+      assert(addForm?.name?.value === 'Headphones', 'flow: name prefilled');
+      assert(addForm?.targetAmount?.value === '200', 'flow: targetAmount prefilled');
+      assert(snap() === before, 'flow: financial state unchanged before saving goal submit');
+
+      document.getElementById('out').textContent = lines.join('\n') + `\n\n${failed === 0 ? 'ALL PASSED' : `${failed} FAILED`}`;
+      window.__QA_RESULT__ = { failed, passed: failed === 0 };
+    }
+
+    run().catch((error) => {
+      lines.push(`FAIL: uncaught ${error.message}`);
+      document.getElementById('out').textContent = lines.join('\n');
+    });
+  </script>
+</body>
+</html>

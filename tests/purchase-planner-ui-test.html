@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase planner UI test</title>
+</head>
+<body>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import { mountPurchasePlannerModal, initPurchasePlannerHandlers, openPurchasePlanner } from '../src/modules/purchasePlanner.js';
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+
+    const lines = [];
+    let failed = 0;
+    const assert = (c, m) => { lines.push(`${c ? 'OK' : 'FAIL'}: ${m}`); if (!c) failed++; };
+    const wait = () => new Promise((r) => setTimeout(r, 50));
+
+    const RESERVED_TOTAL = 5800;
+
+    function financeSnap(state) {
+      return JSON.stringify({
+        free: calculateFreeBalance(state),
+        categories: (state.categories ?? []).map((c) => c.reserved ?? 0),
+        savings: (state.savings ?? []).map((s) => s.accumulated ?? 0),
+        obligations: (state.obligations ?? []).map((o) => o.reserveAmount ?? 0),
+        debts: (state.debts ?? []).map((d) => d.reserved ?? 0)
+      });
+    }
+
+    function setFree(state, freeAmount) {
+      state.accounts[0].balance = freeAmount + RESERVED_TOTAL;
+    }
+
+    const state = {
+      exchangeRate: 92,
+      accounts: [{ id: 'a1', balance: 6300, currency: 'RUB' }],
+      categories: [
+        { id: 'c1', name: 'Food', reserved: 800 },
+        { id: 'c2', name: 'Car maintenance', reserved: 1000 }
+      ],
+      savings: [{ id: 's1', name: 'Vacation', accumulated: 4000, targetAmount: 5000 }],
+      obligations: [],
+      debts: [],
+      transactions: []
+    };
+
+    async function simulateInModal({ name, amount, label }) {
+      const before = financeSnap(state);
+      openPurchasePlanner();
+      const modal = document.querySelector('[data-modal="purchase-planner"]');
+      const form = modal.querySelector('[data-form="purchase-planner"]');
+      form.purchaseName.value = name ?? '';
+      form.purchaseAmount.value = String(amount);
+      form.requestSubmit();
+      await wait();
+      assert(before === financeSnap(state), `${label}: read-only after simulate`);
+      return modal;
+    }
+
+    async function run() {
+      mountPurchasePlannerModal();
+      initPurchasePlannerHandlers(state, { onSaveForPurchase: () => {} });
+
+      setFree(state, 500);
+      const modal = await simulateInModal({ name: 'Headphones', amount: 200, label: 'fits' });
+      assert(!modal.classList.contains('hidden'), 'modal opens');
+      const resultBody = modal.querySelector('[data-purchase-result-body]');
+      assert(resultBody?.textContent.includes('No reserved money is affected'), 'fits: no reserve impact');
+      assert(resultBody?.textContent.includes('300'), 'fits: free after 300');
+
+      setFree(state, 0);
+      await simulateInModal({ name: 'Headphones', amount: 200, label: 'free=0' });
+      assert(resultBody?.textContent.includes('You need'), 'free=0: shortfall message');
+      assert(resultBody?.textContent.includes('Vacation'), 'free=0: lists Vacation');
+
+      setFree(state, 200);
+      await simulateInModal({ name: 'Headphones', amount: 200, label: 'free=purchase' });
+      assert(resultBody?.textContent.includes('No reserved money is affected'), 'free=purchase: no reserve impact');
+
+      setFree(state, 100);
+      await simulateInModal({ name: 'Headphones', amount: 200, label: 'partial' });
+      assert(resultBody?.textContent.includes('You need'), 'partial: shortfall message');
+      assert(resultBody?.textContent.includes('from Free'), 'partial: mentions free usage first');
+
+      modal.querySelector('[data-action="purchase-planner-back"]')?.click();
+      await wait();
+      assert(!modal.querySelector('[data-purchase-step="input"]')?.classList.contains('hidden'), 'back to input');
+
+      modal.querySelector('[data-action="purchase-planner-done"]')?.click();
+      await wait();
+      assert(modal.classList.contains('hidden'), 'modal closes on Done');
+
+      document.getElementById('out').textContent = lines.join('\n') + `\n\n${failed === 0 ? 'ALL PASSED' : `${failed} FAILED`}`;
+      window.__QA_RESULT__ = { failed, passed: failed === 0 };
+    }
+
+    run().catch((error) => {
+      lines.push(`FAIL: uncaught ${error.message}`);
+      failed += 1;
+      document.getElementById('out').textContent = lines.join('\n') + `\n\n${failed} FAILED`;
+    });
+  </script>
+</body>
+</html>

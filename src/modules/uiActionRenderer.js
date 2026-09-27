@@ -190,6 +190,30 @@ const ACTION_DEFS = Object.freeze({
     title: 'Списать долг',
     menuLabel: 'Списать долг',
     menuTone: 'text-red-600 hover:bg-red-50'
+  },
+  'open-purchase-planner': {
+    title: 'Plan a purchase',
+    menuLabel: 'Plan a purchase'
+  },
+  'purchase-planner-done': {
+    title: 'Done',
+    menuLabel: 'Done'
+  },
+  'purchase-planner-back': {
+    title: 'Simulate another purchase',
+    menuLabel: 'Simulate another purchase'
+  },
+  'save-for-purchase': {
+    title: 'Save for this purchase',
+    menuLabel: 'Save for this purchase'
+  },
+  'toggle-free-help': {
+    title: 'What is Free?',
+    menuLabel: 'What is Free?'
+  },
+  'dismiss-free-help': {
+    title: 'Got it',
+    menuLabel: 'Got it'
   }
 });
 
