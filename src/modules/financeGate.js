@@ -1,4 +1,8 @@
 import { FINANCE_ENTRY_POINTS } from './financeEntryRegistry.js';
+import {
+  BETA_ANALYTICS_EVENTS,
+  trackBetaEventFireAndForget
+} from '../lib/betaAnalytics.js';
 import { withGateContext, assertCalledFromAllowedEntryPoint } from './financeGateHelpers.js';
 import { FinanceInvariantError } from './financeCoreInvariants.js';
 import {
@@ -51,6 +55,14 @@ function runProtected(entryPoint, fn) {
   });
 }
 
+function trackRedistribution(kind, result) {
+  if (result?.ok) {
+    trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.REDISTRIBUTION_PERFORMED, {
+      redistribution_kind: kind
+    });
+  }
+}
+
 export function createExpense(state, categoryId, amount, accountId, comment, date, author) {
   return runProtected(FINANCE_ENTRY_POINTS.EXPENSE, () =>
     recordExpense(state, categoryId, amount, accountId, comment, date, author)
@@ -64,9 +76,11 @@ export function reserveCategory(state, categoryId, amount, comment, date, author
 }
 
 export function unreserveCategory(state, categoryId, amount, comment, date, author) {
-  return runProtected(FINANCE_ENTRY_POINTS.UNRESERVE, () =>
+  const result = runProtected(FINANCE_ENTRY_POINTS.UNRESERVE, () =>
     recordCategoryUnreserve(state, categoryId, amount, comment, date, author)
   );
+  trackRedistribution('category', result);
+  return result;
 }
 
 export function deleteCategory(state, category, author) {
@@ -118,7 +132,9 @@ export function updateSavings(state, { action, savingId, amount, comment, date, 
     }
 
     if (action === 'withdraw') {
-      return recordSavingWithdraw(state, savingId, amount, comment, date, author);
+      const result = recordSavingWithdraw(state, savingId, amount, comment, date, author);
+      trackRedistribution('saving', result);
+      return result;
     }
 
     return { ok: false, error: 'Неизвестное действие копилки' };
@@ -132,9 +148,13 @@ export function spendSaving(state, savingId, accountId, comment, date, author) {
 }
 
 export function createSaving(state, saving, author) {
-  return runProtected(FINANCE_ENTRY_POINTS.SAVING_ADMIN, () =>
+  const result = runProtected(FINANCE_ENTRY_POINTS.SAVING_ADMIN, () =>
     recordSavingCreate(state, saving, author)
   );
+  if (result?.ok) {
+    trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.SAVINGS_GOAL_CREATED);
+  }
+  return result;
 }
 
 export function updateSavingRecord(state, savingId, changes, author) {
@@ -165,9 +185,11 @@ export function payObligation(state, obligationId, amount, accountId, paidUntil,
 }
 
 export function unreserveObligation(state, obligationId, amount, comment, date, author) {
-  return runProtected(FINANCE_ENTRY_POINTS.OBLIGATION_UNRESERVE, () =>
+  const result = runProtected(FINANCE_ENTRY_POINTS.OBLIGATION_UNRESERVE, () =>
     recordObligationUnreserve(state, obligationId, amount, comment, date, author)
   );
+  trackRedistribution('obligation', result);
+  return result;
 }
 
 export function reserveObligation(state, obligationId, amount, comment, date, author) {

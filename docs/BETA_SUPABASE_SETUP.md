@@ -49,3 +49,43 @@ The app uses plain INSERT for join (not UPSERT) — this migration is recommende
 ## 7. Invite codes
 
 Owners share codes from the **Invite** button in the app header. Partners use **Join** in the header or the onboarding screen.
+
+## 8. Product analytics (beta events)
+
+**Safest apply path:** Supabase Dashboard → **SQL Editor** → New query → paste full file:
+
+`supabase/migrations/20250928000000_beta_product_events.sql` → **Run**.
+
+(Do not use `supabase db push` unless Supabase CLI is linked to project `zbbhhlxdduhkvyhiesba`.)
+
+### Verify table
+
+```sql
+SELECT count(*) FROM public.beta_product_events;
+```
+
+### Verify RLS (run as SQL — uses service role in editor)
+
+```sql
+-- Should return policies: insert only, no select for authenticated
+SELECT policyname, cmd, roles
+FROM pg_policies
+WHERE tablename = 'beta_product_events';
+```
+
+Clients with anon/authenticated keys **cannot SELECT** (no read policy). Aggregates: run in SQL Editor only.
+
+### After deploy with analytics code
+
+1. `LOCAL_ONLY_TEST_MODE = false`
+2. Sign in on beta preview → Plan a purchase → Simulate (shortfall case)
+3. SQL Editor:
+
+```sql
+SELECT event_name, context, created_at
+FROM public.beta_product_events
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+Expect e.g. `signin`, `purchase_planner_opened`, `purchase_simulation_completed`, `purchase_reserve_affected` — **no amounts or purchase names in `context`.**

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Beta analytics test</title>
+</head>
+<body>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      BETA_ANALYTICS_EVENTS,
+      sanitizeBetaEventContext
+    } from '../src/lib/betaAnalytics.js';
+    import { isLocalOnlyTestMode } from '../src/config/environmentConfig.js';
+
+    const lines = [];
+    let failed = 0;
+    const assert = (c, m) => { lines.push(`${c ? 'OK' : 'FAIL'}: ${m}`); if (!c) failed++; };
+
+    const cleaned = sanitizeBetaEventContext({
+      simulation_outcome: 'shortfall',
+      purchaseAmount: 999,
+      itemName: 'Headphones',
+      balance: 5000,
+      auth_method: 'email'
+    });
+    assert(cleaned.simulation_outcome === 'shortfall', 'allowed context kept');
+    assert(cleaned.auth_method === 'email', 'auth_method kept');
+    assert(cleaned.purchaseAmount == null, 'amount stripped');
+    assert(cleaned.itemName == null, 'name stripped');
+    assert(cleaned.balance == null, 'balance stripped');
+
+    const eventNames = Object.values(BETA_ANALYTICS_EVENTS);
+    assert(eventNames.length === 11, `eleven event types (${eventNames.length})`);
+    assert(!isLocalOnlyTestMode(), 'LOCAL_ONLY_TEST_MODE is false for beta');
+
+    document.getElementById('out').textContent = lines.join('\n') + `\n\n${failed ? 'FAIL' : 'ALL PASSED'}`;
+    window.__QA_RESULT__ = { failed, passed: failed === 0 };
+  </script>
+</body>
+</html>

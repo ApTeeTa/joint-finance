@@ -261,6 +261,10 @@ function resetAllData() {
 function finishTabRender() {
   closeAllModals();
   relocateModals(tabContent);
+  mountInviteModal();
+  mountJoinHouseholdModal();
+  mountEditDisplayNameModal();
+  mountPurchasePlannerModal();
   syncHeaderHeight();
   onStateChange();
 }
@@ -558,6 +562,9 @@ async function init() {
       if (!access.ready) {
         return;
       }
+    } else {
+      document.getElementById('auth-gate')?.classList.add('hidden');
+      document.getElementById('app-shell')?.classList.remove('hidden');
     }
 
     await bootFinancialApp();

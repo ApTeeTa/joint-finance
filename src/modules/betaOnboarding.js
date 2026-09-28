@@ -14,6 +14,10 @@ import {
 } from '../lib/householdService.js';
 import { exportSharedSnapshot } from './storage.js';
 import { clearActiveHousehold } from '../lib/householdContext.js';
+import {
+  BETA_ANALYTICS_EVENTS,
+  trackBetaEventFireAndForget
+} from '../lib/betaAnalytics.js';
 
 let gateEl = null;
 let onReadyCallback = null;
@@ -79,9 +83,14 @@ function ensureGateHandlers() {
         setMessage(result.error, true);
         return;
       }
-      if (action === 'auth-sign-up' && !result.session) {
-        setMessage('Check your email to confirm signup, then sign in.');
-        return;
+      if (action === 'auth-sign-up') {
+        trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.SIGNUP, { auth_method: 'email' });
+        if (!result.session) {
+          setMessage('Check your email to confirm signup, then sign in.');
+          return;
+        }
+      } else {
+        trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.SIGNIN, { auth_method: 'email' });
       }
       await continueAfterAuth(result.user);
       return;
@@ -240,6 +249,11 @@ export async function ensureBetaAccess({ seedState = null, onReady } = {}) {
   renderAuthLoadingView();
 
   const session = await resolveSessionAfterBoot();
+  const oauthSignIn = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).has('code');
+  if (session?.user && oauthSignIn) {
+    trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.SIGNIN, { auth_method: 'google' });
+  }
   if (!session?.user) {
     renderAuthView();
     const oauthError = getOAuthCallbackError();

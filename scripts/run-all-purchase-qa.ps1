@@ -47,7 +47,8 @@ try {
     'tests/purchase-planner-qa-test.html',
     'tests/purchase-save-prefill-test.html',
     'tests/purchase-planner-ui-test.html',
-    'tests/purchase-save-flow-test.html'
+    'tests/purchase-save-flow-test.html',
+    'tests/beta-analytics-test.html'
   )
 
   $allPass = $true

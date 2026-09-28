@@ -7,6 +7,10 @@ import {
   clearActiveHousehold
 } from './householdContext.js';
 import {
+  BETA_ANALYTICS_EVENTS,
+  trackBetaEventFireAndForget
+} from './betaAnalytics.js';
+import {
   fetchMemberHouseholdRows,
   insertHouseholdRow,
   insertHouseholdMemberRow,
@@ -103,6 +107,7 @@ export async function createHousehold(userId, { name, displayName, seedPayload =
   };
 
   setActiveHousehold(household);
+  trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.HOUSEHOLD_CREATED);
   return { ok: true, household };
 }
 
@@ -160,6 +165,7 @@ export async function joinHouseholdByInviteCode(userId, code, displayName) {
 
   const context = normalizeHouseholdRow(household, 'member', memberName);
   setActiveHousehold(context);
+  trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.HOUSEHOLD_JOINED);
   return { ok: true, household: context, inviterUserId: invite.inviter_user_id };
 }
 
