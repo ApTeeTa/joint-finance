@@ -19,25 +19,25 @@ function renderJoinModalShell() {
   return `
     <div class="hidden ${getModalOverlayTemplateClasses()}" data-modal="${JOIN_MODAL}">
       <div class="${UI.modalShell} ${UI.modalBody} max-w-md">
-        <h3 class="${UI.modalTitle}">Join a household</h3>
+        <h3 class="${UI.modalTitle}">Присоединиться к семье</h3>
         <p class="text-sm text-slate-500">
-          Enter the invite code from your partner. You will see <strong>their shared data</strong>
-          (accounts and categories). If you already created your own household, the app will switch to theirs.
+          Введите код приглашения от партнёра. Вы увидите <strong>его общие данные</strong>
+          (счета и категории). Если вы уже создали свою семью, приложение переключится на его.
         </p>
         <div class="space-y-3">
           <div>
-            <label class="${UI.label}">Invite code</label>
+            <label class="${UI.label}">Код приглашения</label>
             <input type="text" name="joinInviteCode" maxlength="12" class="${UI.field} uppercase" placeholder="AB12CD34" autocomplete="off">
           </div>
           <div>
-            <label class="${UI.label}">Your name</label>
-            <input type="text" name="joinDisplayName" maxlength="80" class="${UI.field}" placeholder="Sam">
+            <label class="${UI.label}">Ваше имя</label>
+            <input type="text" name="joinDisplayName" maxlength="80" class="${UI.field}" placeholder="Мария">
           </div>
         </div>
         <p data-join-status class="text-sm text-slate-500 min-h-[1.25rem] mt-3"></p>
         <div class="${UI.modalActions}">
-          <button type="button" data-action="close-modal" data-modal="${JOIN_MODAL}" class="${UI.btnSecondaryBlock}">Cancel</button>
-          <button type="button" data-action="submit-join-household" class="${UI.btnPrimaryBlock}">Join household</button>
+          <button type="button" data-action="close-modal" data-modal="${JOIN_MODAL}" class="${UI.btnSecondaryBlock}">Отмена</button>
+          <button type="button" data-action="submit-join-household" class="${UI.btnPrimaryBlock}">Присоединиться</button>
         </div>
       </div>
     </div>
@@ -48,16 +48,16 @@ function renderEditNameModalShell() {
   return `
     <div class="hidden ${getModalOverlayTemplateClasses()}" data-modal="${EDIT_NAME_MODAL}">
       <div class="${UI.modalShell} ${UI.modalBody} max-w-md">
-        <h3 class="${UI.modalTitle}">Your name</h3>
-        <p class="text-sm text-slate-500">Shown in the header and on operations for your partner.</p>
+        <h3 class="${UI.modalTitle}">Ваше имя</h3>
+        <p class="text-sm text-slate-500">Отображается в шапке и в операциях для партнёра.</p>
         <div>
-          <label class="${UI.label}">Display name</label>
-          <input type="text" name="editDisplayName" maxlength="80" class="${UI.field}" placeholder="Alex" autocomplete="name">
+          <label class="${UI.label}">Имя</label>
+          <input type="text" name="editDisplayName" maxlength="80" class="${UI.field}" placeholder="Алексей" autocomplete="name">
         </div>
         <p data-edit-name-status class="text-sm text-slate-500 min-h-[1.25rem] mt-3"></p>
         <div class="${UI.modalActions}">
-          <button type="button" data-action="close-modal" data-modal="${EDIT_NAME_MODAL}" class="${UI.btnSecondaryBlock}">Cancel</button>
-          <button type="button" data-action="submit-edit-display-name" class="${UI.btnPrimaryBlock}">Save</button>
+          <button type="button" data-action="close-modal" data-modal="${EDIT_NAME_MODAL}" class="${UI.btnSecondaryBlock}">Отмена</button>
+          <button type="button" data-action="submit-edit-display-name" class="${UI.btnPrimaryBlock}">Сохранить</button>
         </div>
       </div>
     </div>
@@ -119,11 +119,11 @@ async function submitEditDisplayName() {
   const user = await getCurrentUser();
 
   if (!user?.id) {
-    statusEl.textContent = 'Sign in first.';
+    statusEl.textContent = 'Сначала войдите.';
     return;
   }
 
-  statusEl.textContent = 'Saving…';
+  statusEl.textContent = 'Сохранение…';
   const result = await updateCurrentMemberDisplayName(user.id, displayName);
   if (!result.ok) {
     statusEl.textContent = result.error;
@@ -145,11 +145,11 @@ async function submitJoinHousehold() {
 
   const user = await getCurrentUser();
   if (!user?.id) {
-    statusEl.textContent = 'Sign in first.';
+    statusEl.textContent = 'Сначала войдите.';
     return;
   }
 
-  statusEl.textContent = 'Joining…';
+  statusEl.textContent = 'Присоединение…';
   const result = await joinHouseholdByInviteCode(user.id, code, displayName);
   if (!result.ok) {
     statusEl.textContent = result.error;

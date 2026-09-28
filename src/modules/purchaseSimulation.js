@@ -11,13 +11,13 @@ export const RESERVE_SOURCE_TYPES = Object.freeze({
 function parsePurchaseAmount(amount) {
   const value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) {
-    return { ok: false, error: 'Enter an amount greater than zero.' };
+    return { ok: false, error: 'Введите сумму больше нуля.' };
   }
   return { ok: true, value };
 }
 
 function debtDisplayName(debt) {
-  return debt.title || debt.description || debt.name || 'Debt';
+  return debt.title || debt.description || debt.name || 'Долг';
 }
 
 /**
@@ -35,7 +35,7 @@ export function listReserveSources(state) {
       id: category.id,
       name: category.name,
       amount,
-      kindLabel: 'Category budget'
+      kindLabel: 'Бюджет категории'
     });
   }
 
@@ -50,7 +50,7 @@ export function listReserveSources(state) {
       targetAmount: saving.targetAmount ?? null,
       deadlineType: saving.deadlineType ?? null,
       deadlineDate: saving.deadlineDate ?? null,
-      kindLabel: 'Savings goal'
+      kindLabel: 'Копилка'
     });
   }
 
@@ -63,7 +63,7 @@ export function listReserveSources(state) {
       name: obligation.name,
       amount,
       paidUntil: obligation.paidUntil ?? null,
-      kindLabel: 'Obligation'
+      kindLabel: 'Обязательство'
     });
   }
 
@@ -76,7 +76,7 @@ export function listReserveSources(state) {
       id: debt.id,
       name: debtDisplayName(debt),
       amount,
-      kindLabel: 'Debt reserve'
+      kindLabel: 'Резерв по долгу'
     });
   }
 

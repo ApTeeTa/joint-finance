@@ -66,22 +66,22 @@
       const modal = await simulateInModal({ name: 'Headphones', amount: 200, label: 'fits' });
       assert(!modal.classList.contains('hidden'), 'modal opens');
       const resultBody = modal.querySelector('[data-purchase-result-body]');
-      assert(resultBody?.textContent.includes('No reserved money is affected'), 'fits: no reserve impact');
+      assert(resultBody?.textContent.includes('Зарезервированные деньги не затрагиваются'), 'fits: no reserve impact');
       assert(resultBody?.textContent.includes('300'), 'fits: free after 300');
 
       setFree(state, 0);
       await simulateInModal({ name: 'Headphones', amount: 200, label: 'free=0' });
-      assert(resultBody?.textContent.includes('You need'), 'free=0: shortfall message');
+      assert(resultBody?.textContent.includes('Не хватает'), 'free=0: shortfall message');
       assert(resultBody?.textContent.includes('Vacation'), 'free=0: lists Vacation');
 
       setFree(state, 200);
       await simulateInModal({ name: 'Headphones', amount: 200, label: 'free=purchase' });
-      assert(resultBody?.textContent.includes('No reserved money is affected'), 'free=purchase: no reserve impact');
+      assert(resultBody?.textContent.includes('Зарезервированные деньги не затрагиваются'), 'free=purchase: no reserve impact');
 
       setFree(state, 100);
       await simulateInModal({ name: 'Headphones', amount: 200, label: 'partial' });
-      assert(resultBody?.textContent.includes('You need'), 'partial: shortfall message');
-      assert(resultBody?.textContent.includes('from Free'), 'partial: mentions free usage first');
+      assert(resultBody?.textContent.includes('Не хватает'), 'partial: shortfall message');
+      assert(resultBody?.textContent.includes('Сначала будут использованы свободные'), 'partial: mentions free usage first');
 
       modal.querySelector('[data-action="purchase-planner-back"]')?.click();
       await wait();

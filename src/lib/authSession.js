@@ -83,7 +83,7 @@ export async function resolveSessionAfterBoot() {
       clearAuthCallbackFromUrl();
       return session;
     }
-    lastAuthBootstrapError = 'Sign-in link expired or invalid. Please try Google again.';
+    lastAuthBootstrapError = 'Ссылка для входа устарела или недействительна. Попробуйте войти через Google ещё раз.';
     clearAuthCallbackFromUrl();
     return null;
   }

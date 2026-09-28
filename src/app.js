@@ -174,7 +174,7 @@ function renderProfile() {
     const isOwnActive = isOwnName && state.profile === ownProfileKey;
     btn.classList.toggle('profile-btn-active', profileKey === state.profile);
     btn.classList.toggle('profile-btn-own', isOwnName);
-    btn.title = isOwnActive ? 'Change your name' : (isOwnName ? 'Select yourself' : '');
+    btn.title = isOwnActive ? 'Изменить имя' : (isOwnName ? 'Выбрать себя' : '');
   });
 }
 

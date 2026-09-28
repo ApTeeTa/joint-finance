@@ -61,8 +61,8 @@ export async function fetchUserHouseholds(userId) {
 export async function createHousehold(userId, { name, displayName, seedPayload = null }) {
   const householdId = crypto.randomUUID();
   const snapshotId = buildHouseholdSnapshotId(householdId);
-  const householdName = (name ?? '').trim() || 'My household';
-  const memberName = (displayName ?? '').trim() || 'Member';
+  const householdName = (name ?? '').trim() || 'Моя семья';
+  const memberName = (displayName ?? '').trim() || 'Участник';
 
   const { error: householdError } = await insertHouseholdRow({
     id: householdId,
@@ -114,7 +114,7 @@ export async function createHousehold(userId, { name, displayName, seedPayload =
 export async function joinHouseholdByInviteCode(userId, code, displayName) {
   const normalizedCode = (code ?? '').trim().toUpperCase();
   if (!normalizedCode) {
-    return { ok: false, error: 'Enter invite code' };
+    return { ok: false, error: 'Введите код приглашения' };
   }
 
   const { data: invite, error: inviteError } = await fetchInviteByCode(normalizedCode);
@@ -123,18 +123,18 @@ export async function joinHouseholdByInviteCode(userId, code, displayName) {
     return { ok: false, error: inviteError.message };
   }
   if (!invite) {
-    return { ok: false, error: 'Invite code not found' };
+    return { ok: false, error: 'Код приглашения не найден' };
   }
   if (new Date(invite.expires_at).getTime() < Date.now()) {
-    return { ok: false, error: 'Invite code expired' };
+    return { ok: false, error: 'Срок действия кода истёк' };
   }
 
   const active = getActiveHousehold() ?? loadPersistedHousehold();
   if (active?.id === invite.household_id) {
-    return { ok: false, error: 'You are already in this household' };
+    return { ok: false, error: 'Вы уже в этой семье' };
   }
 
-  const memberName = (displayName ?? '').trim() || 'Member';
+  const memberName = (displayName ?? '').trim() || 'Участник';
 
   // Use INSERT, not UPSERT — PostgREST upsert fails RLS on household_members for new joiners.
   let { error: memberError } = await insertHouseholdMemberRow({
@@ -199,12 +199,12 @@ export async function getOrCreateInviteCode(householdId, inviterUserId) {
 export async function updateCurrentMemberDisplayName(userId, displayName) {
   const household = getActiveHousehold();
   if (!household?.id) {
-    return { ok: false, error: 'No active household' };
+    return { ok: false, error: 'Нет активной семьи' };
   }
 
   const memberName = (displayName ?? '').trim();
   if (!memberName) {
-    return { ok: false, error: 'Enter your name' };
+    return { ok: false, error: 'Введите ваше имя' };
   }
 
   const { error } = await updateHouseholdMemberRow(household.id, userId, {

@@ -192,28 +192,28 @@ const ACTION_DEFS = Object.freeze({
     menuTone: 'text-red-600 hover:bg-red-50'
   },
   'open-purchase-planner': {
-    title: 'Plan a purchase',
-    menuLabel: 'Plan a purchase'
+    title: 'Запланировать покупку',
+    menuLabel: 'Запланировать покупку'
   },
   'purchase-planner-done': {
-    title: 'Done',
-    menuLabel: 'Done'
+    title: 'Готово',
+    menuLabel: 'Готово'
   },
   'purchase-planner-back': {
-    title: 'Simulate another purchase',
-    menuLabel: 'Simulate another purchase'
+    title: 'Рассчитать другую покупку',
+    menuLabel: 'Рассчитать другую покупку'
   },
   'save-for-purchase': {
-    title: 'Save for this purchase',
-    menuLabel: 'Save for this purchase'
+    title: 'Отложить на эту покупку',
+    menuLabel: 'Отложить на эту покупку'
   },
   'toggle-free-help': {
-    title: 'What is Free?',
-    menuLabel: 'What is Free?'
+    title: 'Что такое «Свободные»?',
+    menuLabel: 'Что такое «Свободные»?'
   },
   'dismiss-free-help': {
-    title: 'Got it',
-    menuLabel: 'Got it'
+    title: 'Понятно',
+    menuLabel: 'Понятно'
   }
 });
 

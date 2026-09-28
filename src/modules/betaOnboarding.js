@@ -60,7 +60,7 @@ function ensureGateHandlers() {
     }
 
     if (action === 'auth-google') {
-      setMessage('Redirecting to Google…');
+      setMessage('Переход в Google…');
       const result = await signInWithGoogle();
       if (!result.ok) setMessage(result.error, true);
       return;
@@ -70,11 +70,11 @@ function ensureGateHandlers() {
       const email = gateEl.querySelector('[name="email"]')?.value.trim();
       const password = gateEl.querySelector('[name="password"]')?.value;
       if (!email || !password) {
-        setMessage('Enter email and password', true);
+        setMessage('Введите email и пароль', true);
         return;
       }
 
-      setMessage(action === 'auth-sign-in' ? 'Signing in…' : 'Creating account…');
+      setMessage(action === 'auth-sign-in' ? 'Вход…' : 'Создание аккаунта…');
       const result = action === 'auth-sign-in'
         ? await signInWithEmail(email, password)
         : await signUpWithEmail(email, password);
@@ -86,7 +86,7 @@ function ensureGateHandlers() {
       if (action === 'auth-sign-up') {
         trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.SIGNUP, { auth_method: 'email' });
         if (!result.session) {
-          setMessage('Check your email to confirm signup, then sign in.');
+          setMessage('Подтвердите email и затем войдите.');
           return;
         }
       } else {
@@ -100,7 +100,7 @@ function ensureGateHandlers() {
       const userId = gateEl.dataset.userId;
       const householdName = gateEl.querySelector('[name="householdName"]')?.value;
       const displayName = gateEl.querySelector('[name="displayName"]')?.value;
-      setMessage('Creating household…');
+      setMessage('Создание семьи…');
       const seedPayload = seedStateRef ? exportSharedSnapshot(seedStateRef) : null;
       const result = await createHousehold(userId, {
         name: householdName,
@@ -119,7 +119,7 @@ function ensureGateHandlers() {
       const userId = gateEl.dataset.userId;
       const code = gateEl.querySelector('[name="inviteCode"]')?.value;
       const displayName = gateEl.querySelector('[name="joinDisplayName"]')?.value;
-      setMessage('Joining household…');
+      setMessage('Присоединение к семье…');
       const result = await joinHouseholdByInviteCode(userId, code, displayName);
       if (!result.ok) {
         setMessage(result.error, true);
@@ -134,22 +134,22 @@ function renderAuthView() {
   showGate();
   gateEl.innerHTML = `
     <div class="max-w-md mx-auto ${UI.panel} ${UI.panelPadding} mt-10">
-      <h2 class="${UI.panelTitle} mb-1 text-center">Joint Finance Beta</h2>
-      <p class="text-sm text-slate-500 text-center mb-6">Sign in to sync your household finances</p>
+      <h2 class="${UI.panelTitle} mb-1 text-center">Семейные финансы · Beta</h2>
+      <p class="text-sm text-slate-500 text-center mb-6">Войдите, чтобы синхронизировать семейный бюджет</p>
       <div class="space-y-4">
         <div>
           <label class="${UI.label}">Email</label>
           <input type="email" name="email" required autocomplete="email" class="${UI.field}" placeholder="you@example.com">
         </div>
         <div>
-          <label class="${UI.label}">Password</label>
+          <label class="${UI.label}">Пароль</label>
           <input type="password" name="password" required autocomplete="current-password" class="${UI.field}" placeholder="••••••••">
         </div>
         <p data-auth-message class="text-sm text-slate-500 text-center"></p>
         <div class="flex flex-col gap-2">
-          <button type="button" data-action="auth-sign-in" class="${UI.btnPrimaryBlock}">Sign in</button>
-          <button type="button" data-action="auth-sign-up" class="${UI.btnSecondaryBlock}">Create account</button>
-          <button type="button" data-action="auth-google" class="${UI.btnSecondaryBlock}">Continue with Google</button>
+          <button type="button" data-action="auth-sign-in" class="${UI.btnPrimaryBlock}">Войти</button>
+          <button type="button" data-action="auth-sign-up" class="${UI.btnSecondaryBlock}">Создать аккаунт</button>
+          <button type="button" data-action="auth-google" class="${UI.btnSecondaryBlock}">Войти через Google</button>
         </div>
       </div>
     </div>
@@ -161,45 +161,45 @@ function renderHouseholdView(user, { seedState = null } = {}) {
   showGate();
   seedStateRef = seedState;
   const seedHint = seedState
-    ? '<p class="text-xs text-slate-500">Your current local data will be uploaded to this household.</p>'
+    ? '<p class="text-xs text-slate-500">Текущие локальные данные будут загружены в эту семью.</p>'
     : '';
 
   gateEl.innerHTML = `
     <div class="max-w-lg mx-auto ${UI.panel} ${UI.panelPadding} mt-10 space-y-6">
       <div>
-        <h2 class="${UI.panelTitle} mb-1">Set up your household</h2>
-        <p class="text-sm text-slate-500">Create a new household or join with an invite code. The inviter's data becomes shared.</p>
+        <h2 class="${UI.panelTitle} mb-1">Настройте семью</h2>
+        <p class="text-sm text-slate-500">Создайте новую семью или присоединитесь по коду приглашения. Данные того, кто пригласил, станут общими.</p>
       </div>
 
       <section class="space-y-3">
-        <h3 class="text-sm font-semibold text-slate-800">Create household</h3>
+        <h3 class="text-sm font-semibold text-slate-800">Создать семью</h3>
         <div>
-          <label class="${UI.label}">Household name</label>
-          <input type="text" name="householdName" maxlength="80" class="${UI.field}" placeholder="Our family">
+          <label class="${UI.label}">Название семьи</label>
+          <input type="text" name="householdName" maxlength="80" class="${UI.field}" placeholder="Наша семья">
         </div>
         <div>
-          <label class="${UI.label}">Your name</label>
-          <input type="text" name="displayName" maxlength="80" class="${UI.field}" placeholder="Alex">
+          <label class="${UI.label}">Ваше имя</label>
+          <input type="text" name="displayName" maxlength="80" class="${UI.field}" placeholder="Алексей">
         </div>
         ${seedHint}
-        <button type="button" data-action="household-create" class="${UI.btnPrimaryBlock}">Create household</button>
+        <button type="button" data-action="household-create" class="${UI.btnPrimaryBlock}">Создать семью</button>
       </section>
 
       <div class="border-t border-surface-border pt-4 space-y-3">
-        <h3 class="text-sm font-semibold text-slate-800">Join with invite code</h3>
+        <h3 class="text-sm font-semibold text-slate-800">Присоединиться по коду</h3>
         <div>
-          <label class="${UI.label}">Invite code</label>
+          <label class="${UI.label}">Код приглашения</label>
           <input type="text" name="inviteCode" maxlength="12" class="${UI.field} uppercase" placeholder="AB12CD34">
         </div>
         <div>
-          <label class="${UI.label}">Your name</label>
-          <input type="text" name="joinDisplayName" maxlength="80" class="${UI.field}" placeholder="Sam">
+          <label class="${UI.label}">Ваше имя</label>
+          <input type="text" name="joinDisplayName" maxlength="80" class="${UI.field}" placeholder="Мария">
         </div>
-        <button type="button" data-action="household-join" class="${UI.btnSecondaryBlock}">Join household</button>
+        <button type="button" data-action="household-join" class="${UI.btnSecondaryBlock}">Присоединиться</button>
       </div>
 
       <p data-auth-message class="text-sm text-slate-500 text-center"></p>
-      <button type="button" data-action="auth-sign-out" class="text-sm text-slate-500 hover:text-slate-700 w-full text-center">Sign out</button>
+      <button type="button" data-action="auth-sign-out" class="text-sm text-slate-500 hover:text-slate-700 w-full text-center">Выйти</button>
     </div>
   `;
 
@@ -236,7 +236,7 @@ function renderAuthLoadingView() {
   showGate();
   gateEl.innerHTML = `
     <div class="max-w-md mx-auto ${UI.panel} ${UI.panelPadding} mt-10 text-center">
-      <p class="text-sm text-slate-500">Signing you in…</p>
+      <p class="text-sm text-slate-500">Вход в приложение…</p>
     </div>
   `;
 }

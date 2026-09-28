@@ -42,7 +42,7 @@ export function setActiveHousehold(household) {
   activeHousehold = {
     id: household.id,
     snapshot_id: household.snapshot_id,
-    name: household.name ?? 'My household',
+    name: household.name ?? 'Моя семья',
     owner_user_id: household.owner_user_id,
     role: household.role ?? 'member',
     display_name: household.display_name ?? ''

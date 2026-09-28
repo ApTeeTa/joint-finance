@@ -957,19 +957,19 @@
             id="join-household-btn"
             data-action="open-join-household"
             class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
-          >Join</button>
+          >Присоединиться</button>
           <button
             type="button"
             id="invite-partner-btn"
             data-action="open-invite-partner"
             class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
-          >Invite</button>
+          >Пригласить</button>
           <button
             type="button"
             id="sign-out-btn"
             data-action="auth-sign-out-app"
             class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-slate-600 hover:bg-surface-muted transition-colors"
-          >Sign out</button>
+          >Выйти</button>
         <div class="flex gap-2 shrink-0" id="profile-selector">
           <button
             type="button"
@@ -992,19 +992,19 @@
         </div>
         <div class="balance-card balance-card--free">
           <div class="balance-card-label-row">
-            <p class="balance-card-label mb-0">Free</p>
+            <p class="balance-card-label mb-0">Свободные</p>
             <button
               type="button"
               class="balance-help-btn"
               data-action="toggle-free-help"
-              aria-label="What is Free?"
-              title="What is Free?"
+              aria-label="Что такое «Свободные»?"
+              title="Что такое «Свободные»?"
             >?</button>
           </div>
           <p id="free-balance" class="balance-card-value">0 ₽</p>
           <div id="free-help-popover" class="hidden" role="tooltip">
-            Free is money with no future task assigned yet. If Free is $0, all current money is already allocated to goals, obligations, or reserves.
-            <button type="button" data-action="dismiss-free-help" class="block mt-1 text-primary-700 hover:text-primary-800 font-medium">Got it</button>
+            Свободные — это деньги без назначенной задачи: они ещё не отложены в копилки, обязательства или резервы. Если свободных 0 ₽, весь текущий баланс уже распределён.
+            <button type="button" data-action="dismiss-free-help" class="block mt-1 text-primary-700 hover:text-primary-800 font-medium">Понятно</button>
           </div>
         </div>
         <div class="balance-card balance-card--reserved">
@@ -1014,7 +1014,7 @@
       </div>
 
       <button type="button" data-action="open-purchase-planner" class="purchase-planner-btn">
-        Plan a purchase
+        Запланировать покупку
       </button>
 
       <nav id="tab-nav" aria-label="Навигация">
@@ -1026,7 +1026,7 @@
         <button type="button" data-tab="debts" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Долги</button>
         <button type="button" data-tab="stats" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Статистика</button>
       </nav>
-      <p id="build-stamp" class="mt-2 text-[10px] text-slate-400 text-center">build beta · beta branch</p>
+      <p id="build-stamp" class="mt-2 text-[10px] text-slate-400 text-center">beta · тестовая версия</p>
     </div>
   </header>
 
@@ -1043,7 +1043,7 @@
   <div id="modal-root" aria-hidden="true"></div>
 
   <script type="module">
-    import('./src/app.js?v=beta-analytics').catch((error) => {
+    import('./src/app.js?v=beta-ru-ui').catch((error) => {
       const el = document.getElementById('boot-error');
       if (el) {
         el.classList.remove('hidden');

@@ -15,7 +15,7 @@ let handlersBound = false;
 
 function formatExpiry(iso) {
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString('ru-RU', {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -29,23 +29,23 @@ function renderInviteModalShell() {
   return `
     <div class="hidden ${getModalOverlayTemplateClasses()}" data-modal="${MODAL_NAME}">
       <div class="${UI.modalShell} ${UI.modalBody} max-w-md">
-        <h3 class="${UI.modalTitle}">Invite your partner</h3>
+        <h3 class="${UI.modalTitle}">Пригласить партнёра</h3>
         <p class="text-sm text-slate-500">
-          Share this code. When they join, they see <strong>your household data</strong> (same accounts and categories).
+          Поделитесь этим кодом. После присоединения партнёр увидит <strong>ваши общие данные</strong> (те же счета и категории).
         </p>
         <div class="rounded-xl bg-surface-muted border border-surface-border p-4 text-center">
-          <p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Invite code</p>
+          <p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Код приглашения</p>
           <p data-invite-code class="text-2xl font-bold tracking-[0.2em] text-slate-900">——</p>
           <p data-invite-expiry class="text-xs text-slate-500 mt-2"></p>
         </div>
         <p data-invite-members class="text-sm text-slate-600"></p>
         <p data-invite-status class="text-sm text-slate-500 min-h-[1.25rem]"></p>
         <div class="${UI.modalActions}">
-          <button type="button" data-action="close-modal" data-modal="${MODAL_NAME}" class="${UI.btnSecondaryBlock}">Close</button>
-          <button type="button" data-action="copy-invite-code" class="${UI.btnPrimaryBlock}">Copy code</button>
+          <button type="button" data-action="close-modal" data-modal="${MODAL_NAME}" class="${UI.btnSecondaryBlock}">Закрыть</button>
+          <button type="button" data-action="copy-invite-code" class="${UI.btnPrimaryBlock}">Скопировать код</button>
         </div>
         <button type="button" data-action="regenerate-invite-code" class="text-sm text-primary-700 hover:text-primary-800 w-full text-center mt-1">
-          Generate new code
+          Создать новый код
         </button>
       </div>
     </div>
@@ -86,11 +86,11 @@ async function loadInviteIntoModal() {
   const user = await getCurrentUser();
   const household = getActiveHousehold();
   if (!user?.id || !household?.id) {
-    statusEl.textContent = 'Sign in and create a household first.';
+    statusEl.textContent = 'Сначала войдите и создайте семью.';
     return;
   }
 
-  statusEl.textContent = 'Loading invite…';
+  statusEl.textContent = 'Загрузка кода…';
   const inviteResult = await getOrCreateInviteCode(household.id, user.id);
   if (!inviteResult.ok) {
     statusEl.textContent = inviteResult.error;
@@ -98,14 +98,14 @@ async function loadInviteIntoModal() {
   }
 
   codeEl.textContent = inviteResult.code;
-  expiryEl.textContent = `Valid until ${formatExpiry(inviteResult.expiresAt)}`;
-  statusEl.textContent = inviteResult.reused ? 'Using your active invite code.' : 'New invite code created.';
+  expiryEl.textContent = `Действует до ${formatExpiry(inviteResult.expiresAt)}`;
+  statusEl.textContent = inviteResult.reused ? 'Используется ваш активный код.' : 'Создан новый код приглашения.';
 
   const stats = await getHouseholdMemberStats(household.id);
   if (stats.ok) {
     membersEl.textContent = stats.memberCount <= 1
-      ? 'Waiting for your partner to join.'
-      : `${stats.memberCount} members in this household.`;
+      ? 'Ждём, когда партнёр присоединится.'
+      : `В семье ${stats.memberCount} участников.`;
   }
 }
 
@@ -116,7 +116,7 @@ async function regenerateInviteCode() {
 
   const modal = document.querySelector(`[data-modal="${MODAL_NAME}"]`);
   const statusEl = modal?.querySelector('[data-invite-status]');
-  if (statusEl) statusEl.textContent = 'Creating new code…';
+  if (statusEl) statusEl.textContent = 'Создание нового кода…';
 
   const result = await createInviteCode(household.id, user.id);
   if (!result.ok) {
@@ -125,8 +125,8 @@ async function regenerateInviteCode() {
   }
 
   modal.querySelector('[data-invite-code]').textContent = result.code;
-  modal.querySelector('[data-invite-expiry]').textContent = `Valid until ${formatExpiry(result.expiresAt)}`;
-  if (statusEl) statusEl.textContent = 'New invite code ready.';
+  modal.querySelector('[data-invite-expiry]').textContent = `Действует до ${formatExpiry(result.expiresAt)}`;
+  if (statusEl) statusEl.textContent = 'Новый код готов.';
 }
 
 async function copyInviteCode() {
@@ -137,9 +137,9 @@ async function copyInviteCode() {
 
   try {
     await navigator.clipboard.writeText(code);
-    if (statusEl) statusEl.textContent = 'Code copied to clipboard.';
+    if (statusEl) statusEl.textContent = 'Код скопирован.';
   } catch {
-    if (statusEl) statusEl.textContent = `Copy manually: ${code}`;
+    if (statusEl) statusEl.textContent = `Скопируйте вручную: ${code}`;
   }
 }
 

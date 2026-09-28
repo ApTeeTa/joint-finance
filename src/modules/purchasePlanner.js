@@ -15,7 +15,7 @@ let handlersBound = false;
 let lastSimulation = null;
 
 function formatMoney(amount) {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
     currency: 'RUB',
     maximumFractionDigits: 0
@@ -35,7 +35,7 @@ function formatDeadline(deadlineType, deadlineDate) {
     return null;
   }
   try {
-    return new Date(deadlineDate).toLocaleDateString('en-US', {
+    return new Date(deadlineDate).toLocaleDateString('ru-RU', {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -48,7 +48,7 @@ function formatDeadline(deadlineType, deadlineDate) {
 function formatPaidUntil(iso) {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleDateString('en-US', {
+    return new Date(iso).toLocaleDateString('ru-RU', {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
@@ -63,33 +63,33 @@ function renderPurchasePlannerModalShell() {
     <div class="hidden ${getModalOverlayTemplateClasses()}" data-modal="${MODAL_NAME}">
       <div class="${UI.modalShell} ${UI.modalBody} max-w-lg max-h-[90vh] overflow-y-auto">
         <div data-purchase-step="${STEP_INPUT}">
-          <h3 class="${UI.modalTitle}">Plan a purchase</h3>
+          <h3 class="${UI.modalTitle}">Запланировать покупку</h3>
           <p class="text-sm text-slate-500 mb-4">
-            See what would change if you spent this amount. Nothing is saved until you take a separate action.
+            Посмотрите, что изменится, если потратить эту сумму. Ничего не сохраняется, пока вы не сделаете отдельное действие.
           </p>
           <form data-form="purchase-planner" class="space-y-4">
             <div>
-              <label class="${UI.label}">What do you want to buy?</label>
-              <input type="text" name="purchaseName" maxlength="120" class="${UI.field}" placeholder="e.g. Headphones">
+              <label class="${UI.label}">Что хотите купить?</label>
+              <input type="text" name="purchaseName" maxlength="120" class="${UI.field}" placeholder="Например, наушники">
             </div>
             <div>
-              <label class="${UI.label}">Amount (RUB)</label>
+              <label class="${UI.label}">Сумма (₽)</label>
               <input type="number" name="purchaseAmount" required min="1" step="1" class="${UI.field}" placeholder="0">
             </div>
             <p data-purchase-error class="text-sm text-red-600 hidden"></p>
             <div class="${UI.modalActions}">
-              <button type="button" data-action="close-modal" data-modal="${MODAL_NAME}" class="${UI.btnSecondaryBlock}">Cancel</button>
-              <button type="submit" class="${UI.btnPrimaryBlock}">Simulate</button>
+              <button type="button" data-action="close-modal" data-modal="${MODAL_NAME}" class="${UI.btnSecondaryBlock}">Отмена</button>
+              <button type="submit" class="${UI.btnPrimaryBlock}">Рассчитать</button>
             </div>
           </form>
         </div>
         <div data-purchase-step="${STEP_RESULT}" class="hidden">
           <div data-purchase-result-body></div>
           <div class="flex flex-col gap-2 pt-4 mt-4 border-t border-surface-border">
-            <button type="button" data-action="purchase-planner-done" class="${UI.btnPrimaryBlock}">Done</button>
-            <button type="button" data-action="save-for-purchase" class="${UI.btnSecondaryBlock}">Save for this purchase</button>
+            <button type="button" data-action="purchase-planner-done" class="${UI.btnPrimaryBlock}">Готово</button>
+            <button type="button" data-action="save-for-purchase" class="${UI.btnSecondaryBlock}">Отложить на эту покупку</button>
             <button type="button" data-action="purchase-planner-back" class="text-sm text-primary-700 hover:text-primary-800 w-full text-center mt-1">
-              Simulate another purchase
+              Рассчитать другую покупку
             </button>
           </div>
         </div>
@@ -101,23 +101,23 @@ function renderPurchasePlannerModalShell() {
 function renderFitsInFreeResult(simulation) {
   const title = simulation.name
     ? `<p class="text-base font-semibold text-slate-900 mb-3">${escapeHtml(simulation.name)} — ${formatMoney(simulation.purchaseAmount)}</p>`
-    : `<p class="text-base font-semibold text-slate-900 mb-3">Purchase: ${formatMoney(simulation.purchaseAmount)}</p>`;
+    : `<p class="text-base font-semibold text-slate-900 mb-3">Покупка: ${formatMoney(simulation.purchaseAmount)}</p>`;
 
   return `
-    <h3 class="${UI.modalTitle}">Simulation result</h3>
+    <h3 class="${UI.modalTitle}">Результат расчёта</h3>
     ${title}
     <dl class="space-y-2 text-sm">
       <div class="flex justify-between gap-4">
-        <dt class="text-slate-500">Free now</dt>
+        <dt class="text-slate-500">Свободные сейчас</dt>
         <dd class="font-medium text-slate-900">${formatMoney(simulation.freeBefore)}</dd>
       </div>
       <div class="flex justify-between gap-4">
-        <dt class="text-slate-500">Free after purchase</dt>
+        <dt class="text-slate-500">Свободные после покупки</dt>
         <dd class="font-medium text-emerald-700">${formatMoney(simulation.freeAfter)}</dd>
       </div>
     </dl>
     <p class="mt-4 text-sm text-slate-600 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-      No reserved money is affected.
+      Зарезервированные деньги не затрагиваются.
     </p>
   `;
 }
@@ -127,44 +127,44 @@ function renderImpactCard(impact, shortfall) {
     `<p class="font-medium text-slate-900">${escapeHtml(impact.name)}</p>`,
     `<p class="text-sm text-slate-500">${escapeHtml(impact.kindLabel)}</p>`,
     `<p class="text-sm font-semibold text-amber-700 mt-1">−${formatMoney(impact.withdrawal)}</p>`,
-    `<p class="text-sm text-slate-600">Remaining: ${formatMoney(impact.remaining)}</p>`
+    `<p class="text-sm text-slate-600">Останется: ${formatMoney(impact.remaining)}</p>`
   ];
 
   if (!impact.canCoverFully) {
     lines.push(
-      `<p class="text-xs text-amber-700 mt-1">This reserve alone cannot cover the full ${formatMoney(shortfall)} needed.</p>`
+      `<p class="text-xs text-amber-700 mt-1">Этого резерва недостаточно, чтобы покрыть всю нехватку ${formatMoney(shortfall)}.</p>`
     );
   }
 
   if (impact.sourceType === RESERVE_SOURCE_TYPES.SAVING) {
-    lines.push(`<p class="text-xs text-slate-500 mt-1">Accumulated now: ${formatMoney(impact.currentAmount)}</p>`);
-    lines.push(`<p class="text-xs text-slate-500">After withdrawal: ${formatMoney(impact.remaining)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500 mt-1">Накоплено сейчас: ${formatMoney(impact.currentAmount)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500">После снятия: ${formatMoney(impact.remaining)}</p>`);
     if (impact.targetAmount != null && impact.targetAmount > 0) {
-      lines.push(`<p class="text-xs text-slate-500">Target: ${formatMoney(impact.targetAmount)}</p>`);
+      lines.push(`<p class="text-xs text-slate-500">Цель: ${formatMoney(impact.targetAmount)}</p>`);
     }
     const deadline = formatDeadline(impact.deadlineType, impact.deadlineDate);
     if (deadline) {
-      lines.push(`<p class="text-xs text-slate-500">Deadline: ${escapeHtml(deadline)}</p>`);
+      lines.push(`<p class="text-xs text-slate-500">Срок: ${escapeHtml(deadline)}</p>`);
     }
   }
 
   if (impact.sourceType === RESERVE_SOURCE_TYPES.OBLIGATION) {
     const paidUntil = formatPaidUntil(impact.paidUntil);
     if (paidUntil) {
-      lines.push(`<p class="text-xs text-slate-500 mt-1">Paid until: ${escapeHtml(paidUntil)}</p>`);
+      lines.push(`<p class="text-xs text-slate-500 mt-1">Оплачено до: ${escapeHtml(paidUntil)}</p>`);
     }
-    lines.push(`<p class="text-xs text-slate-500">Reserve now: ${formatMoney(impact.currentAmount)}</p>`);
-    lines.push(`<p class="text-xs text-slate-500">After withdrawal: ${formatMoney(impact.remaining)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500">Резерв сейчас: ${formatMoney(impact.currentAmount)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500">После снятия: ${formatMoney(impact.remaining)}</p>`);
   }
 
   if (impact.sourceType === RESERVE_SOURCE_TYPES.CATEGORY) {
-    lines.push(`<p class="text-xs text-slate-500 mt-1">Reserved now: ${formatMoney(impact.currentAmount)}</p>`);
-    lines.push(`<p class="text-xs text-slate-500">After withdrawal: ${formatMoney(impact.remaining)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500 mt-1">В резерве сейчас: ${formatMoney(impact.currentAmount)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500">После снятия: ${formatMoney(impact.remaining)}</p>`);
   }
 
   if (impact.sourceType === RESERVE_SOURCE_TYPES.DEBT) {
-    lines.push(`<p class="text-xs text-slate-500 mt-1">Reserved now: ${formatMoney(impact.currentAmount)}</p>`);
-    lines.push(`<p class="text-xs text-slate-500">After withdrawal: ${formatMoney(impact.remaining)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500 mt-1">В резерве сейчас: ${formatMoney(impact.currentAmount)}</p>`);
+    lines.push(`<p class="text-xs text-slate-500">После снятия: ${formatMoney(impact.remaining)}</p>`);
   }
 
   return `
@@ -177,36 +177,36 @@ function renderImpactCard(impact, shortfall) {
 function renderShortfallResult(simulation) {
   const title = simulation.name
     ? `<p class="text-base font-semibold text-slate-900">${escapeHtml(simulation.name)} — ${formatMoney(simulation.purchaseAmount)}</p>`
-    : `<p class="text-base font-semibold text-slate-900">Purchase: ${formatMoney(simulation.purchaseAmount)}</p>`;
+    : `<p class="text-base font-semibold text-slate-900">Покупка: ${formatMoney(simulation.purchaseAmount)}</p>`;
 
   const freeUsedNote = simulation.freeBefore > 0
     ? `<p class="text-xs text-slate-500">
-        ${formatMoney(simulation.freeBefore)} from Free would be used first.
+        Сначала будут использованы свободные: ${formatMoney(simulation.freeBefore)}.
       </p>`
     : '';
 
   const impactCards = simulation.impacts.length
     ? simulation.impacts.map((impact) => renderImpactCard(impact, simulation.shortfall)).join('')
     : `<p class="text-sm text-slate-500 rounded-lg bg-slate-50 border border-surface-border px-3 py-2">
-        No reserved money is available. You would need to reduce the purchase amount or add funds first.
+        Нет доступных резервов. Уменьшите сумму покупки или сначала пополните баланс.
       </p>`;
 
   return `
-    <h3 class="${UI.modalTitle}">Simulation result</h3>
+    <h3 class="${UI.modalTitle}">Результат расчёта</h3>
     <div class="space-y-3 text-sm">
       ${title}
       <div class="flex justify-between gap-4">
-        <span class="text-slate-500">Free</span>
+        <span class="text-slate-500">Свободные</span>
         <span class="font-medium text-slate-900">${formatMoney(simulation.freeBefore)}</span>
       </div>
       ${freeUsedNote}
       <p class="text-sm text-amber-800 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-        You need ${formatMoney(simulation.shortfall)} from your reserved money.
+        Не хватает ${formatMoney(simulation.shortfall)} из зарезервированных денег.
       </p>
       <div>
-        <p class="text-xs uppercase tracking-wide text-slate-500 mb-2">Possible impact</p>
+        <p class="text-xs uppercase tracking-wide text-slate-500 mb-2">Возможное влияние</p>
         <p class="text-xs text-slate-500 mb-3">
-          If you took the full ${formatMoney(simulation.shortfall)} from one of these reserves:
+          Если взять всю нехватку ${formatMoney(simulation.shortfall)} из одного из этих резервов:
         </p>
         <div class="space-y-2">${impactCards}</div>
       </div>
