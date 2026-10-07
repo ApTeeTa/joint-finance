@@ -1,4 +1,8 @@
-import { getFinancialStorageKey, registerHouseholdSnapshotResolver } from '../config/environmentConfig.js';
+import {
+  getFinancialStorageKey,
+  registerHouseholdSnapshotResolver,
+  requiresHouseholdSnapshot
+} from '../config/environmentConfig.js';
 
 const HOUSEHOLD_SNAPSHOT_PREFIX = 'household_';
 
@@ -26,11 +30,14 @@ export function getActiveHouseholdSnapshotId() {
   return activeHousehold?.snapshot_id ?? null;
 }
 
-/** Snapshot id for sync: household row when logged in, else null → env default. */
+/** Snapshot id for sync: household row when beta auth is on; never legacy shared rows. */
 export function resolveSnapshotIdForSync(fallbackSnapshotId) {
   const householdSnapshotId = getActiveHouseholdSnapshotId();
   if (householdSnapshotId) {
     return householdSnapshotId;
+  }
+  if (requiresHouseholdSnapshot()) {
+    return null;
   }
   return fallbackSnapshotId;
 }

@@ -61,6 +61,10 @@ import {
   getLastRemoteSnapshot
 } from './lib/stateRemote.js';
 import {
+  shouldApplyRemoteSnapshot,
+  getSyncStatusMessage
+} from './lib/syncGuard.js';
+import {
   validateNoStaleEntities,
   applyStatePatch,
   hasSharedStateData
@@ -115,6 +119,7 @@ let freeBalanceEl;
 let reservedBalanceEl;
 let lastValidState = null;
 let ownProfileKey = null;
+let lastSyncReason = null;
 
 const INVARIANT_ROLLBACK_ALERT = 'Операция отменена: свободный баланс не может быть отрицательным!';
 
@@ -414,6 +419,28 @@ function refreshFromRemote() {
   renderTab(state.activeTab || 'accounts');
 }
 
+function showSyncStatusBanner(message, tone = 'error') {
+  if (!message) {
+    document.getElementById('sync-status')?.classList.add('hidden');
+    return;
+  }
+
+  let el = document.getElementById('sync-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sync-status';
+    el.setAttribute('role', 'alert');
+    const anchor = document.getElementById('boot-error') ?? document.getElementById('app-shell');
+    anchor?.parentNode?.insertBefore(el, anchor?.nextSibling ?? null);
+  }
+
+  el.className = tone === 'warning'
+    ? 'max-w-5xl mx-auto px-5 py-2 mt-2 rounded-xl bg-amber-50 text-amber-900 text-sm border border-amber-300 text-center'
+    : 'max-w-5xl mx-auto px-5 py-2 mt-2 rounded-xl bg-red-50 text-red-800 text-sm border border-red-200 text-center';
+  el.textContent = message;
+  el.classList.remove('hidden');
+}
+
 function showLocalTestModeBanner() {
   if (document.getElementById('local-test-banner')) {
     return;
@@ -430,10 +457,13 @@ function showLocalTestModeBanner() {
 async function syncFromRemote() {
   try {
     if (isLocalOnlyTestMode()) {
+      showSyncStatusBanner(null);
       return { ok: true, skipped: true, reason: 'local_only_test_mode' };
     }
 
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      lastSyncReason = 'offline';
+      showSyncStatusBanner(getSyncStatusMessage('offline'), 'warning');
       return { ok: true, skipped: true, reason: 'offline' };
     }
 
@@ -447,6 +477,8 @@ async function syncFromRemote() {
 
     const flushResult = await flushOfflineQueue(state);
     if (!flushResult.ok && !flushResult.skipped) {
+      lastSyncReason = 'offline_queue_flush_failed';
+      showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
       return { ok: false, error: flushResult.error, reason: 'offline_queue_flush_failed' };
     }
 
@@ -454,22 +486,40 @@ async function syncFromRemote() {
 
     const fetchResult = await fetchRemoteSharedSnapshot();
     if (!fetchResult.ok) {
+      lastSyncReason = fetchResult.reason ?? 'fetch_failed';
+      showSyncStatusBanner(getSyncStatusMessage(lastSyncReason));
       return fetchResult;
     }
 
-    const resetResult = await hardResetStateFromRemoteSnapshot(state, fetchResult.snapshot);
-    if (!resetResult.ok) {
-      return { ok: false, error: 'hard_reset_failed' };
+    const applyDecision = shouldApplyRemoteSnapshot(state, fetchResult.meta ?? {});
+
+    if (applyDecision.apply) {
+      const resetResult = await hardResetStateFromRemoteSnapshot(state, fetchResult.snapshot);
+      if (!resetResult.ok) {
+        lastSyncReason = 'hard_reset_failed';
+        showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
+        return { ok: false, error: 'hard_reset_failed' };
+      }
+
+      const patch = validateNoStaleEntities(state, fetchResult.snapshot);
+      applyStatePatch(state, patch);
+      reconcileLegacyTransactions(state);
+      saveState(state, { skipRemote: true });
+      markInitialSyncDone();
+      initLastValidStateIfValid();
+      lastSyncReason = applyDecision.reason;
+      showSyncStatusBanner(null);
+    } else {
+      reconcileLegacyTransactions(state);
+      saveState(state, { skipRemote: true });
+      markInitialSyncDone();
+      initLastValidStateIfValid();
+      lastSyncReason = applyDecision.reason;
+      showSyncStatusBanner(getSyncStatusMessage(applyDecision.reason), 'warning');
     }
 
-    const patch = validateNoStaleEntities(state, fetchResult.snapshot);
-    applyStatePatch(state, patch);
-    reconcileLegacyTransactions(state);
-    saveState(state, { skipRemote: true });
-    markInitialSyncDone();
-    initLastValidStateIfValid();
-
     console.log('[SYNC OK]', {
+      reason: lastSyncReason,
       accounts: state.accounts.length,
       categories: state.categories.length,
       debts: state.debts.length,
@@ -478,8 +528,10 @@ async function syncFromRemote() {
     });
 
     refreshFromRemote();
-    return { ok: true, snapshot: fetchResult.snapshot };
+    return { ok: true, snapshot: fetchResult.snapshot, reason: lastSyncReason };
   } catch (error) {
+    lastSyncReason = 'fetch_failed';
+    showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
     return { ok: false, error: error?.message ?? String(error) };
   }
 }
@@ -512,7 +564,14 @@ async function bootFinancialApp() {
       syncFromRemote();
     });
 
-    await syncFromRemote();
+    const syncResult = await syncFromRemote();
+    if (!syncResult.ok && !hasSharedStateData(state)) {
+      const bootError = document.getElementById('boot-error');
+      if (bootError) {
+        bootError.classList.remove('hidden');
+        bootError.textContent = getSyncStatusMessage(syncResult.reason ?? 'fetch_failed');
+      }
+    }
   }
 
   await applyHouseholdProfileLabels();
@@ -554,7 +613,6 @@ async function init() {
 
     if (!isLocalOnlyTestMode()) {
       const access = await ensureBetaAccess({
-        seedState: state,
         onReady: async () => {
           await bootFinancialApp();
         }

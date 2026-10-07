@@ -42,6 +42,11 @@ export function isLocalOnlyTestMode() {
   return LOCAL_ONLY_TEST_MODE === true;
 }
 
+/** Beta auth path: sync only via per-household snapshots — never legacy shared rows. */
+export function requiresHouseholdSnapshot() {
+  return !isLocalOnlyTestMode();
+}
+
 const MODE_REGISTRY = Object.freeze({
   production: Object.freeze({
     mode: 'production',
@@ -54,10 +59,10 @@ const MODE_REGISTRY = Object.freeze({
   experiment: Object.freeze({
     mode: 'experiment',
     activeSnapshotId: SNAPSHOT_IDS.EXPERIMENT,
-    seedReadSnapshotId: SNAPSHOT_IDS.PRODUCTION,
-    allowSeedFromProduction: true,
-    allowLegacyStorageKeyMigration: true,
-    financialStorageKey: `joint-finance-state-v2-${SNAPSHOT_IDS.EXPERIMENT}`
+    seedReadSnapshotId: null,
+    allowSeedFromProduction: false,
+    allowLegacyStorageKeyMigration: false,
+    financialStorageKey: 'joint-finance-state-v2-beta'
   })
 });
 
@@ -177,7 +182,14 @@ export function isProduction() {
 }
 
 export function getRealtimeChannelName(snapshotId = null) {
-  const id = snapshotId ?? getRegisteredHouseholdSnapshotId() ?? getActiveSnapshotId();
+  const householdId = getRegisteredHouseholdSnapshotId();
+  if (requiresHouseholdSnapshot()) {
+    if (!householdId) {
+      throw new Error('[ENVIRONMENT] Realtime requires active household snapshot');
+    }
+    return `joint-finance-shared-state-${householdId}`;
+  }
+  const id = snapshotId ?? householdId ?? getActiveSnapshotId();
   return `joint-finance-shared-state-${id}`;
 }
 
@@ -198,6 +210,17 @@ export function assertSnapshotWriteTarget(snapshotId) {
   validateEnvironmentIsolation();
 
   const activeHouseholdSnapshotId = getRegisteredHouseholdSnapshotId();
+
+  if (requiresHouseholdSnapshot()) {
+    if (!isHouseholdSnapshotId(snapshotId)) {
+      throw new Error('[ENVIRONMENT] Beta auth cannot write legacy snapshot ids');
+    }
+    if (snapshotId !== activeHouseholdSnapshotId) {
+      throw new Error('[ENVIRONMENT] Write target household snapshot does not match active household');
+    }
+    return;
+  }
+
   if (isHouseholdSnapshotId(snapshotId)) {
     if (snapshotId !== activeHouseholdSnapshotId) {
       throw new Error('[ENVIRONMENT] Write target household snapshot does not match active household');
@@ -223,6 +246,17 @@ export function assertSnapshotReadTarget(snapshotId, { seedBootstrap = false } =
   validateEnvironmentIsolation();
 
   const activeHouseholdSnapshotId = getRegisteredHouseholdSnapshotId();
+
+  if (requiresHouseholdSnapshot()) {
+    if (!isHouseholdSnapshotId(snapshotId)) {
+      throw new Error('[ENVIRONMENT] Beta auth cannot read legacy snapshot ids');
+    }
+    if (snapshotId !== activeHouseholdSnapshotId) {
+      throw new Error('[ENVIRONMENT] Read target household snapshot does not match active household');
+    }
+    return;
+  }
+
   if (isHouseholdSnapshotId(snapshotId)) {
     if (snapshotId !== activeHouseholdSnapshotId) {
       throw new Error('[ENVIRONMENT] Read target household snapshot does not match active household');

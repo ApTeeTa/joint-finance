@@ -12,8 +12,8 @@ import {
   joinHouseholdByInviteCode,
   resolveActiveHouseholdForUser
 } from '../lib/householdService.js';
-import { exportSharedSnapshot } from './storage.js';
 import { clearActiveHousehold } from '../lib/householdContext.js';
+import { resetSyncSession } from '../lib/stateRemote.js';
 import {
   BETA_ANALYTICS_EVENTS,
   trackBetaEventFireAndForget
@@ -21,7 +21,6 @@ import {
 
 let gateEl = null;
 let onReadyCallback = null;
-let seedStateRef = null;
 let handlersBound = false;
 
 function showGate() {
@@ -101,11 +100,9 @@ function ensureGateHandlers() {
       const householdName = gateEl.querySelector('[name="householdName"]')?.value;
       const displayName = gateEl.querySelector('[name="displayName"]')?.value;
       setMessage('Создание семьи…');
-      const seedPayload = seedStateRef ? exportSharedSnapshot(seedStateRef) : null;
       const result = await createHousehold(userId, {
         name: householdName,
-        displayName,
-        seedPayload
+        displayName
       });
       if (!result.ok) {
         setMessage(result.error, true);
@@ -157,12 +154,8 @@ function renderAuthView() {
   ensureGateHandlers();
 }
 
-function renderHouseholdView(user, { seedState = null } = {}) {
+function renderHouseholdView(user) {
   showGate();
-  seedStateRef = seedState;
-  const seedHint = seedState
-    ? '<p class="text-xs text-slate-500">Текущие локальные данные будут загружены в эту семью.</p>'
-    : '';
 
   gateEl.innerHTML = `
     <div class="max-w-lg mx-auto ${UI.panel} ${UI.panelPadding} mt-10 space-y-6">
@@ -181,7 +174,6 @@ function renderHouseholdView(user, { seedState = null } = {}) {
           <label class="${UI.label}">Ваше имя</label>
           <input type="text" name="displayName" maxlength="80" class="${UI.field}" placeholder="Алексей">
         </div>
-        ${seedHint}
         <button type="button" data-action="household-create" class="${UI.btnPrimaryBlock}">Создать семью</button>
       </section>
 
@@ -217,7 +209,7 @@ async function continueAfterAuth(user) {
     finishOnboarding(resolved.household);
     return;
   }
-  renderHouseholdView(user, { seedState: seedStateRef });
+  renderHouseholdView(user);
 }
 
 function finishOnboarding(household) {
@@ -227,6 +219,7 @@ function finishOnboarding(household) {
 
 export async function signOutToAuthGate() {
   clearActiveHousehold();
+  resetSyncSession();
   await signOut();
   renderAuthView();
   setMessage('');
@@ -241,10 +234,9 @@ function renderAuthLoadingView() {
   `;
 }
 
-export async function ensureBetaAccess({ seedState = null, onReady } = {}) {
+export async function ensureBetaAccess({ onReady } = {}) {
   gateEl = document.getElementById('auth-gate');
   onReadyCallback = onReady ?? null;
-  seedStateRef = seedState;
   ensureGateHandlers();
   renderAuthLoadingView();
 
@@ -271,7 +263,7 @@ export async function ensureBetaAccess({ seedState = null, onReady } = {}) {
   }
 
   if (!resolved.household) {
-    renderHouseholdView(session.user, { seedState });
+    renderHouseholdView(session.user);
     return { ready: false };
   }
 

@@ -4,19 +4,47 @@
 import { supabase } from './supabase.js';
 
 export async function fetchMemberHouseholdRows(userId) {
-  return supabase
+  const { data: members, error: membersError } = await supabase
     .from('household_members')
-    .select(`
-      role,
-      display_name,
-      households (
-        id,
-        snapshot_id,
-        name,
-        owner_user_id
-      )
-    `)
+    .select('household_id, role, display_name')
     .eq('user_id', userId);
+
+  if (membersError) {
+    return { data: null, error: membersError };
+  }
+
+  if (!members?.length) {
+    return { data: [], error: null };
+  }
+
+  const householdIds = [...new Set(members.map((row) => row.household_id).filter(Boolean))];
+  const { data: households, error: householdsError } = await supabase
+    .from('households')
+    .select('id, snapshot_id, name, owner_user_id')
+    .in('id', householdIds);
+
+  if (householdsError) {
+    return { data: null, error: householdsError };
+  }
+
+  const householdById = new Map((households ?? []).map((household) => [household.id, household]));
+
+  const rows = members
+    .map((member) => {
+      const household = householdById.get(member.household_id) ?? null;
+      if (!household) {
+        console.warn('[HOUSEHOLD] Member row without readable household', member.household_id);
+        return null;
+      }
+      return {
+        role: member.role,
+        display_name: member.display_name,
+        households: household
+      };
+    })
+    .filter(Boolean);
+
+  return { data: rows, error: null };
 }
 
 export async function insertHouseholdRow(row) {

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Tests: Beta sync guard</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Beta — sync guard &amp; household-only snapshot</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      shouldApplyRemoteSnapshot,
+      shouldAllowRemotePush,
+      getSyncStatusMessage
+    } from '../src/lib/syncGuard.js';
+    import { requiresHouseholdSnapshot } from '../src/config/environmentConfig.js';
+    import { resolveSnapshotIdForSync } from '../src/lib/householdContext.js';
+    import { clearActiveHousehold, setActiveHousehold, buildHouseholdSnapshotId } from '../src/lib/householdContext.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    try {
+      assert(requiresHouseholdSnapshot() === true, 'beta auth requires household snapshot');
+
+      clearActiveHousehold();
+      assert(resolveSnapshotIdForSync('shared-experiment') === null, 'no legacy fallback without household');
+
+      const hid = crypto.randomUUID();
+      setActiveHousehold({
+        id: hid,
+        snapshot_id: buildHouseholdSnapshotId(hid),
+        name: 'Test',
+        owner_user_id: hid,
+        role: 'owner',
+        display_name: 'Owner'
+      });
+      assert(resolveSnapshotIdForSync('shared-experiment') === buildHouseholdSnapshotId(hid), 'household snapshot used');
+
+      const local = { accounts: [{ id: 'a1' }], categories: [], transactions: [], obligations: [], savings: [], debts: [] };
+      const emptyRemote = { hasData: false, rowExists: true };
+      const fullRemote = { hasData: true, rowExists: true };
+
+      assert(shouldApplyRemoteSnapshot(local, fullRemote).apply === true, 'apply when remote has data');
+      assert(
+        shouldApplyRemoteSnapshot(local, emptyRemote).apply === false,
+        'do not wipe local when remote empty'
+      );
+      assert(
+        shouldApplyRemoteSnapshot({ accounts: [] }, emptyRemote).apply === true,
+        'apply empty when both empty'
+      );
+
+      assert(
+        shouldAllowRemotePush({ accounts: [] }, { accounts: [{ id: 'a1' }] }).allow === false,
+        'block empty push over non-empty remote'
+      );
+      assert(
+        shouldAllowRemotePush(local, { accounts: [] }).allow === true,
+        'allow push when remote empty'
+      );
+
+      assert(getSyncStatusMessage('fetch_failed'), 'sync message for fetch failure');
+      clearActiveHousehold();
+
+      log('PASS  Beta sync guard rules', 'pass');
+      log('Total: PASS', 'pass');
+    } catch (e) {
+      log('FAIL  ' + e.message, 'fail');
+    }
+  </script>
+</body>
+</html>

@@ -3,13 +3,25 @@ import {
   getLegacyProductionStorageKey,
   allowsLegacyStorageKeyMigration,
   getLegacyMigrationDoneKey,
-  isLocalOnlyTestMode
+  isLocalOnlyTestMode,
+  requiresHouseholdSnapshot
 } from '../config/environmentConfig.js';
+import { getActiveHousehold } from '../lib/householdContext.js';
 import { checkFinancialInvariants } from './financeCoreInvariants.js';
 
-const STORAGE_KEY = getFinancialStorageKey();
 const LEGACY_PRODUCTION_STORAGE_KEY = getLegacyProductionStorageKey();
 const LEGACY_MIGRATION_DONE_KEY = getLegacyMigrationDoneKey();
+
+function resolveStorageKey() {
+  const base = getFinancialStorageKey();
+  if (requiresHouseholdSnapshot()) {
+    const householdId = getActiveHousehold()?.id;
+    if (householdId) {
+      return `${base}-${householdId}`;
+    }
+  }
+  return base;
+}
 
 const VALID_TABS = ['accounts', 'categories', 'history', 'obligations', 'savings', 'debts', 'stats'];
 
@@ -215,7 +227,7 @@ export function saveState(state, options = {}) {
 
   try {
     const payload = pickPersistedFields(state);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(resolveStorageKey(), JSON.stringify(payload));
     if (!options.skipRemote && !isLocalOnlyTestMode()) {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         import('../lib/offlineActionsQueue.js').then(({ enqueueSnapshotPush }) => {
@@ -245,16 +257,21 @@ function hasPersistedData(loaded) {
 
 export function loadState() {
   try {
-    let raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(resolveStorageKey());
 
-    if (!raw && allowsLegacyStorageKeyMigration() && !isLegacyMigrationDone()) {
+    if (
+      !raw
+      && !requiresHouseholdSnapshot()
+      && allowsLegacyStorageKeyMigration()
+      && !isLegacyMigrationDone()
+    ) {
       const legacyRaw = localStorage.getItem(LEGACY_PRODUCTION_STORAGE_KEY);
       if (legacyRaw) {
         try {
           const legacy = JSON.parse(legacyRaw);
           if (hasPersistedData(legacy)) {
             raw = legacyRaw;
-            localStorage.setItem(STORAGE_KEY, legacyRaw);
+            localStorage.setItem(resolveStorageKey(), legacyRaw);
             markLegacyMigrationDone();
           }
         } catch {
@@ -274,7 +291,7 @@ export function loadState() {
 
 export function clearState() {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(resolveStorageKey());
     return true;
   } catch {
     return false;

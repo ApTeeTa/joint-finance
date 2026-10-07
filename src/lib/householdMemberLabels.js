@@ -7,6 +7,8 @@ export const DEFAULT_PROFILE_LABELS = Object.freeze({
   wife: 'Жена'
 });
 
+const HOUSEHOLD_PARTNER_PLACEHOLDER = 'Партнёр';
+
 let cachedProfileLabels = { ...DEFAULT_PROFILE_LABELS };
 let cachedMembers = [];
 
@@ -24,7 +26,10 @@ export function getHouseholdMembersCache() {
 
 /** owner → husband slot, member → wife slot (internal profile keys unchanged). */
 function mapMembersToLabels(members) {
-  const labels = { ...DEFAULT_PROFILE_LABELS };
+  const labels = {
+    husband: HOUSEHOLD_PARTNER_PLACEHOLDER,
+    wife: HOUSEHOLD_PARTNER_PLACEHOLDER
+  };
   for (const member of members) {
     const name = (member.display_name ?? '').trim();
     if (!name) continue;
@@ -33,6 +38,23 @@ function mapMembersToLabels(members) {
     } else {
       labels.wife = name;
     }
+  }
+  return labels;
+}
+
+function labelsFromActiveHousehold(household) {
+  const labels = {
+    husband: HOUSEHOLD_PARTNER_PLACEHOLDER,
+    wife: HOUSEHOLD_PARTNER_PLACEHOLDER
+  };
+  const name = (household.display_name ?? '').trim();
+  if (!name) {
+    return labels;
+  }
+  if (household.role === 'owner') {
+    labels.husband = name;
+  } else {
+    labels.wife = name;
   }
   return labels;
 }
@@ -53,8 +75,8 @@ export async function refreshHouseholdProfileLabels() {
 
   const { data, error } = await fetchHouseholdMembers(household.id);
   if (error || !data?.length) {
-    cachedProfileLabels = { ...DEFAULT_PROFILE_LABELS };
     cachedMembers = [];
+    cachedProfileLabels = labelsFromActiveHousehold(household);
     return cachedProfileLabels;
   }
 

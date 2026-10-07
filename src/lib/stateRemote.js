@@ -1,23 +1,22 @@
 import { supabase } from './supabase.js';
 import {
   exportSharedSnapshot,
-  getEmptySharedSnapshot,
   normalizeSharedSnapshot
 } from '../modules/storage.js';
 import {
   assertSnapshotId,
-  getActiveSnapshotId,
   getRealtimeChannelName,
-  getSeedReadSnapshotId,
-  isExperiment,
   isHouseholdSnapshotId,
   isLocalOnlyTestMode,
+  requiresHouseholdSnapshot,
   validateEnvironmentIsolation
 } from '../config/environmentConfig.js';
-import { resolveSnapshotIdForSync } from './householdContext.js';
+import { getActiveHouseholdSnapshotId, resolveSnapshotIdForSync } from './householdContext.js';
+import { hasSharedStateData } from './stateAuthority.js';
+import { shouldAllowRemotePush } from './syncGuard.js';
 
 function getSyncSnapshotId() {
-  return resolveSnapshotIdForSync(getActiveSnapshotId());
+  return resolveSnapshotIdForSync(null);
 }
 
 const PUSH_DELAY_MS = 400;
@@ -28,10 +27,19 @@ let lastRemoteUpdatedAt = null;
 let lastRemoteSnapshot = null;
 let lastPushedAt = 0;
 let initialSyncDone = false;
-let experimentSeedAttempted = false;
 
 export function markInitialSyncDone() {
   initialSyncDone = true;
+}
+
+export function resetSyncSession() {
+  initialSyncDone = false;
+  applyingRemote = false;
+  lastRemoteUpdatedAt = null;
+  lastRemoteSnapshot = null;
+  lastPushedAt = 0;
+  clearTimeout(pushTimer);
+  pushTimer = null;
 }
 
 export function isInitialSyncDone() {
@@ -51,35 +59,11 @@ function cloneSnapshotPayload(payload) {
 }
 
 function hasSharedData(snapshot) {
-  if (!snapshot || typeof snapshot !== 'object') {
-    return false;
-  }
-
-  return ['accounts', 'categories', 'transactions', 'obligations', 'savings', 'debts'].some(
-    (key) => Array.isArray(snapshot[key]) && snapshot[key].length > 0
-  );
+  return hasSharedStateData(snapshot);
 }
 
-function isExperimentSnapshotUnderInitialized(payload) {
-  if (!payload || typeof payload !== 'object') {
-    return true;
-  }
-
-  const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
-  return accounts.length === 0;
-}
-
-function canSeedExperimentFromProduction(payload) {
-  if (!payload || typeof payload !== 'object') {
-    return false;
-  }
-
-  const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
-  return accounts.length > 0;
-}
-
-async function fetchSnapshotRow(snapshotId, { seedBootstrap = false } = {}) {
-  assertSnapshotId(snapshotId, 'read', { seedBootstrap });
+async function fetchSnapshotRow(snapshotId) {
+  assertSnapshotId(snapshotId, 'read');
 
   const { data, error } = await supabase
     .from('household_snapshots')
@@ -95,74 +79,19 @@ async function fetchSnapshotRow(snapshotId, { seedBootstrap = false } = {}) {
   return { ok: true, data };
 }
 
-async function upsertSnapshotRow(snapshotId, payload) {
-  assertSnapshotId(snapshotId, 'write');
-
-  const updatedAt = new Date().toISOString();
-  const { data, error } = await supabase
-    .from('household_snapshots')
-    .upsert({
-      id: snapshotId,
-      payload,
-      updated_at: updatedAt
-    })
-    .select('updated_at')
-    .single();
-
-  if (error) {
-    console.error(`Failed to upsert snapshot "${snapshotId}" in Supabase:`, error);
-    return { ok: false, error };
-  }
-
-  return {
-    ok: true,
-    data: {
-      payload,
-      updated_at: data?.updated_at ?? updatedAt
-    }
-  };
-}
-
 async function resolveActiveSnapshotRow() {
   validateEnvironmentIsolation();
   const activeSnapshotId = getSyncSnapshotId();
 
-  if (isHouseholdSnapshotId(activeSnapshotId)) {
-    return fetchSnapshotRow(activeSnapshotId);
+  if (!activeSnapshotId) {
+    return {
+      ok: false,
+      error: new Error('No active household snapshot'),
+      reason: 'no_active_household'
+    };
   }
 
-  if (!isExperiment()) {
-    return fetchSnapshotRow(activeSnapshotId);
-  }
-
-  const experimentResult = await fetchSnapshotRow(activeSnapshotId);
-  if (!experimentResult.ok) {
-    return experimentResult;
-  }
-
-  const experimentPayload = experimentResult.data?.payload;
-  const needsSeed = isExperimentSnapshotUnderInitialized(experimentPayload);
-  const seedReadSnapshotId = getSeedReadSnapshotId();
-
-  if (!needsSeed || experimentSeedAttempted || !seedReadSnapshotId) {
-    return experimentResult;
-  }
-
-  experimentSeedAttempted = true;
-
-  const productionResult = await fetchSnapshotRow(seedReadSnapshotId, { seedBootstrap: true });
-  if (!productionResult.ok || !canSeedExperimentFromProduction(productionResult.data?.payload)) {
-    return experimentResult;
-  }
-
-  const seedPayload = cloneSnapshotPayload(productionResult.data.payload);
-  const seedResult = await upsertSnapshotRow(activeSnapshotId, seedPayload);
-  if (!seedResult.ok) {
-    return experimentResult;
-  }
-
-  console.info('[ENVIRONMENT] Seeded experiment snapshot from production (one-time read-only bootstrap).');
-  return { ok: true, data: seedResult.data, seededFromProduction: true };
+  return fetchSnapshotRow(activeSnapshotId);
 }
 
 export function schedulePushSharedState(state) {
@@ -182,6 +111,16 @@ export async function pushSharedState(state) {
   }
 
   const activeSnapshotId = getSyncSnapshotId();
+  if (!activeSnapshotId) {
+    return { ok: false, reason: 'no_active_household', error: new Error('No active household snapshot') };
+  }
+
+  const pushGuard = shouldAllowRemotePush(state, lastRemoteSnapshot);
+  if (!pushGuard.allow) {
+    console.error('[SYNC] Push blocked:', pushGuard.reason);
+    return { ok: false, reason: pushGuard.reason, error: new Error(pushGuard.reason) };
+  }
+
   assertSnapshotId(activeSnapshotId, 'write');
 
   const payload = exportSharedSnapshot(state);
@@ -203,6 +142,7 @@ export async function pushSharedState(state) {
   }
 
   lastRemoteUpdatedAt = data?.updated_at ?? updatedAt;
+  lastRemoteSnapshot = cloneSnapshotPayload(payload);
   lastPushedAt = Date.now();
   return { ok: true, updatedAt: lastRemoteUpdatedAt };
 }
@@ -212,23 +152,50 @@ export async function fetchRemoteSharedSnapshot() {
     return { ok: true, skipped: true, reason: 'local_only_test_mode', snapshot: null };
   }
 
+  const snapshotId = getSyncSnapshotId();
+  if (!snapshotId) {
+    return {
+      ok: false,
+      reason: 'no_active_household',
+      error: new Error('No active household snapshot')
+    };
+  }
+
   const snapshotResult = await resolveActiveSnapshotRow();
   if (!snapshotResult.ok) {
-    return { ok: false, error: snapshotResult.error };
+    return {
+      ok: false,
+      error: snapshotResult.error,
+      reason: snapshotResult.reason ?? 'fetch_failed'
+    };
   }
 
   const data = snapshotResult.data;
-  const payload = data?.payload && hasSharedData(data.payload)
-    ? data.payload
-    : getEmptySharedSnapshot();
-  const normalized = normalizeSharedSnapshot(payload);
+  const rowExists = Boolean(data);
+  const rawPayload = data?.payload ?? null;
+  const hasData = hasSharedData(rawPayload);
+  const normalized = normalizeSharedSnapshot(rawPayload ?? {});
 
-  lastRemoteSnapshot = normalized;
+  if (requiresHouseholdSnapshot() && isHouseholdSnapshotId(snapshotId) && !rowExists) {
+    return {
+      ok: false,
+      reason: 'snapshot_row_missing',
+      error: new Error(`Household snapshot row missing: ${snapshotId}`)
+    };
+  }
+
+  lastRemoteSnapshot = hasData ? cloneSnapshotPayload(normalized) : null;
   lastRemoteUpdatedAt = data?.updated_at ?? null;
 
   return {
     ok: true,
-    snapshot: normalized
+    snapshot: normalized,
+    meta: {
+      snapshotId,
+      rowExists,
+      hasData,
+      updatedAt: data?.updated_at ?? null
+    }
   };
 }
 
@@ -240,6 +207,10 @@ export async function pullSharedStateInto(_state) {
 
 export async function clearRemoteSharedState() {
   const activeSnapshotId = getSyncSnapshotId();
+  if (!activeSnapshotId) {
+    return { ok: false, reason: 'no_active_household', error: new Error('No active household snapshot') };
+  }
+
   assertSnapshotId(activeSnapshotId, 'write');
 
   const { error } = await supabase
@@ -264,15 +235,22 @@ export async function clearRemoteSharedState() {
   }
 
   lastRemoteUpdatedAt = null;
+  lastRemoteSnapshot = null;
   return { ok: true };
 }
 
 export function subscribeSharedState(state, onChange) {
+  void state;
   if (isLocalOnlyTestMode()) {
     return () => {};
   }
 
-  const activeSnapshotId = getSyncSnapshotId();
+  const activeSnapshotId = getActiveHouseholdSnapshotId();
+  if (!activeSnapshotId) {
+    console.warn('[SYNC] Realtime subscribe skipped: no active household');
+    return () => {};
+  }
+
   validateEnvironmentIsolation();
 
   const channel = supabase

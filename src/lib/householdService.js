@@ -58,7 +58,7 @@ export async function fetchUserHouseholds(userId) {
   return { ok: true, households };
 }
 
-export async function createHousehold(userId, { name, displayName, seedPayload = null }) {
+export async function createHousehold(userId, { name, displayName } = {}) {
   const householdId = crypto.randomUUID();
   const snapshotId = buildHouseholdSnapshotId(householdId);
   const householdName = (name ?? '').trim() || 'Моя семья';
@@ -86,7 +86,7 @@ export async function createHousehold(userId, { name, displayName, seedPayload =
     return { ok: false, error: memberError.message };
   }
 
-  const payload = seedPayload ?? getEmptySharedSnapshot();
+  const payload = getEmptySharedSnapshot();
   const { error: snapshotError } = await insertHouseholdSnapshotRow({
     id: snapshotId,
     payload,
