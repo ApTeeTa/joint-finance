@@ -1,40 +1,16 @@
 /**
- * Environment Isolation — single configuration layer for deployment mode + snapshot ids.
- *
- * RULE: Snapshot row ids exist ONLY in SNAPSHOT_IDS below.
- * All runtime code must use getActiveSnapshotId(), isExperiment(), isProduction().
+ * Family Mode — single shared snapshot via Edge Functions (no Supabase Auth).
  */
 
-const SNAPSHOT_IDS = Object.freeze({
-  PRODUCTION: 'shared',
-  EXPERIMENT: 'shared-experiment'
-});
+export const FAMILY_SNAPSHOT_ID = 'family';
 
 export const ENVIRONMENT_ISOLATION_RULE = Object.freeze({
-  id: 'ENVIRONMENT_ISOLATION_RULE',
-  singleSwitch: 'ACTIVE_ENVIRONMENT',
-  modes: Object.freeze(['production', 'experiment']),
-  productionSnapshotId: SNAPSHOT_IDS.PRODUCTION,
-  experimentSnapshotId: SNAPSHOT_IDS.EXPERIMENT,
-  invariants: Object.freeze({
-    productionNeverUsesExperimentSnapshot: true,
-    experimentNeverWritesProductionSnapshot: true,
-    experimentSeedReadsProductionOnce: true
-  })
+  id: 'FAMILY_MODE',
+  activeSnapshotId: FAMILY_SNAPSHOT_ID
 });
 
 /**
- * ONLY switch for deployment environment.
- * experiment-full-sync branch: 'experiment'
- * main branch: 'production'
- */
-export const ACTIVE_ENVIRONMENT = 'experiment';
-
-/**
- * TEMPORARY local-only test mode — no Supabase read/write/realtime.
- * State persists in localStorage only (good for local UI/data experiments).
- *
- * MUST set to false before git push to GitHub — production relies on Supabase.
+ * MUST be false for production family sync (Supabase Edge Functions).
  */
 export const LOCAL_ONLY_TEST_MODE = false;
 
@@ -42,264 +18,75 @@ export function isLocalOnlyTestMode() {
   return LOCAL_ONLY_TEST_MODE === true;
 }
 
-/** Beta auth path: sync only via per-household snapshots — never legacy shared rows. */
-export function requiresHouseholdSnapshot() {
-  return !isLocalOnlyTestMode();
-}
-
-const MODE_REGISTRY = Object.freeze({
-  production: Object.freeze({
-    mode: 'production',
-    activeSnapshotId: SNAPSHOT_IDS.PRODUCTION,
-    seedReadSnapshotId: null,
-    allowSeedFromProduction: false,
-    allowLegacyStorageKeyMigration: false,
-    financialStorageKey: 'joint-finance-state-v2'
-  }),
-  experiment: Object.freeze({
-    mode: 'experiment',
-    activeSnapshotId: SNAPSHOT_IDS.EXPERIMENT,
-    seedReadSnapshotId: null,
-    allowSeedFromProduction: false,
-    allowLegacyStorageKeyMigration: false,
-    financialStorageKey: 'joint-finance-state-v2-beta'
-  })
-});
+const FINANCIAL_STORAGE_KEY = 'joint-finance-state-v2-family';
 
 let validated = false;
-let householdSnapshotResolver = null;
-
-/** Registered by householdContext — returns active household snapshot id or null. */
-export function registerHouseholdSnapshotResolver(resolver) {
-  householdSnapshotResolver = typeof resolver === 'function' ? resolver : null;
-}
-
-function getRegisteredHouseholdSnapshotId() {
-  try {
-    return householdSnapshotResolver?.() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export function isHouseholdSnapshotId(snapshotId) {
-  return typeof snapshotId === 'string'
-    && snapshotId.startsWith('household_')
-    && snapshotId.length > 'household_'.length;
-}
-
-function resolveConfig() {
-  const config = MODE_REGISTRY[ACTIVE_ENVIRONMENT];
-  if (!config) {
-    throw new Error(
-      `[ENVIRONMENT] Invalid ACTIVE_ENVIRONMENT "${ACTIVE_ENVIRONMENT}". `
-      + `Expected one of: ${ENVIRONMENT_ISOLATION_RULE.modes.join(', ')}`
-    );
-  }
-  return config;
-}
-
-function getSnapshotIds() {
-  return {
-    production: ENVIRONMENT_ISOLATION_RULE.productionSnapshotId,
-    experiment: ENVIRONMENT_ISOLATION_RULE.experimentSnapshotId
-  };
-}
 
 export function validateEnvironmentIsolation() {
-  if (validated) {
-    return resolveConfig();
-  }
-
-  const config = resolveConfig();
-  const { production, experiment } = getSnapshotIds();
-
-  if (config.mode === 'production') {
-    if (config.activeSnapshotId !== production) {
-      throw new Error('[ENVIRONMENT] Production mode must bind to production snapshot id only');
-    }
-    if (config.activeSnapshotId === experiment) {
-      throw new Error('[ENVIRONMENT] Production mode cannot use experiment snapshot id');
-    }
-  }
-
-  if (config.mode === 'experiment') {
-    if (config.activeSnapshotId !== experiment) {
-      throw new Error('[ENVIRONMENT] Experiment mode must bind to experiment snapshot id only');
-    }
-    if (config.activeSnapshotId === production) {
-      throw new Error('[ENVIRONMENT] Experiment mode cannot use production snapshot as active id');
-    }
-  }
-
   validated = true;
-
-  if (typeof console !== 'undefined' && config.mode === 'experiment') {
-    console.info('[ENVIRONMENT]', {
-      rule: ENVIRONMENT_ISOLATION_RULE.id,
-      mode: config.mode,
-      activeSnapshotId: config.activeSnapshotId,
-      seedReadAllowed: config.allowSeedFromProduction
-    });
-  }
-
-  return config;
+  return { mode: 'family', activeSnapshotId: FAMILY_SNAPSHOT_ID };
 }
 
-/** Active Supabase household_snapshots row id for this deployment. */
 export function getActiveSnapshotId() {
-  return validateEnvironmentIsolation().activeSnapshotId;
-}
-
-export function getSeedReadSnapshotId() {
-  const config = validateEnvironmentIsolation();
-  return config.allowSeedFromProduction ? config.seedReadSnapshotId : null;
+  validateEnvironmentIsolation();
+  return FAMILY_SNAPSHOT_ID;
 }
 
 export function getFinancialStorageKey() {
-  return validateEnvironmentIsolation().financialStorageKey;
+  return FINANCIAL_STORAGE_KEY;
 }
 
 export function getLegacyProductionStorageKey() {
-  return MODE_REGISTRY.production.financialStorageKey;
+  return 'joint-finance-state-v2';
 }
 
-/** Persisted flag — legacy localStorage migration runs at most once per environment key. */
 export function getLegacyMigrationDoneKey() {
-  return `${validateEnvironmentIsolation().financialStorageKey}-legacy-migration-done`;
+  return `${FINANCIAL_STORAGE_KEY}-legacy-migration-done`;
 }
 
 export function allowsLegacyStorageKeyMigration() {
-  return validateEnvironmentIsolation().allowLegacyStorageKeyMigration;
+  return false;
+}
+
+export function getSeedReadSnapshotId() {
+  return null;
+}
+
+/** @deprecated Family mode — always false (no legacy shared rows). */
+export function requiresHouseholdSnapshot() {
+  return false;
+}
+
+export function isHouseholdSnapshotId(snapshotId) {
+  return snapshotId === FAMILY_SNAPSHOT_ID;
 }
 
 export function isExperiment() {
-  return validateEnvironmentIsolation().mode === 'experiment';
+  return true;
 }
 
 export function isProduction() {
-  return validateEnvironmentIsolation().mode === 'production';
+  return false;
 }
 
-export function getRealtimeChannelName(snapshotId = null) {
-  const householdId = getRegisteredHouseholdSnapshotId();
-  if (requiresHouseholdSnapshot()) {
-    if (!householdId) {
-      throw new Error('[ENVIRONMENT] Realtime requires active household snapshot');
-    }
-    return `joint-finance-shared-state-${householdId}`;
+export function assertSnapshotId(snapshotId, operation = 'read') {
+  void operation;
+  if (snapshotId !== FAMILY_SNAPSHOT_ID) {
+    throw new Error(`[ENVIRONMENT] Invalid snapshot id "${snapshotId}" — expected "${FAMILY_SNAPSHOT_ID}"`);
   }
-  const id = snapshotId ?? householdId ?? getActiveSnapshotId();
-  return `joint-finance-shared-state-${id}`;
-}
-
-/**
- * Guard any snapshot id usage. Throws on cross-environment access.
- * @param {'read'|'write'} operation
- */
-export function assertSnapshotId(snapshotId, operation = 'read', { seedBootstrap = false } = {}) {
-  if (operation === 'write') {
-    assertSnapshotWriteTarget(snapshotId);
-    return;
-  }
-  assertSnapshotReadTarget(snapshotId, { seedBootstrap });
 }
 
 export function assertSnapshotWriteTarget(snapshotId) {
-  const { production, experiment } = getSnapshotIds();
-  validateEnvironmentIsolation();
-
-  const activeHouseholdSnapshotId = getRegisteredHouseholdSnapshotId();
-
-  if (requiresHouseholdSnapshot()) {
-    if (!isHouseholdSnapshotId(snapshotId)) {
-      throw new Error('[ENVIRONMENT] Beta auth cannot write legacy snapshot ids');
-    }
-    if (snapshotId !== activeHouseholdSnapshotId) {
-      throw new Error('[ENVIRONMENT] Write target household snapshot does not match active household');
-    }
-    return;
-  }
-
-  if (isHouseholdSnapshotId(snapshotId)) {
-    if (snapshotId !== activeHouseholdSnapshotId) {
-      throw new Error('[ENVIRONMENT] Write target household snapshot does not match active household');
-    }
-    return;
-  }
-
-  if (snapshotId === production && !isProduction()) {
-    throw new Error('[ENVIRONMENT] Experiment deployment cannot write production snapshot id');
-  }
-
-  if (snapshotId === experiment && isProduction()) {
-    throw new Error('[ENVIRONMENT] Production deployment cannot write experiment snapshot id');
-  }
-
-  if (snapshotId !== getActiveSnapshotId()) {
-    throw new Error(`[ENVIRONMENT] Write target "${snapshotId}" is not the active snapshot id`);
-  }
+  assertSnapshotId(snapshotId, 'write');
 }
 
-export function assertSnapshotReadTarget(snapshotId, { seedBootstrap = false } = {}) {
-  const { production, experiment } = getSnapshotIds();
-  validateEnvironmentIsolation();
-
-  const activeHouseholdSnapshotId = getRegisteredHouseholdSnapshotId();
-
-  if (requiresHouseholdSnapshot()) {
-    if (!isHouseholdSnapshotId(snapshotId)) {
-      throw new Error('[ENVIRONMENT] Beta auth cannot read legacy snapshot ids');
-    }
-    if (snapshotId !== activeHouseholdSnapshotId) {
-      throw new Error('[ENVIRONMENT] Read target household snapshot does not match active household');
-    }
-    return;
-  }
-
-  if (isHouseholdSnapshotId(snapshotId)) {
-    if (snapshotId !== activeHouseholdSnapshotId) {
-      throw new Error('[ENVIRONMENT] Read target household snapshot does not match active household');
-    }
-    return;
-  }
-
-  if (isProduction()) {
-    if (snapshotId === experiment) {
-      throw new Error('[ENVIRONMENT] Production deployment cannot read experiment snapshot id');
-    }
-    if (snapshotId !== production) {
-      throw new Error(`[ENVIRONMENT] Production deployment cannot read snapshot id "${snapshotId}"`);
-    }
-    return;
-  }
-
-  if (snapshotId === getActiveSnapshotId()) {
-    return;
-  }
-
-  if (seedBootstrap && snapshotId === production && getSeedReadSnapshotId() === production) {
-    return;
-  }
-
-  if (snapshotId === production) {
-    throw new Error('[ENVIRONMENT] Experiment cannot read production snapshot outside seed bootstrap');
-  }
-
-  throw new Error(`[ENVIRONMENT] Experiment deployment cannot read snapshot id "${snapshotId}"`);
+export function assertSnapshotReadTarget(snapshotId) {
+  assertSnapshotId(snapshotId, 'read');
 }
 
-/** @deprecated Use getActiveSnapshotId */
-export function getActiveSnapshotRow() {
-  return getActiveSnapshotId();
-}
+/** No-op — household resolver removed in family mode. */
+export function registerHouseholdSnapshotResolver() {}
 
-/** @deprecated Use isExperiment */
-export function isExperimentEnvironment() {
-  return isExperiment();
-}
-
-/** @deprecated Use isProduction */
-export function isProductionEnvironment() {
-  return isProduction();
+export function getRealtimeChannelName() {
+  throw new Error('[ENVIRONMENT] Realtime disabled in family mode');
 }

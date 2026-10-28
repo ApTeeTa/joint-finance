@@ -1,0 +1,652 @@
+/**
+ * Joint Finance — premium family banking UI tokens & shell components.
+ */
+
+:root {
+  --jf-white: #ffffff;
+  --jf-bg: #f7f7f5;
+  --jf-graphite: #141816;
+  --jf-graphite-muted: #3d4541;
+  --jf-text-muted: #6b736f;
+  --jf-border: #e8eae7;
+  --jf-border-strong: #d4d8d4;
+  --jf-emerald: #0d7a5f;
+  --jf-emerald-deep: #065a46;
+  --jf-emerald-soft: #e6f4ef;
+  --jf-emerald-glow: rgba(13, 122, 95, 0.12);
+  --jf-gold: #b8922e;
+  --jf-gold-soft: #f5eed9;
+  --jf-shadow-sm: 0 1px 2px rgba(20, 24, 22, 0.04);
+  --jf-shadow-md: 0 4px 24px rgba(20, 24, 22, 0.08);
+  --jf-shadow-lift: 0 12px 32px rgba(20, 24, 22, 0.1);
+  --jf-radius-lg: 1.25rem;
+  --jf-radius-md: 1rem;
+  --jf-radius-sm: 0.75rem;
+  --jf-motion: 200ms;
+  --jf-motion-fast: 150ms;
+  --jf-nav-height: 4.25rem;
+  --header-height: 0px;
+
+  /* Legacy aliases used across shell */
+  --color-primary: var(--jf-emerald-deep);
+  --color-primary-soft: var(--jf-emerald-soft);
+  --color-primary-hover: var(--jf-emerald);
+  --color-surface: var(--jf-white);
+  --color-surface-muted: var(--jf-bg);
+  --color-border: var(--jf-border);
+  --color-text: var(--jf-graphite);
+  --color-text-muted: var(--jf-text-muted);
+  --color-free: var(--jf-emerald);
+  --color-free-bg: var(--jf-emerald-soft);
+  --color-free-border: #b8ddd0;
+  --color-reserved: #6b6358;
+  --color-reserved-bg: #f3f2ef;
+  --color-reserved-border: var(--jf-border);
+  --radius-card: var(--jf-radius-md);
+  --shadow-card: var(--jf-shadow-md);
+  --font-amount-tracking: -0.035em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --jf-motion: 0ms;
+    --jf-motion-fast: 0ms;
+  }
+}
+
+body.app-body {
+  background: var(--jf-bg);
+  color: var(--jf-graphite);
+}
+
+/* —— Interactive base —— */
+.jf-interactive {
+  transition:
+    background-color var(--jf-motion) ease,
+    border-color var(--jf-motion) ease,
+    color var(--jf-motion) ease,
+    box-shadow var(--jf-motion) ease,
+    transform var(--jf-motion-fast) ease;
+}
+
+@media (hover: hover) {
+  .jf-interactive:hover:not(:disabled) {
+    box-shadow: var(--jf-shadow-sm);
+  }
+}
+
+.jf-interactive:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.jf-interactive:focus-visible {
+  outline: 2px solid var(--jf-emerald);
+  outline-offset: 2px;
+}
+
+.jf-interactive:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* —— Header —— */
+#app-header {
+  background: color-mix(in srgb, var(--jf-white) 92%, transparent);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--jf-border);
+  box-shadow: var(--jf-shadow-sm);
+}
+
+.app-brand-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--jf-graphite);
+}
+
+.app-brand-subtitle {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--jf-text-muted);
+}
+
+.app-brand-title::after {
+  content: '';
+  display: inline-block;
+  width: 0.35rem;
+  height: 0.35rem;
+  margin-left: 0.35rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--jf-gold), #d4af5a);
+  vertical-align: super;
+}
+
+/* —— Hero balances —— */
+.jf-hero {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 768px) {
+  .jf-hero {
+    grid-template-columns: 1.4fr 1fr;
+    align-items: stretch;
+  }
+}
+
+.balance-card {
+  border: 1px solid var(--jf-border);
+  border-radius: var(--jf-radius-lg);
+  padding: 1rem 1.125rem;
+  background: var(--jf-white);
+  box-shadow: var(--jf-shadow-sm);
+  min-width: 0;
+}
+
+.balance-card--free {
+  position: relative;
+  background: linear-gradient(145deg, var(--jf-white) 0%, var(--jf-emerald-soft) 100%);
+  border-color: #c5e6d9;
+  padding: 1.25rem 1.375rem;
+}
+
+@media (min-width: 768px) {
+  .balance-card--free {
+    grid-row: span 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+
+.jf-amount-hero {
+  font-size: clamp(2rem, 8vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: var(--font-amount-tracking);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  color: var(--jf-emerald-deep);
+}
+
+.jf-hero-secondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.625rem;
+}
+
+@media (min-width: 768px) {
+  .jf-hero-secondary {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
+
+.balance-card-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--jf-text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.balance-card--free .balance-card-label {
+  color: var(--jf-emerald);
+}
+
+.balance-card-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: var(--font-amount-tracking);
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-card--free .balance-card-value:not(.jf-amount-hero) {
+  color: var(--jf-emerald-deep);
+}
+
+.balance-card--total .balance-card-value {
+  color: var(--jf-graphite);
+}
+
+.balance-card--reserved .balance-card-value {
+  color: var(--jf-graphite-muted);
+}
+
+.balance-card-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.balance-help-btn {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-free-border);
+  background: var(--jf-white);
+  color: var(--jf-emerald);
+  font-size: 0.625rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#free-help-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: var(--jf-white);
+  border: 1px solid var(--jf-border);
+  border-radius: var(--jf-radius-sm);
+  padding: 0.625rem 0.75rem;
+  box-shadow: var(--jf-shadow-md);
+}
+
+.purchase-planner-btn {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  min-height: 2.75rem;
+  border-radius: var(--jf-radius-md);
+  border: 1px solid var(--jf-border-strong);
+  background: var(--jf-white);
+  color: var(--jf-graphite);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background var(--jf-motion), border-color var(--jf-motion), transform var(--jf-motion-fast);
+}
+
+.purchase-planner-btn:hover {
+  border-color: var(--jf-gold);
+  background: var(--jf-gold-soft);
+}
+
+.purchase-planner-btn:active {
+  transform: scale(0.99);
+}
+
+/* —— Profile & lock —— */
+.profile-btn {
+  border: 1px solid var(--jf-border);
+  background: var(--jf-white);
+  color: var(--jf-text-muted);
+  border-radius: var(--jf-radius-sm);
+  transition: all var(--jf-motion);
+}
+
+.profile-btn-active {
+  background: var(--jf-graphite) !important;
+  border-color: var(--jf-graphite) !important;
+  color: var(--jf-white) !important;
+  box-shadow: var(--jf-shadow-sm);
+}
+
+#family-lock-btn {
+  border-radius: var(--jf-radius-sm);
+}
+
+/* —— Tab navigation —— */
+#tab-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.25rem;
+  border-radius: var(--jf-radius-md);
+  background: var(--jf-white);
+  border: 1px solid var(--jf-border);
+}
+
+.tab-btn {
+  border: 1px solid transparent;
+  color: var(--jf-text-muted);
+  border-radius: var(--jf-radius-sm);
+  transition: all var(--jf-motion);
+}
+
+.tab-btn:hover:not(.tab-btn-active) {
+  background: var(--jf-bg);
+  color: var(--jf-graphite);
+}
+
+.tab-btn-active {
+  background: var(--jf-emerald-soft) !important;
+  border-color: #b8ddd0 !important;
+  color: var(--jf-emerald-deep) !important;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(13, 122, 95, 0.08);
+}
+
+.tab-btn--overflow {
+  /* shown on desktop in row; mobile only in more sheet */
+}
+
+#tab-more-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--jf-nav-height) + env(safe-area-inset-bottom, 0px));
+  z-index: 35;
+  padding: 0.75rem 1rem 1rem;
+  background: var(--jf-white);
+  border-top: 1px solid var(--jf-border);
+  box-shadow: 0 -8px 32px rgba(20, 24, 22, 0.12);
+  border-radius: var(--jf-radius-lg) var(--jf-radius-lg) 0 0;
+  transform: translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform var(--jf-motion) ease, opacity var(--jf-motion) ease;
+}
+
+#tab-more-sheet.is-open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#tab-more-sheet .tab-btn {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 2.75rem;
+  margin-bottom: 0.35rem;
+}
+
+@media (max-width: 767px) {
+  #app-shell {
+    padding-bottom: calc(var(--jf-nav-height) + env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+
+  #tab-nav-mobile-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: space-around;
+    gap: 0;
+    padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid var(--jf-border);
+    background: color-mix(in srgb, var(--jf-white) 94%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  #tab-nav-mobile-dock .tab-btn--dock {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    font-size: 0.625rem;
+    padding: 0.35rem 0.15rem;
+    min-height: 3rem;
+    gap: 0.15rem;
+  }
+
+  #tab-nav-mobile-dock .tab-btn--dock .tab-icon {
+    font-size: 1.125rem;
+    line-height: 1;
+  }
+
+  #tab-nav.tab-nav-desktop .tab-btn--overflow {
+    display: none !important;
+  }
+
+  #tab-nav.tab-nav-desktop {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  #tab-nav-mobile-dock,
+  #tab-more-backdrop {
+    display: none !important;
+  }
+
+  #tab-more-sheet {
+    display: none !important;
+  }
+
+  #tab-nav.tab-nav-desktop {
+    display: flex;
+  }
+}
+
+#tab-nav-mobile-dock {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  #tab-nav-mobile-dock {
+    display: flex;
+  }
+}
+
+/* —— Dashboard (accounts home) —— */
+.jf-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.jf-quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.625rem;
+}
+
+.jf-quick-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--jf-radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid var(--jf-border);
+  background: var(--jf-white);
+  color: var(--jf-graphite);
+  transition: all var(--jf-motion);
+}
+
+.jf-quick-btn--income {
+  border-color: #b8ddd0;
+  background: var(--jf-emerald-soft);
+  color: var(--jf-emerald-deep);
+}
+
+.jf-quick-btn--expense {
+  background: var(--jf-graphite);
+  color: var(--jf-white);
+  border-color: var(--jf-graphite);
+}
+
+.jf-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--jf-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.jf-progress-row {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--jf-border);
+}
+
+.jf-progress-row:last-child {
+  border-bottom: none;
+}
+
+.jf-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--jf-bg);
+  overflow: hidden;
+  margin-top: 0.35rem;
+}
+
+.jf-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--jf-emerald), #12a07a);
+  transition: width var(--jf-motion) ease;
+}
+
+.jf-tx-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--jf-border);
+  font-size: 0.875rem;
+}
+
+.jf-tx-row:last-child {
+  border-bottom: none;
+}
+
+/* —— Family gate —— */
+.jf-gate-shell {
+  max-width: 24rem;
+  margin: 2rem auto;
+  padding: 1.75rem 1.5rem;
+  background: var(--jf-white);
+  border: 1px solid var(--jf-border);
+  border-radius: var(--jf-radius-lg);
+  box-shadow: var(--jf-shadow-md);
+}
+
+.jf-gate-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-align: center;
+  color: var(--jf-graphite);
+}
+
+.jf-gate-btn {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: var(--jf-radius-md);
+  background: var(--jf-graphite);
+  color: var(--jf-white);
+  font-weight: 600;
+  transition: background var(--jf-motion), transform var(--jf-motion-fast);
+}
+
+.jf-gate-btn:hover:not(:disabled) {
+  background: var(--jf-emerald-deep);
+}
+
+.jf-gate-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.jf-gate-btn:disabled {
+  opacity: 0.6;
+}
+
+/* —— Modal motion —— */
+[data-modal]:not(.hidden) {
+  animation: jf-modal-in var(--jf-motion) ease;
+}
+
+@keyframes jf-modal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+[data-modal]:not(.hidden) .jf-modal-panel {
+  animation: jf-panel-in 220ms ease;
+}
+
+@keyframes jf-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-modal]:not(.hidden),
+  [data-modal]:not(.hidden) .jf-modal-panel {
+    animation: none;
+  }
+}
+
+/* —— Cards & fields —— */
+@media (hover: hover) {
+  .jf-card-hover:hover {
+    border-color: #c5e6d9;
+    box-shadow: var(--jf-shadow-md);
+    transform: translateY(-1px);
+  }
+}
+
+.jf-card-hover {
+  transition:
+    border-color var(--jf-motion) ease,
+    box-shadow var(--jf-motion) ease,
+    transform var(--jf-motion-fast) ease;
+}
+
+.jf-field.jf-field--error,
+.jf-field:invalid:not(:placeholder-shown):not(:focus) {
+  border-color: #e11d48;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.12);
+}
+
+button[data-busy='true'] {
+  pointer-events: none;
+  opacity: 0.65;
+  position: relative;
+}
+
+button[data-busy='true']::after {
+  content: '';
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-top: -0.4375rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: jf-spin 600ms linear infinite;
+}
+
+@keyframes jf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button[data-busy='true']::after {
+    animation: none;
+    border-right-color: currentColor;
+    opacity: 0.4;
+  }
+}

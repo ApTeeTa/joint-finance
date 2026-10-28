@@ -211,8 +211,4 @@ export function installSupabaseWriteGuard(supabaseClient) {
   supabaseClient.__archGuardInstalled = true;
 }
 
-if (isExperiment()) {
-  import('../lib/supabase.js')
-    .then(({ supabase }) => installSupabaseWriteGuard(supabase))
-    .catch(() => {});
-}
+// Family mode: no Supabase client in browser — snapshot via Edge Functions only.

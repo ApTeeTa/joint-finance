@@ -1,23 +1,22 @@
-import { supabase } from './supabase.js';
 import {
   exportSharedSnapshot,
   normalizeSharedSnapshot
 } from '../modules/storage.js';
 import {
   assertSnapshotId,
-  getRealtimeChannelName,
-  isHouseholdSnapshotId,
+  getActiveSnapshotId,
   isLocalOnlyTestMode,
-  requiresHouseholdSnapshot,
   validateEnvironmentIsolation
 } from '../config/environmentConfig.js';
-import { getActiveHouseholdSnapshotId, resolveSnapshotIdForSync } from './householdContext.js';
 import { hasSharedStateData } from './stateAuthority.js';
 import { shouldAllowRemotePush } from './syncGuard.js';
+import { getFamilySnapshot, putFamilySnapshot } from './familySnapshotApi.js';
+import {
+  notifyUnauthorized,
+  requireAccessToken
+} from './familySession.js';
 
-function getSyncSnapshotId() {
-  return resolveSnapshotIdForSync(null);
-}
+export const FAMILY_SYNC_CONFLICT_EVENT = 'joint-finance:family-sync-conflict';
 
 const PUSH_DELAY_MS = 400;
 
@@ -62,36 +61,45 @@ function hasSharedData(snapshot) {
   return hasSharedStateData(snapshot);
 }
 
+function getSyncSnapshotId() {
+  validateEnvironmentIsolation();
+  return getActiveSnapshotId();
+}
+
+function handleHttpAuthFailure(status) {
+  if (status === 401) {
+    notifyUnauthorized();
+  }
+}
+
 async function fetchSnapshotRow(snapshotId) {
   assertSnapshotId(snapshotId, 'read');
 
-  const { data, error } = await supabase
-    .from('household_snapshots')
-    .select('payload, updated_at')
-    .eq('id', snapshotId)
-    .maybeSingle();
-
-  if (error) {
-    console.error(`Failed to load snapshot "${snapshotId}" from Supabase:`, error);
-    return { ok: false, error };
+  const tokenResult = requireAccessToken();
+  if (!tokenResult.ok) {
+    return { ok: false, error: tokenResult.error, reason: 'no_family_token' };
   }
 
-  return { ok: true, data };
-}
+  const { response, data } = await getFamilySnapshot(tokenResult.token);
+  handleHttpAuthFailure(response.status);
 
-async function resolveActiveSnapshotRow() {
-  validateEnvironmentIsolation();
-  const activeSnapshotId = getSyncSnapshotId();
-
-  if (!activeSnapshotId) {
-    return {
-      ok: false,
-      error: new Error('No active household snapshot'),
-      reason: 'no_active_household'
-    };
+  if (response.status === 401) {
+    return { ok: false, error: new Error('unauthorized'), reason: 'unauthorized' };
   }
 
-  return fetchSnapshotRow(activeSnapshotId);
+  if (!response.ok || !data?.ok) {
+    console.error('[SYNC] GET family-snapshot failed', response.status, data);
+    return { ok: false, error: new Error('fetch_failed') };
+  }
+
+  return {
+    ok: true,
+    data: {
+      payload: data.payload,
+      updated_at: data.updated_at
+    },
+    rowExists: data.row_exists !== false && data.updated_at != null
+  };
 }
 
 export function schedulePushSharedState(state) {
@@ -100,8 +108,11 @@ export function schedulePushSharedState(state) {
   }
 
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => {
-    pushSharedState(state);
+  pushTimer = setTimeout(async () => {
+    const result = await pushSharedState(state);
+    if (result?.conflict && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(FAMILY_SYNC_CONFLICT_EVENT));
+    }
   }, PUSH_DELAY_MS);
 }
 
@@ -111,8 +122,9 @@ export async function pushSharedState(state) {
   }
 
   const activeSnapshotId = getSyncSnapshotId();
-  if (!activeSnapshotId) {
-    return { ok: false, reason: 'no_active_household', error: new Error('No active household snapshot') };
+  const tokenResult = requireAccessToken();
+  if (!tokenResult.ok) {
+    return { ok: false, reason: 'no_family_token', error: tokenResult.error };
   }
 
   const pushGuard = shouldAllowRemotePush(state, lastRemoteSnapshot);
@@ -124,24 +136,42 @@ export async function pushSharedState(state) {
   assertSnapshotId(activeSnapshotId, 'write');
 
   const payload = exportSharedSnapshot(state);
-  const updatedAt = new Date().toISOString();
+  const { response, data } = await putFamilySnapshot(tokenResult.token, {
+    payload,
+    expectedUpdatedAt: lastRemoteUpdatedAt
+  });
 
-  const { data, error } = await supabase
-    .from('household_snapshots')
-    .upsert({
-      id: activeSnapshotId,
-      payload,
-      updated_at: updatedAt
-    })
-    .select('updated_at')
-    .single();
+  handleHttpAuthFailure(response.status);
 
-  if (error) {
-    console.error('Failed to save shared state to Supabase:', error);
-    return { ok: false, error };
+  if (response.status === 401) {
+    return { ok: false, reason: 'unauthorized', error: new Error('unauthorized') };
   }
 
-  lastRemoteUpdatedAt = data?.updated_at ?? updatedAt;
+  if (response.status === 409 && data?.current) {
+    const normalized = normalizeSharedSnapshot(data.current.payload ?? {});
+    lastRemoteSnapshot = hasSharedData(normalized)
+      ? cloneSnapshotPayload(normalized)
+      : null;
+    lastRemoteUpdatedAt = data.current.updated_at ?? null;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(FAMILY_SYNC_CONFLICT_EVENT));
+    }
+    return {
+      ok: false,
+      reason: 'conflict',
+      error: new Error('conflict'),
+      conflict: true,
+      currentSnapshot: normalized,
+      currentUpdatedAt: data.current.updated_at ?? null
+    };
+  }
+
+  if (!response.ok || !data?.ok) {
+    console.error('[SYNC] PUT family-snapshot failed', response.status, data);
+    return { ok: false, error: new Error('push_failed') };
+  }
+
+  lastRemoteUpdatedAt = data.updated_at ?? new Date().toISOString();
   lastRemoteSnapshot = cloneSnapshotPayload(payload);
   lastPushedAt = Date.now();
   return { ok: true, updatedAt: lastRemoteUpdatedAt };
@@ -153,15 +183,8 @@ export async function fetchRemoteSharedSnapshot() {
   }
 
   const snapshotId = getSyncSnapshotId();
-  if (!snapshotId) {
-    return {
-      ok: false,
-      reason: 'no_active_household',
-      error: new Error('No active household snapshot')
-    };
-  }
+  const snapshotResult = await fetchSnapshotRow(snapshotId);
 
-  const snapshotResult = await resolveActiveSnapshotRow();
   if (!snapshotResult.ok) {
     return {
       ok: false,
@@ -171,18 +194,10 @@ export async function fetchRemoteSharedSnapshot() {
   }
 
   const data = snapshotResult.data;
-  const rowExists = Boolean(data);
+  const rowExists = snapshotResult.rowExists;
   const rawPayload = data?.payload ?? null;
   const hasData = hasSharedData(rawPayload);
   const normalized = normalizeSharedSnapshot(rawPayload ?? {});
-
-  if (requiresHouseholdSnapshot() && isHouseholdSnapshotId(snapshotId) && !rowExists) {
-    return {
-      ok: false,
-      reason: 'snapshot_row_missing',
-      error: new Error(`Household snapshot row missing: ${snapshotId}`)
-    };
-  }
 
   lastRemoteSnapshot = hasData ? cloneSnapshotPayload(normalized) : null;
   lastRemoteUpdatedAt = data?.updated_at ?? null;
@@ -199,39 +214,44 @@ export async function fetchRemoteSharedSnapshot() {
   };
 }
 
-/** Fetch-only remote read — does not mutate in-memory state. */
 export async function pullSharedStateInto(_state) {
   void _state;
   return fetchRemoteSharedSnapshot();
 }
 
 export async function clearRemoteSharedState() {
-  const activeSnapshotId = getSyncSnapshotId();
-  if (!activeSnapshotId) {
-    return { ok: false, reason: 'no_active_household', error: new Error('No active household snapshot') };
+  if (isLocalOnlyTestMode()) {
+    return { ok: true, skipped: true };
   }
 
+  const activeSnapshotId = getSyncSnapshotId();
   assertSnapshotId(activeSnapshotId, 'write');
 
-  const { error } = await supabase
-    .from('household_snapshots')
-    .upsert({
-      id: activeSnapshotId,
-      payload: exportSharedSnapshot({
-        accounts: [],
-        categories: [],
-        transactions: [],
-        obligations: [],
-        savings: [],
-        debts: [],
-        exchangeRate: 92
-      }),
-      updated_at: new Date().toISOString()
-    });
+  const emptyPayload = exportSharedSnapshot({
+    accounts: [],
+    categories: [],
+    transactions: [],
+    obligations: [],
+    savings: [],
+    debts: [],
+    exchangeRate: 92
+  });
 
-  if (error) {
-    console.error('Failed to clear shared state in Supabase:', error);
-    return { ok: false, error };
+  const tokenResult = requireAccessToken();
+  if (!tokenResult.ok) {
+    return { ok: false, reason: 'no_family_token', error: tokenResult.error };
+  }
+
+  const { response, data } = await putFamilySnapshot(tokenResult.token, {
+    payload: emptyPayload,
+    expectedUpdatedAt: lastRemoteUpdatedAt
+  });
+
+  handleHttpAuthFailure(response.status);
+
+  if (!response.ok || !data?.ok) {
+    console.error('[SYNC] clear remote failed', response.status);
+    return { ok: false, error: new Error('clear_failed') };
   }
 
   lastRemoteUpdatedAt = null;
@@ -239,41 +259,34 @@ export async function clearRemoteSharedState() {
   return { ok: true };
 }
 
-export function subscribeSharedState(state, onChange) {
-  void state;
+/** Realtime disabled — use polling via startFamilySyncPolling in app.js */
+export function subscribeSharedState(_state, _onChange) {
+  void _state;
+  void _onChange;
+  return () => {};
+}
+
+const POLL_INTERVAL_MS = 50_000;
+
+export function startFamilySyncPolling(onPoll) {
   if (isLocalOnlyTestMode()) {
     return () => {};
   }
 
-  const activeSnapshotId = getActiveHouseholdSnapshotId();
-  if (!activeSnapshotId) {
-    console.warn('[SYNC] Realtime subscribe skipped: no active household');
-    return () => {};
-  }
+  let timer = null;
 
-  validateEnvironmentIsolation();
+  const tick = () => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return;
+    }
+    onPoll();
+  };
 
-  const channel = supabase
-    .channel(getRealtimeChannelName(activeSnapshotId))
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'household_snapshots',
-        filter: `id=eq.${activeSnapshotId}`
-      },
-      async (payload) => {
-        const rowId = payload.new?.id ?? payload.old?.id;
-        if (rowId !== activeSnapshotId) {
-          return;
-        }
-        onChange();
-      }
-    )
-    .subscribe();
+  timer = setInterval(tick, POLL_INTERVAL_MS);
 
   return () => {
-    supabase.removeChannel(channel);
+    if (timer) {
+      clearInterval(timer);
+    }
   };
 }

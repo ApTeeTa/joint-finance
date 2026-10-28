@@ -99,7 +99,8 @@
       );
       assert(!fail.ok, 'must fail');
       assert(fail.error.includes('свобод'), fail.error);
-      assert(calculateFreeBalance(state) === 1000, 'free unchanged');
+      // total 105000 (100k+5k), reserved 99000 → free 6000
+      assert(calculateFreeBalance(state) === 6000, 'free unchanged');
     });
 
     await run('TEST 2 — recordAccountTransfer не уходит в минус', 'test2', () => {
@@ -139,8 +140,9 @@
       }
     });
 
-    await run('TEST 4 — обязательства работают без UI auto-reserve', 'test4', () => {
+    await run('TEST 4 — обязательства: резерв затем оплата', 'test4', () => {
       const state = baseState();
+      state.obligations[0].reserveAmount = 5000;
       const result = payObligation(
         state,
         'obl',
@@ -193,7 +195,9 @@
     Object.entries(results).forEach(([key, status]) => {
       log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
     });
-    log('\nГотово.');
+    const failed = Object.values(results).filter((s) => s === 'FAIL').length;
+    log(failed === 0 ? '\nALL PASSED' : `\n${failed} FAILED`, failed ? 'fail' : 'pass');
+    window.__QA_RESULT__ = { failed, passed: failed === 0 };
   </script>
 </body>
 </html>

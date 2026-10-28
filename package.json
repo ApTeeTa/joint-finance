@@ -5,7 +5,5 @@
   "scripts": {
     "check:architecture": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/architecture-lock-check.ps1"
   },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.49.1"
-  }
+  "dependencies": {}
 }

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Tests: Family mode modules</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Family mode module tests</h1>
+  <ul id="results"></ul>
+  <script type="module">
+    import {
+      FAMILY_SNAPSHOT_ID,
+      getActiveSnapshotId,
+      getFinancialStorageKey,
+      requiresHouseholdSnapshot
+    } from '../src/config/environmentConfig.js';
+    import { TOKEN_KEY, EXP_KEY } from '../src/lib/familySession.js';
+
+    const results = document.getElementById('results');
+
+    function assert(name, condition) {
+      const li = document.createElement('li');
+      li.className = condition ? 'pass' : 'fail';
+      li.textContent = `${condition ? 'PASS' : 'FAIL'}: ${name}`;
+      results.appendChild(li);
+    }
+
+    assert('family snapshot id', getActiveSnapshotId() === 'family');
+    assert('FAMILY_SNAPSHOT_ID constant', FAMILY_SNAPSHOT_ID === 'family');
+    assert('storage key', getFinancialStorageKey() === 'joint-finance-state-v2-family');
+    assert('no household snapshot mode', requiresHouseholdSnapshot() === false);
+    assert('token storage keys', TOKEN_KEY === 'joint-finance-family-token' && EXP_KEY === 'joint-finance-family-token-exp');
+
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = document.createElement('p');
+    summary.className = failed ? 'fail' : 'pass';
+    summary.textContent = failed === 0 ? 'ALL PASSED' : `${failed} FAILED`;
+    results.after(summary);
+    window.__QA_RESULT__ = { failed, passed: failed === 0 };
+  </script>
+</body>
+</html>

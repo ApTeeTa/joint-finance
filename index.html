@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1e4d56">
+  <meta name="theme-color" content="#065a46">
   <meta name="description" content="Семейный учёт финансов">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -26,58 +26,52 @@
           },
           colors: {
             primary: {
-              50: '#eef7f5',
-              100: '#d5ebe6',
-              500: '#3d8b7a',
-              600: '#2d6b5c',
-              700: '#1e4d56'
+              50: '#e6f4ef',
+              100: '#cce9df',
+              500: '#0d7a5f',
+              600: '#065a46',
+              700: '#044536'
             },
-            accent: { 500: '#c8956c', 600: '#a8764f' },
+            accent: { 500: '#b8922e', 600: '#967024' },
             surface: {
-              DEFAULT: '#fffcf8',
-              muted: '#f4f1eb',
-              border: '#e6dfd4'
+              DEFAULT: '#ffffff',
+              muted: '#f7f7f5',
+              border: '#e8eae7'
             }
           },
           boxShadow: {
-            card: '0 1px 2px rgba(30, 77, 86, 0.06), 0 8px 24px rgba(30, 77, 86, 0.06)'
+            card: '0 4px 24px rgba(20, 24, 22, 0.08)'
           }
         }
-      }
-    }
-  </script>
-  <script type="importmap">
-    {
-      "imports": {
-        "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/+esm"
       }
     }
   </script>
   <style>
     :root {
       --header-height: 0px;
-      --color-primary: #1e4d56;
-      --color-primary-soft: #d5ebe6;
-      --color-primary-hover: #2d6b5c;
-      --color-surface: #fffcf8;
-      --color-surface-muted: #f4f1eb;
-      --color-border: #e6dfd4;
-      --color-text: #1c2b33;
-      --color-text-muted: #5c6b73;
+      --color-primary: #1a3d32;
+      --color-primary-soft: #dce8e3;
+      --color-primary-hover: #234f42;
+      --color-surface: #fafaf8;
+      --color-surface-muted: #f0efec;
+      --color-border: #e2e4e0;
+      --color-text: #1a2421;
+      --color-text-muted: #5c6560;
       --color-free: #2d6b5c;
-      --color-free-bg: #e8f3ef;
-      --color-reserved: #a8764f;
-      --color-reserved-bg: #f8efe6;
+      --color-free-bg: #e6f0eb;
+      --color-free-border: #c5d9ce;
+      --color-reserved: #8b7355;
+      --color-reserved-bg: #f3efe8;
+      --color-reserved-border: #e0d5c8;
       --radius-card: 1rem;
-      --shadow-card: 0 1px 2px rgba(30, 77, 86, 0.06), 0 8px 24px rgba(30, 77, 86, 0.06);
+      --shadow-card: 0 1px 2px rgba(26, 61, 50, 0.05), 0 6px 20px rgba(26, 61, 50, 0.06);
+      --font-amount-tracking: -0.03em;
     }
 
     body {
       font-family: 'Onest', system-ui, sans-serif;
       color: var(--color-text);
-      background:
-        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(213, 235, 230, 0.45), transparent 55%),
-        var(--color-surface-muted);
+      background: var(--color-surface-muted);
     }
 
     html {
@@ -94,10 +88,10 @@
     }
 
     #app-header {
-      background: rgba(255, 252, 248, 0.92);
-      backdrop-filter: blur(10px);
+      background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+      backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--color-border);
-      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
     }
 
     .app-brand-title {
@@ -118,8 +112,8 @@
     }
 
     .profile-btn:hover:not(.profile-btn-active) {
-      background: #faf7f2;
-      border-color: #d9d0c4;
+      background: var(--color-surface-muted);
+      border-color: var(--color-border);
     }
 
     .profile-btn-active {
@@ -150,17 +144,17 @@
     }
 
     .balance-card--total {
-      background: linear-gradient(135deg, #fffcf8 0%, #f7f3ec 100%);
+      background: var(--color-surface);
     }
 
     .balance-card--free {
       background: var(--color-free-bg);
-      border-color: #cfe5dc;
+      border-color: var(--color-free-border);
     }
 
     .balance-card--reserved {
       background: var(--color-reserved-bg);
-      border-color: #ead9c8;
+      border-color: var(--color-reserved-border);
     }
 
     .balance-card-label {
@@ -176,7 +170,8 @@
     .balance-card-value {
       font-size: 1.25rem;
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: var(--font-amount-tracking);
+      font-variant-numeric: tabular-nums;
       line-height: 1.2;
       white-space: nowrap;
       overflow: hidden;
@@ -199,8 +194,8 @@
       width: 1rem;
       height: 1rem;
       border-radius: 9999px;
-      border: 1px solid #9ec5b5;
-      background: #fff;
+      border: 1px solid var(--color-free-border);
+      background: var(--color-surface);
       color: var(--color-free);
       font-size: 0.625rem;
       font-weight: 700;
@@ -222,7 +217,7 @@
       font-size: 0.6875rem;
       line-height: 1.35;
       color: var(--color-text);
-      background: #fff;
+      background: var(--color-surface);
       border: 1px solid var(--color-border);
       border-radius: 0.625rem;
       padding: 0.5rem 0.625rem;
@@ -239,8 +234,8 @@
       padding: 0.625rem 1rem;
       min-height: 2.5rem;
       border-radius: 0.875rem;
-      border: 1px solid #b9d9cf;
-      background: linear-gradient(135deg, #f3fbf7 0%, #e8f5ef 100%);
+      border: 1px solid var(--color-free-border);
+      background: var(--color-free-bg);
       color: var(--color-primary);
       font-size: 0.875rem;
       font-weight: 600;
@@ -248,8 +243,8 @@
     }
 
     .purchase-planner-btn:hover {
-      background: #e3f3eb;
-      border-color: #9ec5b5;
+      background: var(--color-primary-soft);
+      border-color: var(--color-free-border);
     }
     .balance-card--reserved .balance-card-label { color: var(--color-reserved); }
     .balance-card--reserved .balance-card-value { color: var(--color-reserved); }
@@ -260,7 +255,7 @@
       gap: 0.375rem;
       padding: 0.25rem;
       border-radius: 0.875rem;
-      background: rgba(255, 252, 248, 0.8);
+      background: color-mix(in srgb, var(--color-surface) 88%, transparent);
       border: 1px solid var(--color-border);
     }
 
@@ -278,7 +273,7 @@
 
     .tab-btn-active {
       background: var(--color-primary-soft) !important;
-      border-color: #b9d9cf !important;
+      border-color: var(--color-free-border) !important;
       color: var(--color-primary) !important;
       font-weight: 600;
     }
@@ -938,38 +933,44 @@
       font-size: 1.25rem;
     }
   </style>
+  <link rel="stylesheet" href="/src/styles/jf-design-system.css">
+  <script>
+    (function loadJointFinanceDesignCss() {
+      var link = document.querySelector('link[href*="jf-design-system"]');
+      var href = link && link.getAttribute('href');
+      if (!href) return;
+      fetch(href, { cache: 'no-store' }).then(function (r) {
+        if (!r.ok) return r.text();
+        return r.text().then(function (cssText) {
+          if (!cssText || cssText.indexOf(':root') < 0) return;
+          if (document.getElementById('jf-design-system-injected')) return;
+          var style = document.createElement('style');
+          style.id = 'jf-design-system-injected';
+          style.textContent = cssText;
+          document.head.appendChild(style);
+        });
+      }).catch(function () {});
+    })();
+  </script>
 </head>
 <body class="app-body min-h-screen overflow-x-hidden">
 
-  <div id="auth-gate" class="max-w-5xl mx-auto px-5 py-6 min-w-0" aria-live="polite"></div>
+  <div id="family-gate" class="max-w-5xl mx-auto px-5 py-6 min-w-0" aria-live="polite"></div>
 
   <div id="app-shell" class="hidden">
   <header id="app-header" class="sticky top-0 z-20">
     <div class="max-w-5xl mx-auto px-5 py-5 min-w-0">
       <div class="flex flex-row items-start justify-between gap-4 mb-5">
         <div class="min-w-0">
-          <h1 class="app-brand-title text-2xl font-bold text-slate-900">Семейные финансы</h1>
-          <p class="app-brand-subtitle mt-0.5">Совместный учёт для двоих</p>
+          <h1 class="app-brand-title">Joint Finance</h1>
+          <p class="app-brand-subtitle mt-0.5">Семейный учёт</p>
         </div>
         <div class="flex gap-2 shrink-0 items-center" id="header-actions">
           <button
             type="button"
-            id="join-household-btn"
-            data-action="open-join-household"
-            class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
-          >Присоединиться</button>
-          <button
-            type="button"
-            id="invite-partner-btn"
-            data-action="open-invite-partner"
-            class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-primary-700 hover:bg-surface-muted transition-colors"
-          >Пригласить</button>
-          <button
-            type="button"
-            id="sign-out-btn"
-            data-action="auth-sign-out-app"
-            class="hidden px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-slate-600 hover:bg-surface-muted transition-colors"
-          >Выйти</button>
+            id="family-lock-btn"
+            class="px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-slate-600 hover:bg-surface-muted transition-colors"
+          >Заблокировать</button>
         <div class="flex gap-2 shrink-0" id="profile-selector">
           <button
             type="button"
@@ -985,46 +986,48 @@
         </div>
       </div>
 
-      <div class="balance-strip mb-5 min-w-0">
-        <div class="balance-card balance-card--total">
-          <p class="balance-card-label">Общий баланс</p>
-          <p id="total-balance" class="balance-card-value text-slate-900">0 ₽</p>
-        </div>
+      <div class="jf-hero mb-5 min-w-0">
         <div class="balance-card balance-card--free">
           <div class="balance-card-label-row">
-            <p class="balance-card-label mb-0">Свободные</p>
+            <p class="balance-card-label mb-0">Свободно</p>
             <button
               type="button"
-              class="balance-help-btn"
+              class="balance-help-btn jf-interactive"
               data-action="toggle-free-help"
-              aria-label="Что такое «Свободные»?"
-              title="Что такое «Свободные»?"
+              aria-label="Что такое «Свободно»?"
+              title="Что такое «Свободно»?"
             >?</button>
           </div>
-          <p id="free-balance" class="balance-card-value">0 ₽</p>
+          <p id="free-balance" class="balance-card-value jf-amount-hero">0 ₽</p>
           <div id="free-help-popover" class="hidden" role="tooltip">
-            Свободные — это деньги без назначенной задачи: они ещё не отложены в копилки, обязательства или резервы. Если свободных 0 ₽, весь текущий баланс уже распределён.
-            <button type="button" data-action="dismiss-free-help" class="block mt-1 text-primary-700 hover:text-primary-800 font-medium">Понятно</button>
+            Свободно — деньги без назначенной задачи: они ещё не отложены в копилки, обязательства или резервы. Если 0 ₽, весь баланс уже распределён.
+            <button type="button" data-action="dismiss-free-help" class="block mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium jf-interactive">Понятно</button>
           </div>
         </div>
-        <div class="balance-card balance-card--reserved">
-          <p class="balance-card-label">Зарезервировано</p>
-          <p id="reserved-balance" class="balance-card-value">0 ₽</p>
+        <div class="jf-hero-secondary">
+          <div class="balance-card balance-card--total">
+            <p class="balance-card-label">Всего</p>
+            <p id="total-balance" class="balance-card-value">0 ₽</p>
+          </div>
+          <div class="balance-card balance-card--reserved">
+            <p class="balance-card-label">В резервах</p>
+            <p id="reserved-balance" class="balance-card-value">0 ₽</p>
+          </div>
         </div>
       </div>
 
-      <button type="button" data-action="open-purchase-planner" class="purchase-planner-btn">
+      <button type="button" data-action="open-purchase-planner" class="purchase-planner-btn jf-interactive">
         Запланировать покупку
       </button>
 
-      <nav id="tab-nav" aria-label="Навигация">
+      <nav id="tab-nav" class="tab-nav-desktop" aria-label="Навигация">
         <button type="button" data-tab="accounts" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Счета</button>
         <button type="button" data-tab="categories" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Категории</button>
         <button type="button" data-tab="history" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">История</button>
         <button type="button" data-tab="obligations" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Обязательства</button>
         <button type="button" data-tab="savings" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Копилки</button>
-        <button type="button" data-tab="debts" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Долги</button>
-        <button type="button" data-tab="stats" class="tab-btn whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Статистика</button>
+        <button type="button" data-tab="debts" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Долги</button>
+        <button type="button" data-tab="stats" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[40px] rounded-lg text-sm font-medium">Статистика</button>
       </nav>
       <p id="build-stamp" class="mt-2 text-[10px] text-slate-400 text-center">beta · тестовая версия</p>
     </div>
@@ -1038,6 +1041,22 @@
 
   <main id="tab-content" class="max-w-5xl mx-auto px-5 py-6 min-w-0 overflow-x-hidden">
   </main>
+
+  <div id="tab-more-backdrop" class="hidden fixed inset-0 z-[34] bg-slate-900/25" aria-hidden="true"></div>
+  <div id="tab-more-sheet" aria-label="Дополнительные разделы">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 px-1">Ещё разделы</p>
+    <button type="button" data-tab="obligations" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium">Обязательства</button>
+    <button type="button" data-tab="debts" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium">Долги</button>
+    <button type="button" data-tab="stats" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium">Статистика</button>
+  </div>
+
+  <nav id="tab-nav-mobile-dock" aria-label="Навигация">
+    <button type="button" data-tab="accounts" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">🏠</span><span class="tab-label">Счета</span></button>
+    <button type="button" data-tab="categories" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">📂</span><span class="tab-label">Категории</span></button>
+    <button type="button" data-tab="history" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">📋</span><span class="tab-label">История</span></button>
+    <button type="button" data-tab="savings" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">🐷</span><span class="tab-label">Копилки</span></button>
+    <button type="button" id="tab-more-btn" data-action="toggle-tab-more" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">⋯</span><span class="tab-label">Ещё</span></button>
+  </nav>
   </div>
 
   <div id="modal-root" aria-hidden="true"></div>

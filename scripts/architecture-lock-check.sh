@@ -16,8 +16,8 @@ while IFS= read -r -d '' file; do
   rel="${file#"$ROOT"/}"
   while IFS= read -r line; do
     if [[ "$line" =~ supabase\.from\( ]]; then
-      if [[ "$rel" != "src/lib/stateRemote.js" && "$rel" != "src/lib/householdRemote.js" ]]; then
-        fail "supabase.from outside allowlist: $rel"
+      if [[ "$rel" != "src/lib/stateRemote.js" ]]; then
+        fail "supabase.from outside allowlist: $rel (family mode uses Edge Functions only)"
       fi
     fi
   done < "$file"

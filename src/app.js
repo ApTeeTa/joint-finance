@@ -6,9 +6,27 @@ BACKUP SNAPSHOT:
 - State: CARD_STATE controls expanded visibility
 - Stable build checkpoint created for rollback
 */
-import './lib/supabase.js';
-import './lib/householdContext.js';
 import { UI } from './modules/uiTheme.js';
+
+/** Local static servers may serve .css as octet-stream; inject so rules apply. */
+async function ensureDesignStylesLoaded() {
+  if (document.getElementById('jf-design-system-injected')) return;
+  const link = document.querySelector('link[href*="jf-design-system"]');
+  const href = link?.getAttribute('href');
+  if (!href) return;
+  try {
+    const response = await fetch(href, { cache: 'no-store' });
+    if (!response.ok) return;
+    const cssText = await response.text();
+    if (!cssText.includes(':root')) return;
+    const style = document.createElement('style');
+    style.id = 'jf-design-system-injected';
+    style.textContent = cssText;
+    document.head.appendChild(style);
+  } catch {
+    /* production CDN / Vercel serves text/css — link alone is enough */
+  }
+}
 
 import {
   calculateTotalBalance,
@@ -28,37 +46,26 @@ import { saveState, loadState, clearState, hardResetStateFromRemoteSnapshot } fr
 import { relocateModals, closeAllModals } from './modules/modalLayer.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
 import { validateEnvironmentIsolation, isLocalOnlyTestMode } from './config/environmentConfig.js';
-import { ensureBetaAccess } from './modules/betaOnboarding.js';
 import {
-  initHouseholdInviteHandlers,
-  mountInviteModal,
-  updateInviteHeaderButton
-} from './modules/householdInvite.js';
-import {
-  initHouseholdAccountHandlers,
-  mountJoinHouseholdModal,
-  mountEditDisplayNameModal,
-  openEditDisplayName,
-  updateAccountHeaderButtons
-} from './modules/householdAccount.js';
+  ensureFamilyAccess,
+  initFamilyUnauthorizedListener,
+  clearFamilySession,
+  lockAppAndShowGate
+} from './lib/familySession.js';
 import {
   mountPurchasePlannerModal,
   initPurchasePlannerHandlers
 } from './modules/purchasePlanner.js';
 import { openAddSavingPrefilled } from './modules/savings.js';
-import { getCurrentUser } from './lib/authSession.js';
-import {
-  getProfileLabel,
-  refreshHouseholdProfileLabels,
-  findMemberByUserId,
-  resolveProfileKeyForMember
-} from './lib/householdMemberLabels.js';
+import { getProfileLabel } from './lib/householdMemberLabels.js';
 import {
   fetchRemoteSharedSnapshot,
-  subscribeSharedState,
+  startFamilySyncPolling,
   clearRemoteSharedState,
   markInitialSyncDone,
-  getLastRemoteSnapshot
+  getLastRemoteSnapshot,
+  resetSyncSession,
+  FAMILY_SYNC_CONFLICT_EVENT
 } from './lib/stateRemote.js';
 import {
   shouldApplyRemoteSnapshot,
@@ -118,8 +125,9 @@ let totalBalanceEl;
 let freeBalanceEl;
 let reservedBalanceEl;
 let lastValidState = null;
-let ownProfileKey = null;
 let lastSyncReason = null;
+let stopSyncPolling = null;
+let financialAppBooted = false;
 
 const INVARIANT_ROLLBACK_ALERT = 'Операция отменена: свободный баланс не может быть отрицательным!';
 
@@ -175,29 +183,10 @@ function renderProfile() {
     if (profileKey) {
       btn.textContent = getProfileLabel(profileKey);
     }
-    const isOwnName = ownProfileKey && profileKey === ownProfileKey;
-    const isOwnActive = isOwnName && state.profile === ownProfileKey;
     btn.classList.toggle('profile-btn-active', profileKey === state.profile);
-    btn.classList.toggle('profile-btn-own', isOwnName);
-    btn.title = isOwnActive ? 'Изменить имя' : (isOwnName ? 'Выбрать себя' : '');
+    btn.classList.remove('profile-btn-own');
+    btn.title = '';
   });
-}
-
-async function applyHouseholdProfileLabels() {
-  await refreshHouseholdProfileLabels();
-
-  if (!isLocalOnlyTestMode()) {
-    const user = await getCurrentUser();
-    const member = user?.id ? findMemberByUserId(user.id) : null;
-    ownProfileKey = resolveProfileKeyForMember(member);
-    if (ownProfileKey) {
-      state.profile = ownProfileKey;
-    }
-  } else {
-    ownProfileKey = null;
-  }
-
-  renderProfile();
 }
 
 function updateCounters() {
@@ -266,9 +255,6 @@ function resetAllData() {
 function finishTabRender() {
   closeAllModals();
   relocateModals(tabContent);
-  mountInviteModal();
-  mountJoinHouseholdModal();
-  mountEditDisplayNameModal();
   mountPurchasePlannerModal();
   syncHeaderHeight();
   onStateChange();
@@ -279,9 +265,14 @@ function renderTab(tab) {
 
   state.activeTab = tab;
 
+  const overflowTabs = ['obligations', 'debts', 'stats'];
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.toggle('tab-btn-active', btn.dataset.tab === tab);
   });
+  document.getElementById('tab-more-btn')?.classList.toggle(
+    'tab-btn-active',
+    overflowTabs.includes(tab)
+  );
 
   if (tab === 'accounts') {
     renderAccounts(state, tabContent);
@@ -366,13 +357,8 @@ function initDisplayModeRefresh() {
 
 function initProfileHandlers() {
   document.querySelectorAll('.profile-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const profileKey = btn.dataset.profile;
-      const isOwnName = !isLocalOnlyTestMode() && ownProfileKey && profileKey === ownProfileKey;
-      if (isOwnName && state.profile === ownProfileKey) {
-        await openEditDisplayName();
-        return;
-      }
       state.profile = profileKey;
       renderProfile();
       renderTab(state.activeTab);
@@ -380,15 +366,84 @@ function initProfileHandlers() {
   });
 }
 
-function initTabHandlers() {
-  const tabNav = document.getElementById('tab-nav');
-  if (!tabNav) return;
-
-  tabNav.addEventListener('click', (event) => {
-    const btn = event.target.closest('.tab-btn');
-    if (!btn) return;
-    renderTab(btn.dataset.tab);
+function initFamilyLockHandlers() {
+  document.getElementById('family-lock-btn')?.addEventListener('click', () => {
+    if (!confirm('Заблокировать приложение на этом устройстве? Потребуется семейный пароль.')) {
+      return;
+    }
+    stopSyncPolling?.();
+    stopSyncPolling = null;
+    resetSyncSession();
+    clearFamilySession();
+    financialAppBooted = false;
+    lockAppAndShowGate();
   });
+}
+
+function closeTabMoreSheet() {
+  document.getElementById('tab-more-sheet')?.classList.remove('is-open');
+  document.getElementById('tab-more-backdrop')?.classList.add('hidden');
+}
+
+function openTabMoreSheet() {
+  document.getElementById('tab-more-sheet')?.classList.add('is-open');
+  document.getElementById('tab-more-backdrop')?.classList.remove('hidden');
+}
+
+function handleTabNavClick(event) {
+  if (event.target.closest('[data-action="toggle-tab-more"]')) {
+    const sheet = document.getElementById('tab-more-sheet');
+    if (sheet?.classList.contains('is-open')) {
+      closeTabMoreSheet();
+    } else {
+      openTabMoreSheet();
+    }
+    return;
+  }
+
+  const btn = event.target.closest('.tab-btn[data-tab]');
+  if (!btn?.dataset.tab) return;
+
+  closeTabMoreSheet();
+  renderTab(btn.dataset.tab);
+}
+
+function initTabHandlers() {
+  document.getElementById('tab-nav')?.addEventListener('click', handleTabNavClick);
+  document.getElementById('tab-nav-mobile-dock')?.addEventListener('click', handleTabNavClick);
+  document.getElementById('tab-more-sheet')?.addEventListener('click', handleTabNavClick);
+  document.getElementById('tab-more-backdrop')?.addEventListener('click', closeTabMoreSheet);
+
+  document.addEventListener('joint-finance:navigate-tab', (event) => {
+    const tab = event.detail?.tab;
+    if (tab) {
+      closeTabMoreSheet();
+      renderTab(tab);
+    }
+  });
+}
+
+function initVisualActionBusyGuard() {
+  const skipActions = new Set([
+    'family-unlock',
+    'close-modal',
+    'toggle-free-help',
+    'dismiss-free-help',
+    'exchange-rate',
+    'toggle-tab-more',
+    'navigate-tab'
+  ]);
+
+  document.addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-action]');
+    if (!btn || btn.disabled || btn.dataset.busy === 'true') return;
+    const action = btn.dataset.action;
+    if (!action || skipActions.has(action)) return;
+    btn.dataset.busy = 'true';
+    window.setTimeout(() => {
+      delete btn.dataset.busy;
+    }, 400);
+  }, true);
 }
 
 function syncHeaderHeight() {
@@ -476,7 +531,7 @@ async function syncFromRemote() {
     }
 
     const flushResult = await flushOfflineQueue(state);
-    if (!flushResult.ok && !flushResult.skipped) {
+    if (!flushResult.ok && !flushResult.skipped && !flushResult.conflict) {
       lastSyncReason = 'offline_queue_flush_failed';
       showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
       return { ok: false, error: flushResult.error, reason: 'offline_queue_flush_failed' };
@@ -537,6 +592,11 @@ async function syncFromRemote() {
 }
 
 async function bootFinancialApp() {
+  if (financialAppBooted) {
+    return;
+  }
+  financialAppBooted = true;
+
   initDisplayModeSystem();
   initDisplayModeRefresh();
   applyLoadedState(loadState());
@@ -555,13 +615,27 @@ async function bootFinancialApp() {
       }
     });
 
-    subscribeSharedState(state, async () => {
-      await syncFromRemote();
+    stopSyncPolling?.();
+    stopSyncPolling = startFamilySyncPolling(() => {
+      syncFromRemote();
     });
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible') return;
       syncFromRemote();
+    });
+
+    window.addEventListener('online', () => {
+      syncFromRemote();
+    });
+
+    window.addEventListener(FAMILY_SYNC_CONFLICT_EVENT, () => {
+      syncFromRemote();
+    });
+
+    initFamilyUnauthorizedListener(() => {
+      resetSyncSession();
+      financialAppBooted = false;
     });
 
     const syncResult = await syncFromRemote();
@@ -574,33 +648,30 @@ async function bootFinancialApp() {
     }
   }
 
-  await applyHouseholdProfileLabels();
+  renderProfile();
   updateCounters();
   initProfileHandlers();
+  initFamilyLockHandlers();
   initTabHandlers();
+  initVisualActionBusyGuard();
   initHeaderHeightSync();
-  mountInviteModal();
-  mountJoinHouseholdModal();
-  mountEditDisplayNameModal();
   mountPurchasePlannerModal();
-  initHouseholdInviteHandlers();
-  initHouseholdAccountHandlers();
   initPurchasePlannerHandlers(state, {
     onSaveForPurchase: ({ name, targetAmount }) => {
       renderTab('savings');
       openAddSavingPrefilled(tabContent, { name, targetAmount });
     }
   });
-  updateInviteHeaderButton();
-  updateAccountHeaderButtons();
   renderTab(state.activeTab || 'accounts');
   console.log('[BOOT OK]', {
-    build: 'beta-b4-oauth',
-    branch: 'beta'
+    build: 'family-mode',
+    snapshot: 'family'
   });
 }
 
 async function init() {
+  await ensureDesignStylesLoaded();
+
   tabContent = document.getElementById('tab-content');
   totalBalanceEl = document.getElementById('total-balance');
   freeBalanceEl = document.getElementById('free-balance');
@@ -611,21 +682,15 @@ async function init() {
   try {
     validateEnvironmentIsolation();
 
-    if (!isLocalOnlyTestMode()) {
-      const access = await ensureBetaAccess({
-        onReady: async () => {
-          await bootFinancialApp();
-        }
-      });
-      if (!access.ready) {
-        return;
+    const access = await ensureFamilyAccess({
+      onReady: async () => {
+        await bootFinancialApp();
       }
-    } else {
-      document.getElementById('auth-gate')?.classList.add('hidden');
-      document.getElementById('app-shell')?.classList.remove('hidden');
-    }
+    });
 
-    await bootFinancialApp();
+    if (access.ready) {
+      await bootFinancialApp();
+    }
   } catch (error) {
     const bootError = document.getElementById('boot-error');
     if (bootError) {

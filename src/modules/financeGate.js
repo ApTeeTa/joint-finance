@@ -1,8 +1,4 @@
 import { FINANCE_ENTRY_POINTS } from './financeEntryRegistry.js';
-import {
-  BETA_ANALYTICS_EVENTS,
-  trackBetaEventFireAndForget
-} from '../lib/betaAnalytics.js';
 import { withGateContext, assertCalledFromAllowedEntryPoint } from './financeGateHelpers.js';
 import { FinanceInvariantError } from './financeCoreInvariants.js';
 import {
@@ -55,12 +51,8 @@ function runProtected(entryPoint, fn) {
   });
 }
 
-function trackRedistribution(kind, result) {
-  if (result?.ok) {
-    trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.REDISTRIBUTION_PERFORMED, {
-      redistribution_kind: kind
-    });
-  }
+function trackRedistribution(_kind, _result) {
+  /* family mode — analytics removed */
 }
 
 export function createExpense(state, categoryId, amount, accountId, comment, date, author) {
@@ -151,9 +143,6 @@ export function createSaving(state, saving, author) {
   const result = runProtected(FINANCE_ENTRY_POINTS.SAVING_ADMIN, () =>
     recordSavingCreate(state, saving, author)
   );
-  if (result?.ok) {
-    trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.SAVINGS_GOAL_CREATED);
-  }
   return result;
 }
 

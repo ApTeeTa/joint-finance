@@ -11,6 +11,8 @@ import {
 } from './mutationContract.js';
 import {
   getAccountTransactions,
+  getUserTransactions,
+  getSavingAccumulated,
   renderAccountSelectOptions,
   TYPE_LABELS
 } from './transactions.js';
@@ -874,6 +876,88 @@ function renderTopUpModal() {
   `;
 }
 
+function renderRecentTransactions(state, limit = 5) {
+  const recent = getUserTransactions(state).slice(0, limit);
+  if (!recent.length) {
+    return `<p class="text-sm text-slate-500 py-2">Операций пока нет</p>`;
+  }
+  return recent.map((tx) => {
+    const label = TYPE_LABELS[tx.type] ?? tx.type;
+    const title = escapeHtml(tx.comment || label);
+    const amount = formatMoney(tx.amount, tx.currency ?? 'RUB');
+    const isOut = String(tx.type).includes('EXPENSE') || String(tx.type).includes('SPEND');
+    const amountClass = isOut ? 'text-slate-900' : 'text-primary-600';
+    return `
+      <div class="jf-tx-row">
+        <span class="min-w-0 truncate text-slate-700">${title}</span>
+        <span class="${amountClass} font-semibold tabular-nums shrink-0">${amount}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderSavingsProgress(state, limit = 3) {
+  const items = (state.savings ?? [])
+    .map((saving) => {
+      const accumulated = getSavingAccumulated(saving);
+      const target = Number(saving.targetAmount) || 0;
+      const pct = target > 0 ? Math.min(100, Math.round((accumulated / target) * 100)) : 0;
+      return { name: saving.name ?? 'Копилка', accumulated, target, pct };
+    })
+    .filter((item) => item.target > 0)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, limit);
+
+  if (!items.length) {
+    return `<p class="text-sm text-slate-500 py-2">Нет активных целей с суммой</p>`;
+  }
+
+  return items.map((item) => `
+    <div class="jf-progress-row">
+      <div class="flex justify-between gap-2 text-sm">
+        <span class="font-medium text-slate-800 truncate">${escapeHtml(item.name)}</span>
+        <span class="text-slate-500 tabular-nums shrink-0">${item.pct}%</span>
+      </div>
+      <div class="jf-progress-track" role="presentation">
+        <div class="jf-progress-fill" style="width:${item.pct}%"></div>
+      </div>
+      <p class="text-xs text-slate-500 mt-1 tabular-nums">${formatMoney(item.accumulated)} из ${formatMoney(item.target)}</p>
+    </div>
+  `).join('');
+}
+
+function renderAccountsDashboard(state) {
+  const accounts = state.accounts ?? [];
+  const firstAccount = accounts[0];
+  const incomeAttrs = firstAccount
+    ? `data-action="open-topup" data-account-id="${escapeHtml(firstAccount.id)}"`
+    : 'data-action="open-add-account-modal"';
+
+  return `
+    <section class="jf-dashboard" aria-label="Обзор">
+      <div class="jf-quick-actions">
+        <button type="button" class="jf-quick-btn jf-quick-btn--income jf-interactive" ${incomeAttrs}>
+          <span aria-hidden="true">↑</span> Доход
+        </button>
+        <button type="button" class="jf-quick-btn jf-quick-btn--expense jf-interactive" data-action="navigate-tab" data-tab="categories">
+          <span aria-hidden="true">↓</span> Расход
+        </button>
+      </div>
+      <div class="${UI.panel} ${UI.panelPadding}">
+        <p class="jf-section-title">Цели и копилки</p>
+        ${renderSavingsProgress(state)}
+      </div>
+      <div class="${UI.panel} ${UI.panelPadding}">
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <p class="jf-section-title mb-0">Последние операции</p>
+          <button type="button" class="text-xs font-semibold text-primary-600 jf-interactive" data-action="navigate-tab" data-tab="history">Вся история</button>
+        </div>
+        ${renderRecentTransactions(state)}
+      </div>
+    </section>
+  `;
+}
+
 function renderEmptyState() {
   return `
     <div class="${UI.emptyState}">
@@ -955,6 +1039,7 @@ export function renderAccounts(state, container) {
 
   container.innerHTML = `
     <div class="space-y-4">
+      ${renderAccountsDashboard(state)}
       ${renderDisplayModeRoot(DISPLAY_MODULE_KEYS.ACCOUNTS, `
       <div class="${UI.panel} ${UI.panelPadding}">
         <div class="${UI.panelHeader}">
@@ -1146,6 +1231,15 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     if (target.closest('[data-action="close-modal"]')) {
       const btn = target.closest('[data-action="close-modal"]');
       closeModal(btn.dataset.modal);
+      return;
+    }
+
+    if (target.closest('[data-action="navigate-tab"]')) {
+      const btn = target.closest('[data-action="navigate-tab"]');
+      const tab = btn?.dataset.tab;
+      if (tab) {
+        document.dispatchEvent(new CustomEvent('joint-finance:navigate-tab', { detail: { tab } }));
+      }
       return;
     }
 

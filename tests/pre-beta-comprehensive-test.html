@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Pre-beta comprehensive tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Pre-beta — finance, flows, family sync logic</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      calculateTotalBalance,
+      calculateReservedBalance,
+      calculateFreeBalance,
+      validateState
+    } from '../src/modules/financeEngine.js';
+    import { checkFinancialInvariants } from '../src/modules/financeCoreInvariants.js';
+    import {
+      depositAccount,
+      createExpense,
+      reserveCategory,
+      unreserveCategory,
+      transferAccount
+    } from '../src/modules/financeGate.js';
+    import { simulatePurchase } from '../src/modules/purchaseSimulation.js';
+    import { todayIso } from '../src/modules/transactions.js';
+    import { validateAvailableFunds } from '../src/modules/financeValidation.js';
+    import {
+      exportSharedSnapshot,
+      normalizeSharedSnapshot
+    } from '../src/modules/storage.js';
+    import {
+      shouldApplyRemoteSnapshot,
+      shouldAllowRemotePush
+    } from '../src/lib/syncGuard.js';
+    import {
+      isAccessTokenValid,
+      TOKEN_KEY,
+      EXP_KEY
+    } from '../src/lib/familySession.js';
+    import { getProfileLabel } from '../src/lib/householdMemberLabels.js';
+    import { FAMILY_SNAPSHOT_ID, getActiveSnapshotId } from '../src/config/environmentConfig.js';
+
+    const out = document.getElementById('out');
+    const summary = { passed: 0, failed: 0, failures: [] };
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(condition, message) {
+      if (!condition) throw new Error(message);
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        summary.passed += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        summary.failed += 1;
+        summary.failures.push({ name, error: e?.message ?? String(e) });
+        log(`FAIL  ${name}: ${e?.message ?? e}`, 'fail');
+      }
+    }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [
+          { id: 'a1', name: 'Main', currency: 'RUB', balance: 10_000, owner: 'husband' },
+          { id: 'a2', name: 'USD', currency: 'USD', balance: 100, owner: 'wife' }
+        ],
+        categories: [{ id: 'food', name: 'Еда', limit: 5000, reserved: 800, spent: 0 }],
+        savings: [{ id: 's1', name: 'Отпуск', accumulated: 4000, targetAmount: 10_000 }],
+        obligations: [{ id: 'o1', name: 'Net', reserveAmount: 500, payments: [] }],
+        debts: [{ id: 'd1', direction: 'we_owe', reserved: 200, amount: 1000 }],
+        transactions: []
+      };
+    }
+
+    // Expected: 10000 + 100*92 = 19200 total; reserved 800+4000+200+500=5500; free=13700
+    await run('financeEngine — total/reserved/free (hand calc)', () => {
+      const state = baseState();
+      assert(calculateTotalBalance(state) === 19_200, `total=${calculateTotalBalance(state)}`);
+      assert(calculateReservedBalance(state) === 5500, `reserved=${calculateReservedBalance(state)}`);
+      assert(calculateFreeBalance(state) === 13_700, `free=${calculateFreeBalance(state)}`);
+      assert(validateState(state).valid, 'validateState');
+    });
+
+    await run('financeEngine — zero exchangeRate falls back to 1 for USD', () => {
+      const state = baseState();
+      state.exchangeRate = 0;
+      assert(calculateTotalBalance(state) === 10_100, `total=${calculateTotalBalance(state)}`);
+    });
+
+    await run('transfer — total unchanged, single transfer tx, no income/expense', () => {
+      const state = baseState();
+      state.accounts.push({ id: 'a3', name: 'Cash', currency: 'RUB', balance: 0, owner: 'husband' });
+      const totalBefore = calculateTotalBalance(state);
+      const r = transferAccount(state, {
+        sourceAccountId: 'a1',
+        destAccountId: 'a3',
+        sourceAmount: 3000,
+        creditAmount: 3000,
+        sourceCurrency: 'RUB',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(r.ok, r.error);
+      assert(calculateTotalBalance(state) === totalBefore, 'total preserved');
+      assert(state.accounts.find((a) => a.id === 'a1').balance === 7000, 'source debited');
+      assert(state.accounts.find((a) => a.id === 'a3').balance === 3000, 'dest credited');
+      assert(state.transactions.length === 1, 'one tx');
+      assert(state.transactions[0].type === 'account_transfer', 'transfer type');
+      const incomeExpense = state.transactions.filter((t) =>
+        t.type === 'account_deposit' || t.type === 'expense'
+      );
+      assert(incomeExpense.length === 0, 'no fake income/expense');
+    });
+
+    await run('scenario — deposit then expense updates account balance', () => {
+      const state = {
+        ...baseState(),
+        accounts: [{ id: 'a1', name: 'Main', currency: 'RUB', balance: 0, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 10_000, reserved: 0, spent: 0 }],
+        savings: [],
+        obligations: [],
+        debts: []
+      };
+      const dep = depositAccount(state, 'a1', 5000, '', todayIso(), 'husband');
+      assert(dep.ok, dep.error);
+      assert(calculateTotalBalance(state) === 5000, 'after deposit');
+      const res = reserveCategory(state, 'food', 2000, '', todayIso(), 'husband');
+      assert(res.ok, res.error);
+      assert(calculateFreeBalance(state) === 3000, 'free after reserve');
+      const exp = createExpense(state, 'food', 1500, 'a1', 'lunch', todayIso(), 'husband');
+      assert(exp.ok, exp.error);
+      assert(state.accounts[0].balance === 3500, 'account after expense');
+      assert(state.categories[0].spent === 1500, 'spent');
+      assert(calculateFreeBalance(state) === 3000, 'free unchanged (from reserve)');
+    });
+
+    await run('scenario — reserve, unreserve, free restored', () => {
+      const state = baseState();
+      state.categories[0].reserved = 0;
+      const free0 = calculateFreeBalance(state);
+      reserveCategory(state, 'food', 1000, '', todayIso(), 'husband');
+      assert(calculateFreeBalance(state) === free0 - 1000, 'free after reserve');
+      unreserveCategory(state, 'food', 400, '', todayIso(), 'husband');
+      assert(calculateFreeBalance(state) === free0 - 600, 'free after partial unreserve');
+    });
+
+    await run('purchaseSimulation — shortfall 800, impacts use shortfall', () => {
+      const state = {
+        exchangeRate: 92,
+        accounts: [{ id: 'a1', balance: 10_000, currency: 'RUB', owner: 'husband' }],
+        categories: [
+          { id: 'c1', name: 'Food', reserved: 800, limit: 1000, spent: 0 },
+          { id: 'c2', name: 'Car', reserved: 1000, limit: 1000, spent: 0 }
+        ],
+        savings: [{ id: 's1', name: 'Vacation', accumulated: 4000, targetAmount: 5000 }],
+        obligations: [],
+        debts: [],
+        transactions: []
+      };
+      state.categories.push({ id: 'misc', name: 'Разное', reserved: 0, isMisc: true });
+      assert(calculateFreeBalance(state) === 4200, `free=${calculateFreeBalance(state)}`);
+      const short = simulatePurchase(state, { name: 'Laptop', amount: 5000 });
+      assert(short.ok && !short.fitsInFree, 'does not fit');
+      assert(short.shortfall === 800, `shortfall=${short.shortfall}`);
+      assert(short.impacts.every((i) => i.withdrawal === 800), 'impact withdrawals');
+    });
+
+    await run('validateAvailableFunds — rejects negative amount', () => {
+      const state = baseState();
+      const r = validateAvailableFunds(-1, state);
+      assert(!r.ok, 'must fail');
+    });
+
+    await run('syncGuard — empty remote does not wipe local data', () => {
+      const local = baseState();
+      const d = shouldApplyRemoteSnapshot(local, { hasData: false, rowExists: false });
+      assert(d.apply === false, 'apply false');
+      assert(d.reason === 'remote_empty_local_has_data', d.reason);
+    });
+
+    await run('syncGuard — block push empty over remote data', () => {
+      const local = { accounts: [], categories: [], transactions: [], obligations: [], savings: [], debts: [] };
+      const remote = baseState();
+      const p = shouldAllowRemotePush(local, exportSharedSnapshot(remote));
+      assert(p.allow === false, 'push blocked');
+    });
+
+    await run('familySession — token expiry buffer', () => {
+      const key = TOKEN_KEY;
+      const expKey = EXP_KEY;
+      const prevT = localStorage.getItem(key);
+      const prevE = localStorage.getItem(expKey);
+      try {
+        localStorage.setItem(key, 'test-token');
+        localStorage.setItem(expKey, new Date(Date.now() + 120_000).toISOString());
+        assert(isAccessTokenValid() === true, 'valid token');
+        localStorage.setItem(expKey, new Date(Date.now() + 30_000).toISOString());
+        assert(isAccessTokenValid() === false, 'expiring within 60s buffer invalid');
+      } finally {
+        if (prevT == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, prevT);
+        if (prevE == null) localStorage.removeItem(expKey);
+        else localStorage.setItem(expKey, prevE);
+      }
+    });
+
+    await run('profiles — husband/wife labels, snapshot id family', () => {
+      assert(getProfileLabel('husband') === 'Муж', 'husband label');
+      assert(getProfileLabel('wife') === 'Жена', 'wife label');
+      assert(getActiveSnapshotId() === 'family', 'snapshot id');
+      assert(FAMILY_SNAPSHOT_ID === 'family', 'constant');
+    });
+
+    await run('storage — export/normalize roundtrip preserves balances', () => {
+      const state = baseState();
+      state.profile = 'wife';
+      const snap = exportSharedSnapshot(state);
+      const norm = normalizeSharedSnapshot(snap);
+      assert(norm.accounts.length === 2, 'accounts');
+      assert(norm.accounts[0].balance === 10_000, 'balance preserved');
+      assert(norm.exchangeRate === 92, 'rate');
+    });
+
+    await run('scenario — multi-step invariants hold', () => {
+      const state = baseState();
+      state.categories[0].reserved = 0;
+      depositAccount(state, 'a1', 1000, '', todayIso(), 'husband');
+      reserveCategory(state, 'food', 500, '', todayIso(), 'husband');
+      createExpense(state, 'food', 200, 'a1', '', todayIso(), 'husband');
+      transferAccount(state, {
+        sourceAccountId: 'a1',
+        destAccountId: 'a2',
+        sourceAmount: 100,
+        creditAmount: 100,
+        sourceCurrency: 'RUB',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: '',
+        date: todayIso(),
+        author: 'husband'
+      });
+      assert(checkFinancialInvariants(state).ok, 'invariants');
+      assert(calculateReservedBalance(state) <= calculateTotalBalance(state), 'reserved <= total');
+    });
+
+    await run('deposit — rejects zero amount', () => {
+      const state = baseState();
+      const r = depositAccount(state, 'a1', 0, '', todayIso(), 'husband');
+      assert(!r.ok, 'zero deposit rejected');
+    });
+
+    summary.total = summary.passed + summary.failed;
+    log(`\n--- SUMMARY: ${summary.passed}/${summary.total} passed, ${summary.failed} failed ---`,
+      summary.failed ? 'fail' : 'pass');
+    window.__QA_SUMMARY__ = summary;
+    window.__QA_RESULT__ = { failed: summary.failed, passed: summary.failed === 0 };
+    if (summary.failed === 0) log('ALL PASSED', 'pass');
+  </script>
+</body>
+</html>

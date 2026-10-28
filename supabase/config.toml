@@ -1,0 +1,7 @@
+# Supabase local / deploy config — Family Mode Edge Functions use custom JWT (not Supabase Auth).
+
+[functions.family-session]
+verify_jwt = false
+
+[functions.family-snapshot]
+verify_jwt = false

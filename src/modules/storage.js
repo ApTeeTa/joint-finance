@@ -3,24 +3,15 @@ import {
   getLegacyProductionStorageKey,
   allowsLegacyStorageKeyMigration,
   getLegacyMigrationDoneKey,
-  isLocalOnlyTestMode,
-  requiresHouseholdSnapshot
+  isLocalOnlyTestMode
 } from '../config/environmentConfig.js';
-import { getActiveHousehold } from '../lib/householdContext.js';
 import { checkFinancialInvariants } from './financeCoreInvariants.js';
 
 const LEGACY_PRODUCTION_STORAGE_KEY = getLegacyProductionStorageKey();
 const LEGACY_MIGRATION_DONE_KEY = getLegacyMigrationDoneKey();
 
 function resolveStorageKey() {
-  const base = getFinancialStorageKey();
-  if (requiresHouseholdSnapshot()) {
-    const householdId = getActiveHousehold()?.id;
-    if (householdId) {
-      return `${base}-${householdId}`;
-    }
-  }
-  return base;
+  return getFinancialStorageKey();
 }
 
 const VALID_TABS = ['accounts', 'categories', 'history', 'obligations', 'savings', 'debts', 'stats'];

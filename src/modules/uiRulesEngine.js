@@ -108,7 +108,8 @@ export const MODAL_OVERLAY_RULE = Object.freeze({
   id: 'MODAL_OVERLAY_RULE',
   coverFullViewport: true,
   dimIncludesHeader: true,
-  overlayTemplateClasses: 'hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40',
+  overlayTemplateClasses:
+    'hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 backdrop-blur-[2px] transition-opacity duration-200',
   openLayerSelector: '[data-modal]:not(.hidden)',
   modalRootZIndex: 100,
   headerStaysBelowOverlay: true

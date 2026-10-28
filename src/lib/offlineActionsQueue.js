@@ -168,7 +168,12 @@ export async function flushOfflineQueue(state) {
     const { pushSharedState } = await import('./stateRemote.js');
     const pushResult = await pushSharedState(state);
     if (!pushResult.ok) {
-      return { ok: false, error: pushResult.error };
+      return {
+        ok: false,
+        error: pushResult.error,
+        conflict: Boolean(pushResult.conflict),
+        reason: pushResult.reason
+      };
     }
 
     clearQueue();

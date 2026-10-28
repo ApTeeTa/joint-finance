@@ -27,11 +27,11 @@ Get-ChildItem -Path 'src' -Recurse -Filter '*.js' | ForEach-Object {
     }
   }
 }
-$allowedFrom = @('src/lib/stateRemote.js', 'src/lib/householdRemote.js')
+$allowedFrom = @()
 foreach ($hit in $supabaseFromHits) {
   $file = $hit.Split(':')[0]
   if ($allowedFrom -notcontains $file) {
-    Fail "supabase.from outside allowlist: $hit (allowed: $($allowedFrom -join ', '))"
+    Fail "supabase.from in frontend (forbidden in family mode - use Edge Functions): $hit"
   }
 }
 

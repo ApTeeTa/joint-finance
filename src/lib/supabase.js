@@ -1,17 +1,16 @@
-console.log('SUPABASE FILE LOADED');
+/** Publishable Supabase credentials — safe in frontend; data access is via Edge Functions only. */
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/+esm';
+export const SUPABASE_URL = 'https://zbbhhlxdduhkvyhiesba.supabase.co';
+export const SUPABASE_ANON_KEY = 'sb_publishable_V1l8_4xCq5aJFvt7Vzph8w_5fGOS64u';
 
-const SUPABASE_URL = 'https://zbbhhlxdduhkvyhiesba.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_V1l8_4xCq5aJFvt7Vzph8w_5fGOS64u';
+export function getFunctionsBaseUrl() {
+  return `${SUPABASE_URL}/functions/v1`;
+}
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce'
-  }
-});
-
-console.log('Supabase client initialized');
+export function getSupabaseApiHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    ...extra
+  };
+}

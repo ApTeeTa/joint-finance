@@ -2,11 +2,6 @@ import { UI } from './uiTheme.js';
 import { getModalOverlayTemplateClasses } from './uiRulesEngine.js';
 import { openModal, closeModal, getModalRoot } from './modalLayer.js';
 import { simulatePurchase, RESERVE_SOURCE_TYPES } from './purchaseSimulation.js';
-import {
-  BETA_ANALYTICS_EVENTS,
-  trackBetaEventFireAndForget
-} from '../lib/betaAnalytics.js';
-
 const MODAL_NAME = 'purchase-planner';
 const STEP_INPUT = 'input';
 const STEP_RESULT = 'result';
@@ -255,15 +250,8 @@ export function mountPurchasePlannerModal() {
   root.insertAdjacentHTML('beforeend', renderPurchasePlannerModalShell());
 }
 
-function trackSimulationCancelled() {
-  trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.PURCHASE_SIMULATION_CANCELLED);
-}
-
 export function openPurchasePlanner() {
   resetPurchasePlannerForm();
-  trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.PURCHASE_PLANNER_OPENED, {
-    planner_source: 'header'
-  });
   openModal(MODAL_NAME);
 }
 
@@ -282,7 +270,6 @@ export function initPurchasePlannerHandlers(state, { onSaveForPurchase } = {}) {
 
     const closeBtn = target.closest('[data-action="close-modal"]');
     if (closeBtn?.dataset.modal === MODAL_NAME) {
-      trackSimulationCancelled();
       closeModal(MODAL_NAME);
       resetPurchasePlannerForm();
       return;
@@ -356,14 +343,5 @@ export function initPurchasePlannerHandlers(state, { onSaveForPurchase } = {}) {
 
     lastSimulation = simulation;
     renderSimulationResult(simulation);
-
-    trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.PURCHASE_SIMULATION_COMPLETED, {
-      simulation_outcome: simulation.fitsInFree ? 'fits_in_free' : 'shortfall'
-    });
-    if (!simulation.fitsInFree) {
-      trackBetaEventFireAndForget(BETA_ANALYTICS_EVENTS.PURCHASE_RESERVE_AFFECTED, {
-        reserve_affected: true
-      });
-    }
   });
 }

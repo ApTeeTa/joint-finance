@@ -75,7 +75,9 @@
       assert(JSON.stringify(state) === snapshot, 'state unchanged');
     });
 
-    log('\nГотово.');
+    const failNodes = out.querySelectorAll('.fail');
+    log(failNodes.length === 0 ? '\nALL PASSED' : `\n${failNodes.length} FAILED`, failNodes.length ? 'fail' : 'pass');
+    window.__QA_RESULT__ = { failed: failNodes.length, passed: failNodes.length === 0 };
   </script>
 </body>
 </html>

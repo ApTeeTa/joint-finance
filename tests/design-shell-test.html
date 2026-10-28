@@ -28,11 +28,13 @@
         const doc = document.getElementById('app').contentDocument;
         const root = doc.documentElement;
         const styles = doc.defaultView.getComputedStyle(root);
-        assert(styles.getPropertyValue('--color-primary').trim() === '#1e4d56', 'primary token');
-        assert(doc.querySelector('.balance-strip'), 'balance strip');
+        assert(styles.getPropertyValue('--color-primary').trim() === '#065a46', 'primary token');
+        assert(doc.querySelector('.jf-hero'), 'hero balance layout');
         assert(doc.querySelector('.balance-card--free'), 'free balance card');
         assert(doc.querySelector('#tab-nav .tab-btn'), 'tab buttons');
-        assert(doc.querySelector('.app-brand-title')?.textContent.includes('Семейные'), 'russian title');
+        assert(doc.querySelector('.app-brand-title')?.textContent.includes('Joint Finance'), 'brand title');
+        assert(doc.querySelector('#tab-nav-mobile-dock'), 'mobile dock nav');
+        assert(doc.querySelector('link[href*="jf-design-system"]'), 'design system css');
         const font = styles.fontFamily.toLowerCase();
         assert(font.includes('onest') || doc.querySelector('link[href*="Onest"]'), 'Onest font');
         log('PASS  D1 shell tokens and structure', 'pass');

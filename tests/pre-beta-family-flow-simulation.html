@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Pre-beta: family flow simulation (no live writes)</title>
+  <style>
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Family flow simulation — no Supabase writes</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { isAccessTokenValid, clearFamilySession, TOKEN_KEY, EXP_KEY } from '../src/lib/familySession.js';
+    import { shouldApplyRemoteSnapshot, shouldAllowRemotePush } from '../src/lib/syncGuard.js';
+    import { exportSharedSnapshot } from '../src/modules/storage.js';
+
+    const out = document.getElementById('out');
+    let failed = 0;
+    function log(msg, ok) {
+      out.textContent += `${ok ? 'PASS' : 'FAIL'}: ${msg}\n`;
+      if (!ok) failed += 1;
+    }
+
+    // Expired token → invalid
+    clearFamilySession();
+    localStorage.setItem(TOKEN_KEY, 'sim');
+    localStorage.setItem(EXP_KEY, new Date(Date.now() - 3600_000).toISOString());
+    log('expired token rejected', !isAccessTokenValid());
+
+    // Near-expiry inside 60s buffer → invalid
+    localStorage.setItem(EXP_KEY, new Date(Date.now() + 30_000).toISOString());
+    log('token within 60s buffer rejected', !isAccessTokenValid());
+
+    // Valid window
+    localStorage.setItem(EXP_KEY, new Date(Date.now() + 86400_000 * 10).toISOString());
+    log('future token accepted (storage only)', isAccessTokenValid());
+    clearFamilySession();
+    log('cleared session removes token', !localStorage.getItem(TOKEN_KEY));
+
+    const local = {
+      accounts: [{ id: 'a', balance: 100, currency: 'RUB' }],
+      categories: [],
+      transactions: [],
+      obligations: [],
+      savings: [],
+      debts: []
+    };
+    const remoteEmpty = shouldApplyRemoteSnapshot(local, { hasData: false });
+    log('empty remote does not overwrite local', remoteEmpty.apply === false);
+
+    const remoteFull = exportSharedSnapshot(local);
+    const pushEmpty = shouldAllowRemotePush(
+      { accounts: [], categories: [], transactions: [], obligations: [], savings: [], debts: [] },
+      remoteFull
+    );
+    log('empty local cannot push over remote', pushEmpty.allow === false);
+
+    out.textContent += failed === 0 ? '\nALL PASSED' : `\n${failed} FAILED`;
+    window.__QA_RESULT__ = { failed, passed: failed === 0 };
+  </script>
+</body>
+</html>
