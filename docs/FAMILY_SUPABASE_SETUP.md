@@ -26,6 +26,8 @@ supabase functions deploy family-snapshot
 
 Or upload via Dashboard.
 
+After adding a **new Vercel preview branch URL**, redeploy both functions so `supabase/functions/_shared/cors.ts` is live — otherwise the browser blocks login with «Нет связи с сервером» (CORS).
+
 ## 3. SQL migration
 
 Run once in SQL Editor:

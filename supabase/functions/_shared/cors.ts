@@ -3,11 +3,24 @@ const ALLOWED_ORIGINS = new Set([
   "https://joint-finance.vercel.app",
   "https://joint-finance-git-beta-apteetas-projects.vercel.app",
   "https://joint-finance-git-family-apteetas-projects.vercel.app",
+  "https://joint-finance-git-experiment-full-sync-apteetas-projects.vercel.app",
   "http://127.0.0.1:8080",
   "http://localhost:8080",
   "http://127.0.0.1:8778",
   "http://localhost:8778",
 ]);
+
+/** Vercel preview deployments for this repo (branch previews). */
+function isJointFinanceVercelOrigin(hostname: string): boolean {
+  if (hostname === "joint-finance.vercel.app") {
+    return true;
+  }
+  if (!hostname.endsWith(".vercel.app")) {
+    return false;
+  }
+  return hostname.startsWith("joint-finance")
+    || hostname.startsWith("joint-finance-git-");
+}
 
 function isAllowedOrigin(origin: string): boolean {
   if (!origin) {
@@ -18,6 +31,9 @@ function isAllowedOrigin(origin: string): boolean {
   }
   try {
     const url = new URL(origin);
+    if (url.protocol === "https:" && isJointFinanceVercelOrigin(url.hostname)) {
+      return true;
+    }
     return url.protocol === "http:"
       && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
   } catch {
