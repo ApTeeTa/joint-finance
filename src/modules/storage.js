@@ -21,6 +21,7 @@ function getDefaultState() {
     profile: 'husband',
     accounts: [],
     categories: [],
+    incomeCategories: [],
     transactions: [],
     obligations: [],
     savings: [],
@@ -34,6 +35,7 @@ function pickSharedFields(state) {
   return {
     accounts: Array.isArray(state.accounts) ? state.accounts : [],
     categories: Array.isArray(state.categories) ? state.categories : [],
+    incomeCategories: Array.isArray(state.incomeCategories) ? state.incomeCategories : [],
     transactions: Array.isArray(state.transactions) ? state.transactions : [],
     obligations: Array.isArray(state.obligations) ? state.obligations : [],
     savings: Array.isArray(state.savings) ? state.savings : [],
@@ -104,6 +106,9 @@ function mergeWithDefaults(loaded) {
     profile: loaded.profile === 'wife' ? 'wife' : defaults.profile,
     accounts: Array.isArray(loaded.accounts) ? loaded.accounts : defaults.accounts,
     categories: Array.isArray(loaded.categories) ? loaded.categories : defaults.categories,
+    incomeCategories: Array.isArray(loaded.incomeCategories)
+      ? loaded.incomeCategories
+      : defaults.incomeCategories,
     transactions: Array.isArray(loaded.transactions) ? loaded.transactions : defaults.transactions,
     obligations: normalizeObligations(
       Array.isArray(loaded.obligations) ? loaded.obligations : defaults.obligations
@@ -147,6 +152,7 @@ export function applySharedSnapshot(state, snapshot) {
 
   state.accounts = merged.accounts;
   state.categories = merged.categories;
+  state.incomeCategories = merged.incomeCategories;
   state.transactions = merged.transactions;
   state.obligations = merged.obligations;
   state.savings = merged.savings;

@@ -13,6 +13,7 @@ import {
 } from './mutationContract.js';
 import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LABELS, isMiscCategory, MISC_CATEGORY_NAME } from './transactions.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
+import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -794,65 +795,73 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     }
   });
 
-  document.addEventListener('submit', (event) => {
+  document.addEventListener('submit', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
     const addForm = event.target.closest('[data-form="add-category"]');
     if (addForm) {
-      if (createCategory(state, addForm.name.value, addForm.limit.value)) {
-        closeModal('add-category');
-        addForm.reset();
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('add-category', addForm, async () => {
+        const ok = createCategory(state, addForm.name.value, addForm.limit.value);
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
     const editForm = event.target.closest('[data-form="edit-category"]');
     if (editForm) {
-      if (updateCategory(state, editForm.categoryId.value, editForm.name.value, editForm.limit.value)) {
-        closeModal('edit-category');
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('edit-category', editForm, async () => {
+        const ok = updateCategory(
+          state,
+          editForm.categoryId.value,
+          editForm.name.value,
+          editForm.limit.value
+        );
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
     const reserveForm = event.target.closest('[data-form="reserve"]');
     if (reserveForm) {
-      if (reserveFunds(state, reserveForm.categoryId.value, reserveForm.amount.value)) {
-        closeModal('reserve');
-        reserveForm.reset();
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('reserve', reserveForm, async () => {
+        const ok = reserveFunds(state, reserveForm.categoryId.value, reserveForm.amount.value);
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
     const unreserveForm = event.target.closest('[data-form="unreserve"]');
     if (unreserveForm) {
-      if (unreserveFunds(state, unreserveForm.categoryId.value, unreserveForm.amount.value)) {
-        closeModal('unreserve');
-        unreserveForm.reset();
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('unreserve', unreserveForm, async () => {
+        const ok = unreserveFunds(state, unreserveForm.categoryId.value, unreserveForm.amount.value);
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
     const expenseForm = event.target.closest('[data-form="expense"]');
     if (expenseForm) {
       const categoryId = expenseForm.categoryId.value;
-      if (addExpense(
-        state,
-        categoryId,
-        expenseForm.amount.value,
-        expenseForm.accountId.value,
-        expenseForm.comment.value
-      )) {
-        closeModal('expense');
-        expenseForm.reset();
-        refresh(state, container, onUpdate);
-        const category = findCategory(state, categoryId);
-        if (category && !isMiscCategory(category)) showLimitWarning(category);
-      }
+      await runGuardedModalSubmit('expense', expenseForm, async () => {
+        const ok = addExpense(
+          state,
+          categoryId,
+          expenseForm.amount.value,
+          expenseForm.accountId.value,
+          expenseForm.comment.value
+        );
+        if (ok) {
+          refresh(state, container, onUpdate);
+          const category = findCategory(state, categoryId);
+          if (category && !isMiscCategory(category)) showLimitWarning(category);
+        }
+        return ok;
+      });
     }
   });
 }

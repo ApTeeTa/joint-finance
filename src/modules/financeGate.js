@@ -187,9 +187,25 @@ export function reserveObligation(state, obligationId, amount, comment, date, au
   );
 }
 
-export function depositAccount(state, accountId, amount, comment, date, author) {
+export function depositAccount(
+  state,
+  accountId,
+  amount,
+  comment,
+  date,
+  author,
+  incomeCategoryId = null
+) {
   return runProtected(FINANCE_ENTRY_POINTS.ACCOUNT, () =>
-    recordAccountDeposit(state, accountId, amount, comment, date, author)
+    recordAccountDeposit(
+      state,
+      accountId,
+      amount,
+      comment,
+      date,
+      author,
+      incomeCategoryId
+    )
   );
 }
 

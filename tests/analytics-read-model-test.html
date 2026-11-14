@@ -24,8 +24,12 @@
       getExpensesByCategory,
       getSavingsProgress,
       getObligationsOverview,
-      isAnalyticsTransaction
+      isAnalyticsTransaction,
+      getIncomeSummary,
+      getIncomeByCategory,
+      PERIOD_PRESETS
     } from '../src/modules/analyticsReadModel.js';
+    import { ensureDefaultIncomeCategories } from '../src/modules/incomeCategories.js';
     import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
     import {
       TRANSACTION_STATUS,
@@ -177,7 +181,38 @@
       assert(item.status === 'active', 'status active');
     });
 
-    await run('TEST 5 — отмена не влияет на статистику', 'test5', () => {
+    await run('TEST 5 — доходы по категориям', 'test5income', () => {
+      const state = baseState();
+      ensureDefaultIncomeCategories(state);
+      const now = new Date('2026-06-15T12:00:00Z');
+      state.transactions.push(
+        {
+          id: 'inc1',
+          type: TRANSACTION_TYPES.ACCOUNT_DEPOSIT,
+          status: TRANSACTION_STATUS.ACTIVE,
+          amount: 50000,
+          date: '2026-06-10',
+          incomeCategoryId: 'income-salary',
+          incomeCategoryName: 'Зарплата'
+        },
+        {
+          id: 'inc2',
+          type: TRANSACTION_TYPES.ACCOUNT_DEPOSIT,
+          status: TRANSACTION_STATUS.ACTIVE,
+          amount: 10000,
+          date: '2026-06-05'
+        }
+      );
+      const summary = getIncomeSummary(state, PERIOD_PRESETS.all);
+      assert(summary.total === 60000, 'income total');
+      assert(summary.count === 2, 'income count');
+      const byCat = getIncomeByCategory(state, PERIOD_PRESETS.all);
+      assert(byCat.length === 2, 'income groups');
+      const uncategorized = byCat.find((row) => row.categoryName === 'Без категории');
+      assert(uncategorized?.amount === 10000, 'uncategorized');
+    });
+
+    await run('TEST 6 — отмена не влияет на статистику', 'test5', () => {
       const state = baseState();
       const before = getExpensesByCategory(state);
       const foodBefore = before.find((item) => item.categoryId === 'food')?.amount ?? 0;

@@ -15,6 +15,7 @@ import {
   todayIso
 } from './transactions.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -811,7 +812,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
     }
   });
 
-  document.addEventListener('submit', (event) => {
+  document.addEventListener('submit', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
@@ -823,18 +824,18 @@ export function initSavingsHandlers(state, container, onUpdate) {
         return;
       }
       const targetAmount = parseOptionalTarget(addForm.targetAmount.value);
-      if (createSaving(
-        state,
-        addForm.name.value,
-        targetAmount,
-        deadline.deadlineType,
-        deadline.deadlineDate,
-        addForm.savingType.value
-      )) {
-        closeModal('add-saving');
-        addForm.reset();
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('add-saving', addForm, async () => {
+        const ok = createSaving(
+          state,
+          addForm.name.value,
+          targetAmount,
+          deadline.deadlineType,
+          deadline.deadlineDate,
+          addForm.savingType.value
+        );
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
@@ -846,77 +847,82 @@ export function initSavingsHandlers(state, container, onUpdate) {
         return;
       }
       const targetAmount = parseOptionalTarget(editForm.targetAmount.value);
-      if (updateSaving(
-        state,
-        editForm.savingId.value,
-        editForm.name.value,
-        targetAmount,
-        deadline.deadlineType,
-        deadline.deadlineDate,
-        editForm.savingType.value
-      )) {
-        closeModal('edit-saving');
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('edit-saving', editForm, async () => {
+        const ok = updateSaving(
+          state,
+          editForm.savingId.value,
+          editForm.name.value,
+          targetAmount,
+          deadline.deadlineType,
+          deadline.deadlineDate,
+          editForm.savingType.value
+        );
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
     const depositForm = event.target.closest('[data-form="deposit-saving"]');
     if (depositForm) {
-      const rubAmount = Number(depositForm.amount.value);
-      const result = updateSavings(state, {
-        action: 'deposit',
-        savingId: depositForm.savingId.value,
-        amount: depositForm.amount.value,
-        comment: depositForm.comment.value,
-        date: todayIso(),
-        author: state.profile
+      await runGuardedModalSubmit('deposit-saving', depositForm, async () => {
+        const result = updateSavings(state, {
+          action: 'deposit',
+          savingId: depositForm.savingId.value,
+          amount: depositForm.amount.value,
+          comment: depositForm.comment.value,
+          date: todayIso(),
+          author: state.profile
+        });
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh(state, container, onUpdate);
+        return true;
       });
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-      closeModal('deposit-saving');
-      refresh(state, container, onUpdate);
       return;
     }
 
     const withdrawForm = event.target.closest('[data-form="withdraw-saving"]');
     if (withdrawForm) {
-      const result = updateSavings(state, {
-        action: 'withdraw',
-        savingId: withdrawForm.savingId.value,
-        amount: withdrawForm.amount.value,
-        comment: withdrawForm.comment.value,
-        date: todayIso(),
-        author: state.profile
+      await runGuardedModalSubmit('withdraw-saving', withdrawForm, async () => {
+        const result = updateSavings(state, {
+          action: 'withdraw',
+          savingId: withdrawForm.savingId.value,
+          amount: withdrawForm.amount.value,
+          comment: withdrawForm.comment.value,
+          date: todayIso(),
+          author: state.profile
+        });
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh(state, container, onUpdate);
+        return true;
       });
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-      closeModal('withdraw-saving');
-      refresh(state, container, onUpdate);
       return;
     }
 
     const spendForm = event.target.closest('[data-form="spend-saving"]');
     if (spendForm) {
-      const saving = findSaving(state, spendForm.savingId.value);
-      const result = spendSaving(
-        state,
-        spendForm.savingId.value,
-        spendForm.accountId.value,
-        spendForm.comment.value,
-        todayIso(),
-        state.profile
-      );
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-      closeModal('spend-saving');
-      refresh(state, container, onUpdate);
+      await runGuardedModalSubmit('spend-saving', spendForm, async () => {
+        const result = spendSaving(
+          state,
+          spendForm.savingId.value,
+          spendForm.accountId.value,
+          spendForm.comment.value,
+          todayIso(),
+          state.profile
+        );
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh(state, container, onUpdate);
+        return true;
+      });
     }
   });
 }

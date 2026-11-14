@@ -43,7 +43,13 @@ import { renderObligations, initObligationsHandlers } from './modules/obligation
 import { renderStats, initStatsHandlers } from './modules/stats.js';
 import { reconcileLegacyTransactions } from './modules/transactions.js';
 import { saveState, loadState, clearState, hardResetStateFromRemoteSnapshot } from './modules/storage.js';
-import { relocateModals, closeAllModals } from './modules/modalLayer.js';
+import {
+  relocateModals,
+  closeAllModals,
+  isAnyModalOpen
+} from './modules/modalLayer.js';
+import { initModalDraftSystem } from './modules/modalDraftStore.js';
+import { ensureDefaultIncomeCategories } from './modules/incomeCategories.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
 import { validateEnvironmentIsolation, isLocalOnlyTestMode } from './config/environmentConfig.js';
 import {
@@ -109,6 +115,7 @@ const state = {
   profile: 'husband',
   accounts: [],
   categories: [],
+  incomeCategories: [],
   transactions: [],
   obligations: [],
   savings: [],
@@ -128,6 +135,8 @@ let lastValidState = null;
 let lastSyncReason = null;
 let stopSyncPolling = null;
 let financialAppBooted = false;
+let pendingRemoteUiRefresh = false;
+let lastAppliedRemoteUpdatedAt = null;
 
 const INVARIANT_ROLLBACK_ALERT = 'Операция отменена: свободный баланс не может быть отрицательным!';
 
@@ -209,12 +218,14 @@ function applyLoadedState(loaded) {
   state.profile = loaded.profile;
   state.accounts = loaded.accounts;
   state.categories = loaded.categories;
+  state.incomeCategories = loaded.incomeCategories ?? [];
   state.transactions = loaded.transactions;
   state.obligations = loaded.obligations;
   state.savings = loaded.savings;
   state.debts = loaded.debts;
   state.exchangeRate = loaded.exchangeRate;
   state.activeTab = loaded.activeTab;
+  ensureDefaultIncomeCategories(state);
   reconcileLegacyTransactions(state);
 }
 
@@ -252,16 +263,44 @@ function resetAllData() {
   });
 }
 
-function finishTabRender() {
-  closeAllModals();
+function finishTabRender(options = {}) {
+  const { preserveModals = false, persistActiveTab = true } = options;
+  if (!preserveModals) {
+    closeAllModals();
+  }
   relocateModals(tabContent);
   mountPurchasePlannerModal();
   syncHeaderHeight();
-  onStateChange();
+  updateCounters();
+  if (persistActiveTab) {
+    saveState(state, { skipRemote: true });
+  }
 }
 
-function renderTab(tab) {
+function refreshUiAfterRemoteSync(meta = {}) {
+  const remoteStamp = meta.updatedAt ?? null;
+  if (remoteStamp && remoteStamp === lastAppliedRemoteUpdatedAt) {
+    updateCounters();
+    return;
+  }
+  if (remoteStamp) {
+    lastAppliedRemoteUpdatedAt = remoteStamp;
+  }
+
+  if (isAnyModalOpen()) {
+    pendingRemoteUiRefresh = true;
+    updateCounters();
+    return;
+  }
+
+  renderTab(state.activeTab || 'accounts', { passiveSync: true });
+}
+
+function renderTab(tab, options = {}) {
   if (!tabContent || !TAB_MESSAGES[tab]) return;
+
+  const preserveModals = options.preserveModals === true;
+  const passiveSync = options.passiveSync === true;
 
   state.activeTab = tab;
 
@@ -277,49 +316,49 @@ function renderTab(tab) {
   if (tab === 'accounts') {
     renderAccounts(state, tabContent);
     initAccountsHandlers(state, tabContent, onStateChange, resetAllData);
-    finishTabRender();
+    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
 
   if (tab === 'categories') {
     renderCategories(state, tabContent);
     initCategoriesHandlers(state, tabContent, onStateChange);
-    finishTabRender();
+    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
 
   if (tab === 'history') {
     renderHistory(state, tabContent);
     initHistoryHandlers(state, tabContent, onStateChange);
-    finishTabRender();
+    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
 
   if (tab === 'savings') {
     renderSavings(state, tabContent);
     initSavingsHandlers(state, tabContent, onStateChange);
-    finishTabRender();
+    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
 
   if (tab === 'debts') {
     renderDebts(state, tabContent);
     initDebtsHandlers(state, tabContent, onStateChange, (nextTab) => renderTab(nextTab));
-    finishTabRender();
+    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
 
   if (tab === 'obligations') {
     renderObligations(state, tabContent);
     initObligationsHandlers(state, tabContent, onStateChange);
-    finishTabRender();
+    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
 
   if (tab === 'stats') {
     renderStats(state, tabContent);
     initStatsHandlers(state, tabContent, onStateChange);
-    finishTabRender();
+    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
 
@@ -469,12 +508,7 @@ function initHeaderHeightSync() {
   window.addEventListener('resize', syncHeaderHeight);
 }
 
-function refreshFromRemote() {
-  updateCounters();
-  renderTab(state.activeTab || 'accounts');
-}
-
-function showSyncStatusBanner(message, tone = 'error') {
+function showSyncStatusBanner(message, tone = 'error', options = {}) {
   if (!message) {
     document.getElementById('sync-status')?.classList.add('hidden');
     return;
@@ -492,8 +526,17 @@ function showSyncStatusBanner(message, tone = 'error') {
   el.className = tone === 'warning'
     ? 'max-w-5xl mx-auto px-5 py-2 mt-2 rounded-xl bg-amber-50 text-amber-900 text-sm border border-amber-300 text-center'
     : 'max-w-5xl mx-auto px-5 py-2 mt-2 rounded-xl bg-red-50 text-red-800 text-sm border border-red-200 text-center';
-  el.textContent = message;
   el.classList.remove('hidden');
+  el.replaceChildren();
+  el.appendChild(document.createTextNode(message));
+  if (typeof options.onRetry === 'function') {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ml-2 underline font-medium';
+    btn.textContent = 'Повторить';
+    btn.addEventListener('click', () => options.onRetry());
+    el.appendChild(btn);
+  }
 }
 
 function showLocalTestModeBanner() {
@@ -533,7 +576,9 @@ async function syncFromRemote() {
     const flushResult = await flushOfflineQueue(state);
     if (!flushResult.ok && !flushResult.skipped && !flushResult.conflict) {
       lastSyncReason = 'offline_queue_flush_failed';
-      showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
+      showSyncStatusBanner(getSyncStatusMessage('fetch_failed'), 'error', {
+        onRetry: () => syncFromRemote()
+      });
       return { ok: false, error: flushResult.error, reason: 'offline_queue_flush_failed' };
     }
 
@@ -542,7 +587,9 @@ async function syncFromRemote() {
     const fetchResult = await fetchRemoteSharedSnapshot();
     if (!fetchResult.ok) {
       lastSyncReason = fetchResult.reason ?? 'fetch_failed';
-      showSyncStatusBanner(getSyncStatusMessage(lastSyncReason));
+      showSyncStatusBanner(getSyncStatusMessage(lastSyncReason), 'error', {
+        onRetry: () => syncFromRemote()
+      });
       return fetchResult;
     }
 
@@ -558,6 +605,7 @@ async function syncFromRemote() {
 
       const patch = validateNoStaleEntities(state, fetchResult.snapshot);
       applyStatePatch(state, patch);
+      ensureDefaultIncomeCategories(state);
       reconcileLegacyTransactions(state);
       saveState(state, { skipRemote: true });
       markInitialSyncDone();
@@ -566,6 +614,7 @@ async function syncFromRemote() {
       showSyncStatusBanner(null);
     } else {
       reconcileLegacyTransactions(state);
+      ensureDefaultIncomeCategories(state);
       saveState(state, { skipRemote: true });
       markInitialSyncDone();
       initLastValidStateIfValid();
@@ -582,11 +631,13 @@ async function syncFromRemote() {
       savings: state.savings.length
     });
 
-    refreshFromRemote();
+    refreshUiAfterRemoteSync(fetchResult.meta ?? {});
     return { ok: true, snapshot: fetchResult.snapshot, reason: lastSyncReason };
   } catch (error) {
     lastSyncReason = 'fetch_failed';
-    showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
+    showSyncStatusBanner(getSyncStatusMessage('fetch_failed'), 'error', {
+      onRetry: () => syncFromRemote()
+    });
     return { ok: false, error: error?.message ?? String(error) };
   }
 }
@@ -638,14 +689,6 @@ async function bootFinancialApp() {
       financialAppBooted = false;
     });
 
-    const syncResult = await syncFromRemote();
-    if (!syncResult.ok && !hasSharedStateData(state)) {
-      const bootError = document.getElementById('boot-error');
-      if (bootError) {
-        bootError.classList.remove('hidden');
-        bootError.textContent = getSyncStatusMessage(syncResult.reason ?? 'fetch_failed');
-      }
-    }
   }
 
   renderProfile();
@@ -655,6 +698,7 @@ async function bootFinancialApp() {
   initTabHandlers();
   initVisualActionBusyGuard();
   initHeaderHeightSync();
+  initModalDraftSystem();
   mountPurchasePlannerModal();
   initPurchasePlannerHandlers(state, {
     onSaveForPurchase: ({ name, targetAmount }) => {
@@ -663,6 +707,24 @@ async function bootFinancialApp() {
     }
   });
   renderTab(state.activeTab || 'accounts');
+
+  if (!isLocalOnlyTestMode()) {
+    void syncFromRemote().then((syncResult) => {
+      if (!syncResult.ok && !hasSharedStateData(state)) {
+        const bootError = document.getElementById('boot-error');
+        if (bootError) {
+          bootError.classList.remove('hidden');
+          bootError.textContent = getSyncStatusMessage(syncResult.reason ?? 'fetch_failed');
+        }
+      }
+    });
+  }
+
+  document.addEventListener('joint-finance:modal-closed', () => {
+    if (!pendingRemoteUiRefresh) return;
+    pendingRemoteUiRefresh = false;
+    renderTab(state.activeTab || 'accounts', { passiveSync: true });
+  });
   console.log('[BOOT OK]', {
     build: 'family-mode',
     snapshot: 'family'

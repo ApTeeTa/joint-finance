@@ -10,6 +10,7 @@ import {
   getSavingAccumulated
 } from './transactions.js';
 import { getRecommendedMonthlyPayment } from './savings.js';
+import { findIncomeCategory, resolveIncomeCategoryName } from './incomeCategories.js';
 
 const EXPENSE_TOP_LIMIT = 10;
 
@@ -197,4 +198,209 @@ export function getAnalyticsTransactions(state) {
 
 export function getTransactionEffectiveDate(tx) {
   return getTransactionDate(tx);
+}
+
+const PERIOD_PRESETS = {
+  month: 'month',
+  prev_month: 'prev_month',
+  quarter: 'quarter',
+  year: 'year',
+  all: 'all'
+};
+
+export { PERIOD_PRESETS };
+
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function formatIsoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * @returns {{ from: string, to: string, label: string, previousFrom: string|null, previousTo: string|null }}
+ */
+export function resolveIncomePeriodRange(preset = 'month', now = new Date()) {
+  const base = startOfDay(now);
+  const year = base.getFullYear();
+  const month = base.getMonth();
+
+  if (preset === PERIOD_PRESETS.all) {
+    return {
+      from: '1970-01-01',
+      to: formatIsoDate(endOfDay(now)),
+      label: 'За всё время',
+      previousFrom: null,
+      previousTo: null
+    };
+  }
+
+  if (preset === PERIOD_PRESETS.year) {
+    const from = new Date(year, 0, 1);
+    const to = endOfDay(now);
+    const prevFrom = new Date(year - 1, 0, 1);
+    const prevTo = new Date(year - 1, 11, 31);
+    return {
+      from: formatIsoDate(from),
+      to: formatIsoDate(to),
+      label: `${year} год`,
+      previousFrom: formatIsoDate(prevFrom),
+      previousTo: formatIsoDate(endOfDay(prevTo))
+    };
+  }
+
+  if (preset === PERIOD_PRESETS.quarter) {
+    const qStartMonth = Math.floor(month / 3) * 3;
+    const from = new Date(year, qStartMonth, 1);
+    const to = endOfDay(now);
+    const prevFrom = new Date(year, qStartMonth - 3, 1);
+    const prevTo = new Date(year, qStartMonth, 0);
+    return {
+      from: formatIsoDate(from),
+      to: formatIsoDate(to),
+      label: 'Текущий квартал',
+      previousFrom: formatIsoDate(prevFrom),
+      previousTo: formatIsoDate(endOfDay(prevTo))
+    };
+  }
+
+  if (preset === PERIOD_PRESETS.prev_month) {
+    const from = new Date(year, month - 1, 1);
+    const to = new Date(year, month, 0);
+    return {
+      from: formatIsoDate(from),
+      to: formatIsoDate(endOfDay(to)),
+      label: 'Прошлый месяц',
+      previousFrom: formatIsoDate(new Date(year, month - 2, 1)),
+      previousTo: formatIsoDate(endOfDay(new Date(year, month - 1, 0)))
+    };
+  }
+
+  const from = new Date(year, month, 1);
+  const to = endOfDay(now);
+  const prevFrom = new Date(year, month - 1, 1);
+  const prevTo = new Date(year, month, 0);
+  return {
+    from: formatIsoDate(from),
+    to: formatIsoDate(to),
+    label: 'Текущий месяц',
+    previousFrom: formatIsoDate(prevFrom),
+    previousTo: formatIsoDate(endOfDay(prevTo))
+  };
+}
+
+function isDateInRange(isoDate, from, to) {
+  if (!isoDate) return false;
+  return isoDate >= from && isoDate <= to;
+}
+
+export function getIncomeTransactionsInPeriod(state, from, to) {
+  return (state.transactions ?? [])
+    .filter((tx) => {
+      if (!isAnalyticsTransaction(tx)) return false;
+      if (tx.type !== TRANSACTION_TYPES.ACCOUNT_DEPOSIT) return false;
+      const date = getTransactionDate(tx);
+      return isDateInRange(date, from, to);
+    })
+    .sort((a, b) => {
+      const da = getTransactionDate(a) ?? '';
+      const db = getTransactionDate(b) ?? '';
+      return db.localeCompare(da);
+    });
+}
+
+function sumIncomeAmount(transactions) {
+  return transactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+}
+
+export function getIncomeSummary(state, preset = 'month') {
+  const range = resolveIncomePeriodRange(preset);
+  const items = getIncomeTransactionsInPeriod(state, range.from, range.to);
+  const total = sumIncomeAmount(items);
+  const count = items.length;
+
+  let previousTotal = null;
+  let deltaAmount = null;
+  let deltaPercent = null;
+  if (range.previousFrom && range.previousTo) {
+    const prevItems = getIncomeTransactionsInPeriod(
+      state,
+      range.previousFrom,
+      range.previousTo
+    );
+    previousTotal = sumIncomeAmount(prevItems);
+    deltaAmount = total - previousTotal;
+    if (previousTotal > 0) {
+      deltaPercent = Math.round(((total - previousTotal) / previousTotal) * 100);
+    } else if (total > 0) {
+      deltaPercent = 100;
+    } else {
+      deltaPercent = 0;
+    }
+  }
+
+  const byDate = new Map();
+  for (const tx of items) {
+    const date = getTransactionDate(tx) ?? '—';
+    byDate.set(date, (byDate.get(date) ?? 0) + (Number(tx.amount) || 0));
+  }
+  const trend = [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, amount]) => ({ date, amount }));
+
+  return {
+    preset,
+    range,
+    total,
+    count,
+    items,
+    trend,
+    previousTotal,
+    deltaAmount,
+    deltaPercent
+  };
+}
+
+export function getIncomeByCategory(state, preset = 'month') {
+  const range = resolveIncomePeriodRange(preset);
+  const items = getIncomeTransactionsInPeriod(state, range.from, range.to);
+  const totals = new Map();
+
+  for (const tx of items) {
+    const categoryId = tx.incomeCategoryId ?? '__none__';
+    const current = totals.get(categoryId) ?? {
+      categoryId: tx.incomeCategoryId ?? null,
+      categoryName: resolveIncomeCategoryName(
+        state,
+        tx.incomeCategoryId,
+        tx.incomeCategoryName
+      ),
+      amount: 0,
+      count: 0
+    };
+    if (tx.incomeCategoryId) {
+      const cat = findIncomeCategory(state, tx.incomeCategoryId);
+      if (cat?.name) current.categoryName = cat.name;
+    }
+    current.amount += Number(tx.amount) || 0;
+    current.count += 1;
+    totals.set(categoryId, current);
+  }
+
+  const grandTotal = sumIncomeAmount(items);
+  return [...totals.values()]
+    .map((row) => ({
+      ...row,
+      sharePercent: grandTotal > 0 ? Math.round((row.amount / grandTotal) * 100) : 0
+    }))
+    .sort((a, b) => b.amount - a.amount);
 }
