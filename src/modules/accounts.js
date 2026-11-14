@@ -20,6 +20,7 @@ import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import { renderIncomeCategoryOptions } from './incomeCategories.js';
+import { isExperimentDeployment } from '../config/environmentConfig.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeRoot,
@@ -1078,7 +1079,14 @@ export function renderAccounts(state, container) {
 
         ${accountsList}
 
-        <div class="${UI.listFooter}">
+        <div class="${UI.listFooter} flex flex-wrap gap-4 justify-center">
+          ${isExperimentDeployment() ? `
+          <button
+            type="button"
+            data-action="reset-demo-data"
+            class="text-sm text-amber-700 hover:text-amber-900 font-medium transition-colors"
+          >Сбросить демоданные</button>
+          ` : ''}
           <button
             type="button"
             data-action="reset-all-data"
@@ -1215,13 +1223,20 @@ function refresh(state, container, onUpdate) {
   }
 }
 
-export function initAccountsHandlers(state, container, onUpdate, onReset) {
+export function initAccountsHandlers(state, container, onUpdate, onReset, onResetDemo) {
   if (container.dataset.accountsHandlersBound === 'true') return;
   container.dataset.accountsHandlersBound = 'true';
 
   document.addEventListener('click', (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
+
+    if (target.closest('[data-action="reset-demo-data"]')) {
+      if (typeof onResetDemo === 'function') {
+        onResetDemo();
+      }
+      return;
+    }
 
     if (target.closest('[data-action="reset-all-data"]')) {
       if (typeof onReset === 'function') {

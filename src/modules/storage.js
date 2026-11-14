@@ -3,8 +3,12 @@ import {
   getLegacyProductionStorageKey,
   allowsLegacyStorageKeyMigration,
   getLegacyMigrationDoneKey,
-  isLocalOnlyTestMode
+  isLocalOnlyTestMode,
+  isExperimentDeployment
 } from '../config/environmentConfig.js';
+import { getExperimentMeta, markExperimentUserClearedData } from '../config/experimentMeta.js';
+import { createDemoSeedState, assertDemoSeedInvariants } from '../config/demoSeedData.js';
+import { clearExperimentSkipAutoSeed } from '../config/experimentMeta.js';
 import { checkFinancialInvariants } from './financeCoreInvariants.js';
 
 const LEGACY_PRODUCTION_STORAGE_KEY = getLegacyProductionStorageKey();
@@ -44,7 +48,7 @@ function pickSharedFields(state) {
   };
 }
 
-function pickPersistedFields(state) {
+export function pickPersistedFields(state) {
   return {
     profile: state.profile === 'wife' ? 'wife' : 'husband',
     ...pickSharedFields(state),
@@ -252,9 +256,32 @@ function hasPersistedData(loaded) {
   );
 }
 
+export function restoreDemoSeedToStorage() {
+  const demo = mergeWithDefaults(assertDemoSeedInvariants(createDemoSeedState()));
+  clearExperimentSkipAutoSeed();
+  const payload = pickPersistedFields(demo);
+  localStorage.setItem(resolveStorageKey(), JSON.stringify(payload));
+  return demo;
+}
+
+function seedExperimentDemoIfNeeded() {
+  return restoreDemoSeedToStorage();
+}
+
 export function loadState() {
   try {
     let raw = localStorage.getItem(resolveStorageKey());
+
+    if (isExperimentDeployment()) {
+      if (!raw) {
+        const meta = getExperimentMeta();
+        if (meta.skipAutoSeed) {
+          return getDefaultState();
+        }
+        return seedExperimentDemoIfNeeded();
+      }
+      return mergeWithDefaults(JSON.parse(raw));
+    }
 
     if (
       !raw
@@ -289,6 +316,9 @@ export function loadState() {
 export function clearState() {
   try {
     localStorage.removeItem(resolveStorageKey());
+    if (isExperimentDeployment()) {
+      markExperimentUserClearedData();
+    }
     return true;
   } catch {
     return false;

@@ -1,5 +1,6 @@
 /**
  * Family Mode — single shared snapshot via Edge Functions (no Supabase Auth).
+ * Experiment Vercel preview — isolated demo localStorage, no Supabase.
  */
 
 export const FAMILY_SNAPSHOT_ID = 'family';
@@ -9,31 +10,84 @@ export const ENVIRONMENT_ISOLATION_RULE = Object.freeze({
   activeSnapshotId: FAMILY_SNAPSHOT_ID
 });
 
-/**
- * MUST be false for production family sync (Supabase Edge Functions).
- */
-export const LOCAL_ONLY_TEST_MODE = false;
+const FINANCIAL_STORAGE_KEY_FAMILY = 'joint-finance-state-v2-family';
+const FINANCIAL_STORAGE_KEY_EXPERIMENT = 'joint-finance-state-v2-experiment';
 
-export function isLocalOnlyTestMode() {
-  return LOCAL_ONLY_TEST_MODE === true;
+const PRODUCTION_HOST = 'joint-finance.vercel.app';
+
+/**
+ * Experiment preview on Vercel (branch experiment-full-sync).
+ * Deliberately does not match beta / production hosts.
+ */
+export function matchesExperimentHost(hostname) {
+  const host = String(hostname ?? '').toLowerCase();
+  return host.includes('joint-finance-git-experiment-full-sync');
 }
 
-const FINANCIAL_STORAGE_KEY = 'joint-finance-state-v2-family';
+export function matchesBetaHost(hostname) {
+  const host = String(hostname ?? '').toLowerCase();
+  return host.includes('joint-finance-git-beta')
+    || host.includes('joint-finance-git-family');
+}
+
+export function getDeploymentHostname() {
+  if (typeof window === 'undefined' || !window.location?.hostname) {
+    return '';
+  }
+  return window.location.hostname;
+}
+
+/** True only on Experiment Vercel preview — demo sandbox, no Supabase. */
+export function isExperimentDeployment() {
+  return matchesExperimentHost(getDeploymentHostname());
+}
+
+/**
+ * UI / diagnostics experiment mode (same as isolated Experiment deployment).
+ */
+export function isExperiment() {
+  return isExperimentDeployment();
+}
+
+export function isProduction() {
+  return getDeploymentHostname() === PRODUCTION_HOST;
+}
+
+/**
+ * Demo sandbox: localStorage only, no Edge Functions, no family gate.
+ */
+export function isLocalOnlyTestMode() {
+  return isExperimentDeployment();
+}
+
+/**
+ * @deprecated Constant ignored — use isLocalOnlyTestMode() (hostname-based).
+ */
+export const LOCAL_ONLY_TEST_MODE = false;
 
 let validated = false;
 
 export function validateEnvironmentIsolation() {
   validated = true;
+  if (isExperimentDeployment()) {
+    return { mode: 'experiment-demo', activeSnapshotId: null };
+  }
   return { mode: 'family', activeSnapshotId: FAMILY_SNAPSHOT_ID };
 }
 
 export function getActiveSnapshotId() {
   validateEnvironmentIsolation();
+  if (isExperimentDeployment()) {
+    return null;
+  }
   return FAMILY_SNAPSHOT_ID;
 }
 
 export function getFinancialStorageKey() {
-  return FINANCIAL_STORAGE_KEY;
+  if (isExperimentDeployment()) {
+    return FINANCIAL_STORAGE_KEY_EXPERIMENT;
+  }
+  return FINANCIAL_STORAGE_KEY_FAMILY;
 }
 
 export function getLegacyProductionStorageKey() {
@@ -41,7 +95,8 @@ export function getLegacyProductionStorageKey() {
 }
 
 export function getLegacyMigrationDoneKey() {
-  return `${FINANCIAL_STORAGE_KEY}-legacy-migration-done`;
+  const key = getFinancialStorageKey();
+  return `${key}-legacy-migration-done`;
 }
 
 export function allowsLegacyStorageKeyMigration() {
@@ -52,7 +107,6 @@ export function getSeedReadSnapshotId() {
   return null;
 }
 
-/** @deprecated Family mode — always false (no legacy shared rows). */
 export function requiresHouseholdSnapshot() {
   return false;
 }
@@ -61,16 +115,11 @@ export function isHouseholdSnapshotId(snapshotId) {
   return snapshotId === FAMILY_SNAPSHOT_ID;
 }
 
-export function isExperiment() {
-  return true;
-}
-
-export function isProduction() {
-  return false;
-}
-
 export function assertSnapshotId(snapshotId, operation = 'read') {
   void operation;
+  if (isExperimentDeployment()) {
+    return;
+  }
   if (snapshotId !== FAMILY_SNAPSHOT_ID) {
     throw new Error(`[ENVIRONMENT] Invalid snapshot id "${snapshotId}" — expected "${FAMILY_SNAPSHOT_ID}"`);
   }
@@ -84,7 +133,6 @@ export function assertSnapshotReadTarget(snapshotId) {
   assertSnapshotId(snapshotId, 'read');
 }
 
-/** No-op — household resolver removed in family mode. */
 export function registerHouseholdSnapshotResolver() {}
 
 export function getRealtimeChannelName() {

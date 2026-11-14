@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: Experiment environment</title>
+  <style>
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Experiment sandbox detection</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      matchesExperimentHost,
+      matchesBetaHost,
+      isLocalOnlyTestMode,
+      getFinancialStorageKey
+    } from '../src/config/environmentConfig.js';
+    import { checkFinancialInvariants } from '../src/modules/financeCoreInvariants.js';
+    import { createDemoSeedState } from '../src/config/demoSeedData.js';
+
+    const out = document.getElementById('out');
+    function log(t, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = t;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+  const tests = [
+    ['experiment host', () => {
+      assert(matchesExperimentHost('joint-finance-git-experiment-full-sync-apteetas-projects.vercel.app'), 'match');
+      assert(!matchesExperimentHost('joint-finance-git-beta-apteetas-projects.vercel.app'), 'not beta');
+      assert(!matchesExperimentHost('joint-finance.vercel.app'), 'not prod');
+    }],
+    ['beta host', () => {
+      assert(matchesBetaHost('joint-finance-git-beta-apteetas-projects.vercel.app'), 'beta');
+      assert(!matchesBetaHost('joint-finance-git-experiment-full-sync-apteetas-projects.vercel.app'), 'not exp');
+    }],
+    ['local dev not experiment', () => {
+      assert(!isLocalOnlyTestMode(), 'localhost is not auto demo');
+      assert(getFinancialStorageKey() === 'joint-finance-state-v2-family', 'family key on localhost');
+    }],
+    ['demo seed invariants', () => {
+      const check = checkFinancialInvariants(createDemoSeedState());
+      assert(check.ok, check.errors?.join('; ') ?? 'invariants');
+    }]
+  ];
+
+    let fail = 0;
+    for (const [name, fn] of tests) {
+      try {
+        fn();
+        log(`PASS ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL ${name}: ${e.message}`, 'fail');
+      }
+    }
+    log(fail ? `Failed: ${fail}` : 'ALL PASS', fail ? 'fail' : 'pass');
+  </script>
+</body>
+</html>

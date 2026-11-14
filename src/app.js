@@ -52,7 +52,12 @@ import { initModalDraftSystem } from './modules/modalDraftStore.js';
 import { isAnyModalSubmitting } from './modules/modalFormSubmit.js';
 import { ensureDefaultIncomeCategories } from './modules/incomeCategories.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
-import { validateEnvironmentIsolation, isLocalOnlyTestMode } from './config/environmentConfig.js';
+import {
+  validateEnvironmentIsolation,
+  isLocalOnlyTestMode,
+  isExperimentDeployment
+} from './config/environmentConfig.js';
+import { restoreDemoSeedToStorage } from './modules/storage.js';
 import {
   ensureFamilyAccess,
   initFamilyUnauthorizedListener,
@@ -288,9 +293,25 @@ function resetAllData() {
   }
   clearState();
   clearOfflineQueue();
+  if (isExperimentDeployment()) {
+    location.reload();
+    return;
+  }
   clearRemoteSharedState().finally(() => {
     location.reload();
   });
+}
+
+function resetDemoData() {
+  if (!confirm('Восстановить исходные демонстрационные данные? Текущие изменения будут заменены.')) {
+    return;
+  }
+  try {
+    restoreDemoSeedToStorage();
+    location.reload();
+  } catch (error) {
+    alert(error?.message ?? 'Не удалось восстановить демоданные');
+  }
 }
 
 function finishTabRender(options = {}) {
@@ -345,7 +366,7 @@ function renderTab(tab, options = {}) {
 
   if (tab === 'accounts') {
     renderAccounts(state, tabContent);
-    initAccountsHandlers(state, tabContent, onStateChange, resetAllData);
+    initAccountsHandlers(state, tabContent, onStateChange, resetAllData, resetDemoData);
     finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
     return;
   }
@@ -577,7 +598,7 @@ function showLocalTestModeBanner() {
   const banner = document.createElement('div');
   banner.id = 'local-test-banner';
   banner.className = 'max-w-5xl mx-auto px-5 py-2 mt-2 rounded-xl bg-amber-50 text-amber-900 text-sm border border-amber-300 text-center';
-  banner.textContent = 'Локальный тест: Supabase отключён, данные только в localStorage. Перед push на GitHub — LOCAL_ONLY_TEST_MODE = false в environmentConfig.js';
+  banner.textContent = 'ТЕСТОВЫЙ РЕЖИМ — используются демонстрационные данные. Синхронизация с Supabase отключена.';
   const main = document.getElementById('tab-content');
   main?.parentNode?.insertBefore(banner, main);
 }
