@@ -212,6 +212,9 @@ export async function ensureFamilyAccess({ onReady } = {}) {
 }
 
 export function lockAppAndShowGate() {
+  if (isLocalOnlyTestMode()) {
+    return;
+  }
   renderGateShell();
   bindGateHandlers();
   showGate();

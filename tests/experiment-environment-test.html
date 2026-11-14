@@ -18,6 +18,11 @@
       isLocalOnlyTestMode,
       getFinancialStorageKey
     } from '../src/config/environmentConfig.js';
+    import {
+      getExperimentMeta,
+      markExperimentUserClearedData,
+      clearExperimentSkipAutoSeed
+    } from '../src/config/experimentMeta.js';
     import { checkFinancialInvariants } from '../src/modules/financeCoreInvariants.js';
     import { createDemoSeedState } from '../src/config/demoSeedData.js';
 
@@ -47,6 +52,24 @@
     ['demo seed invariants', () => {
       const check = checkFinancialInvariants(createDemoSeedState());
       assert(check.ok, check.errors?.join('; ') ?? 'invariants');
+    }],
+    ['production not experiment', () => {
+      assert(!matchesExperimentHost('joint-finance.vercel.app'), 'prod host');
+      assert(!matchesBetaHost('joint-finance.vercel.app'), 'prod not beta');
+    }],
+    ['beta never experiment', () => {
+      const beta = 'joint-finance-git-beta-apteetas-projects.vercel.app';
+      assert(matchesBetaHost(beta), 'is beta');
+      assert(!matchesExperimentHost(beta), 'beta is not experiment');
+    }],
+    ['experiment meta skipAutoSeed', () => {
+      localStorage.removeItem('joint-finance-experiment-meta');
+      assert(!getExperimentMeta().skipAutoSeed, 'initial');
+      markExperimentUserClearedData();
+      assert(getExperimentMeta().skipAutoSeed === true, 'marked');
+      clearExperimentSkipAutoSeed();
+      assert(!getExperimentMeta().skipAutoSeed, 'cleared');
+      localStorage.removeItem('joint-finance-experiment-meta');
     }]
   ];
 

@@ -456,7 +456,19 @@ function initProfileHandlers() {
   });
 }
 
+function syncExperimentUiChrome() {
+  const lockBtn = document.getElementById('family-lock-btn');
+  if (lockBtn) {
+    lockBtn.classList.toggle('hidden', isExperimentDeployment());
+    lockBtn.setAttribute('aria-hidden', isExperimentDeployment() ? 'true' : 'false');
+  }
+}
+
 function initFamilyLockHandlers() {
+  if (isExperimentDeployment()) {
+    syncExperimentUiChrome();
+    return;
+  }
   document.getElementById('family-lock-btn')?.addEventListener('click', () => {
     if (!confirm('Заблокировать приложение на этом устройстве? Потребуется семейный пароль.')) {
       return;
@@ -754,6 +766,7 @@ async function bootFinancialApp() {
   }
 
   renderProfile();
+  syncExperimentUiChrome();
   updateCounters();
   initProfileHandlers();
   initFamilyLockHandlers();
