@@ -46,7 +46,9 @@ import { saveState, loadState, clearState, hardResetStateFromRemoteSnapshot } fr
 import {
   relocateModals,
   closeAllModals,
-  isAnyModalOpen
+  isAnyModalOpen,
+  getOpenModalNames,
+  restoreOpenModalsFromSession
 } from './modules/modalLayer.js';
 import { initModalDraftSystem } from './modules/modalDraftStore.js';
 import { isAnyModalSubmitting } from './modules/modalFormSubmit.js';
@@ -294,11 +296,18 @@ function resetAllData() {
 }
 
 function finishTabRender(options = {}) {
-  const { preserveModals = false, persistActiveTab = true } = options;
+  const {
+    preserveModals = false,
+    persistActiveTab = true,
+    preserveOpenNames = []
+  } = options;
   if (!preserveModals) {
     closeAllModals();
   }
-  relocateModals(tabContent);
+  relocateModals(tabContent, {
+    preserveOpen: preserveModals,
+    preserveOpenNames: preserveOpenNames.length ? preserveOpenNames : getOpenModalNames()
+  });
   mountPurchasePlannerModal();
   syncHeaderHeight();
   updateCounters();
@@ -323,14 +332,22 @@ function refreshUiAfterRemoteSync(meta = {}) {
     return;
   }
 
+  if (isAnyModalOpen()) {
+    pendingRemoteUiRefresh = true;
+    updateCounters();
+    return;
+  }
+
   renderTab(state.activeTab || 'accounts', { passiveSync: true });
 }
 
 function renderTab(tab, options = {}) {
   if (!tabContent || !TAB_MESSAGES[tab]) return;
 
-  const preserveModals = options.preserveModals === true;
   const passiveSync = options.passiveSync === true;
+  const openBeforeRender = getOpenModalNames();
+  const preserveModals = options.preserveModals === true
+    || (passiveSync && openBeforeRender.length > 0);
 
   state.activeTab = tab;
 
@@ -346,49 +363,77 @@ function renderTab(tab, options = {}) {
   if (tab === 'accounts') {
     renderAccounts(state, tabContent);
     initAccountsHandlers(state, tabContent, onStateChange, resetAllData);
-    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
+    finishTabRender({
+      preserveModals,
+      persistActiveTab: !passiveSync,
+      preserveOpenNames: openBeforeRender
+    });
     return;
   }
 
   if (tab === 'categories') {
     renderCategories(state, tabContent);
     initCategoriesHandlers(state, tabContent, onStateChange);
-    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
+    finishTabRender({
+      preserveModals,
+      persistActiveTab: !passiveSync,
+      preserveOpenNames: openBeforeRender
+    });
     return;
   }
 
   if (tab === 'history') {
     renderHistory(state, tabContent);
     initHistoryHandlers(state, tabContent, onStateChange);
-    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
+    finishTabRender({
+      preserveModals,
+      persistActiveTab: !passiveSync,
+      preserveOpenNames: openBeforeRender
+    });
     return;
   }
 
   if (tab === 'savings') {
     renderSavings(state, tabContent);
     initSavingsHandlers(state, tabContent, onStateChange);
-    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
+    finishTabRender({
+      preserveModals,
+      persistActiveTab: !passiveSync,
+      preserveOpenNames: openBeforeRender
+    });
     return;
   }
 
   if (tab === 'debts') {
     renderDebts(state, tabContent);
     initDebtsHandlers(state, tabContent, onStateChange, (nextTab) => renderTab(nextTab));
-    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
+    finishTabRender({
+      preserveModals,
+      persistActiveTab: !passiveSync,
+      preserveOpenNames: openBeforeRender
+    });
     return;
   }
 
   if (tab === 'obligations') {
     renderObligations(state, tabContent);
     initObligationsHandlers(state, tabContent, onStateChange);
-    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
+    finishTabRender({
+      preserveModals,
+      persistActiveTab: !passiveSync,
+      preserveOpenNames: openBeforeRender
+    });
     return;
   }
 
   if (tab === 'stats') {
     renderStats(state, tabContent);
     initStatsHandlers(state, tabContent, onStateChange);
-    finishTabRender({ preserveModals, persistActiveTab: !passiveSync });
+    finishTabRender({
+      preserveModals,
+      persistActiveTab: !passiveSync,
+      preserveOpenNames: openBeforeRender
+    });
     return;
   }
 
@@ -713,8 +758,21 @@ async function bootFinancialApp() {
     });
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return;
-      syncFromRemote();
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      void syncFromRemote();
+    });
+
+    window.addEventListener('pageshow', (event) => {
+      if (!event.persisted) {
+        return;
+      }
+      const open = getOpenModalNames();
+      if (open.length > 0) {
+        return;
+      }
+      restoreOpenModalsFromSession();
     });
 
     window.addEventListener('online', () => {
@@ -748,6 +806,7 @@ async function bootFinancialApp() {
     }
   });
   renderTab(state.activeTab || 'accounts');
+  restoreOpenModalsFromSession();
 
   if (!isLocalOnlyTestMode()) {
     void syncFromRemote().then((syncResult) => {

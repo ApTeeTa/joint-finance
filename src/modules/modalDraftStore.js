@@ -2,6 +2,7 @@
  * Local modal form drafts (device-only). No secrets/passphrases/tokens.
  */
 const STORAGE_PREFIX = 'jf-modal-draft-';
+const SESSION_OPEN_MODALS_KEY = 'jf-session-open-modals';
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEBOUNCE_MS = 300;
 
@@ -121,6 +122,23 @@ export function confirmDiscardDraft(modalName) {
 
 let draftSystemBound = false;
 
+function persistOpenModalsForSessionFromDom() {
+  const names = [];
+  try {
+    document.querySelectorAll('[data-modal]:not(.hidden)').forEach((modal) => {
+      const name = modal.dataset?.modal;
+      if (name) names.push(name);
+    });
+    if (names.length > 0) {
+      sessionStorage.setItem(SESSION_OPEN_MODALS_KEY, JSON.stringify(names));
+    } else {
+      sessionStorage.removeItem(SESSION_OPEN_MODALS_KEY);
+    }
+  } catch {
+    /* noop */
+  }
+}
+
 export function flushVisibleModalDrafts() {
   try {
     document.querySelectorAll('[data-modal]:not(.hidden)').forEach((modal) => {
@@ -160,10 +178,17 @@ export function initModalDraftSystem() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       flushVisibleModalDrafts();
+      persistOpenModalsForSessionFromDom();
     }
   });
 
   window.addEventListener('pagehide', () => {
     flushVisibleModalDrafts();
+    persistOpenModalsForSessionFromDom();
+  });
+
+  window.addEventListener('blur', () => {
+    flushVisibleModalDrafts();
+    persistOpenModalsForSessionFromDom();
   });
 }
