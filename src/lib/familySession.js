@@ -179,7 +179,11 @@ export async function loginWithPassphrase(passphrase) {
     if (error?.name === 'AbortError') {
       return { ok: false, error: 'Сервер не ответил вовремя. Попробуйте ещё раз.' };
     }
-    return { ok: false, error: 'Нет связи с сервером. Проверьте интернет.' };
+    console.error('[family-session]', error);
+    return {
+      ok: false,
+      error: 'Нет связи с сервером (Supabase). Проверьте интернет/VPN. Для нового preview на Vercel нужен деплой Edge Functions (CORS). Или откройте beta-ссылку.'
+    };
   }
 }
 
