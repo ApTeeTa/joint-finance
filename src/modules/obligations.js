@@ -18,6 +18,7 @@ import {
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
+import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -648,66 +649,71 @@ export function initObligationsHandlers(state, container, onStateChange) {
     }
   });
 
-  document.addEventListener('submit', (event) => {
+  document.addEventListener('submit', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const form = event.target.closest('[data-form]');
     if (!form) return;
     event.preventDefault();
 
     const formKey = form.dataset.form;
+    const modalName = formKey;
     const data = readFormData(form);
 
     if (formKey === 'add-obligation') {
-      if (createObligation(state, data)) {
-        closeModal('add-obligation');
-        refresh();
-      }
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const ok = createObligation(state, data);
+        if (ok) refresh();
+        return ok;
+      });
       return;
     }
 
     if (formKey === 'edit-obligation') {
-      if (updateObligation(state, data.obligationId, data)) {
-        closeModal('edit-obligation');
-        refresh();
-      }
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const ok = updateObligation(state, data.obligationId, data);
+        if (ok) refresh();
+        return ok;
+      });
       return;
     }
 
     if (formKey === 'pay-obligation') {
-      const result = payObligation(
-        state,
-        data.obligationId,
-        data.amount,
-        data.accountId,
-        data.paidUntil,
-        data.comment,
-        todayIso(),
-        state.profile
-      );
-
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-
-      closeModal('pay-obligation');
-      refresh();
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const result = payObligation(
+          state,
+          data.obligationId,
+          data.amount,
+          data.accountId,
+          data.paidUntil,
+          data.comment,
+          todayIso(),
+          state.profile
+        );
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh();
+        return true;
+      });
       return;
     }
 
     if (formKey === 'reserve-obligation') {
-      if (reserveFunds(state, data.obligationId, data.amount)) {
-        closeModal('reserve-obligation');
-        refresh();
-      }
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const ok = reserveFunds(state, data.obligationId, data.amount);
+        if (ok) refresh();
+        return ok;
+      });
       return;
     }
 
     if (formKey === 'unreserve-obligation') {
-      if (unreserveFunds(state, data.obligationId, data.amount)) {
-        closeModal('unreserve-obligation');
-        refresh();
-      }
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const ok = unreserveFunds(state, data.obligationId, data.amount);
+        if (ok) refresh();
+        return ok;
+      });
     }
   });
 }

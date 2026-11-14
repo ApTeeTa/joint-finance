@@ -49,6 +49,7 @@ import {
   isAnyModalOpen
 } from './modules/modalLayer.js';
 import { initModalDraftSystem } from './modules/modalDraftStore.js';
+import { isAnyModalSubmitting } from './modules/modalFormSubmit.js';
 import { ensureDefaultIncomeCategories } from './modules/incomeCategories.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
 import { validateEnvironmentIsolation, isLocalOnlyTestMode } from './config/environmentConfig.js';
@@ -136,7 +137,36 @@ let lastSyncReason = null;
 let stopSyncPolling = null;
 let financialAppBooted = false;
 let pendingRemoteUiRefresh = false;
+let pendingRemoteSnapshotApply = null;
 let lastAppliedRemoteUpdatedAt = null;
+
+function shouldDeferRemoteMutationApply() {
+  return isAnyModalOpen() || isAnyModalSubmitting();
+}
+
+async function applyPendingRemoteSnapshot() {
+  if (!pendingRemoteSnapshotApply) {
+    return;
+  }
+  const pending = pendingRemoteSnapshotApply;
+  pendingRemoteSnapshotApply = null;
+
+  const resetResult = await hardResetStateFromRemoteSnapshot(state, pending.snapshot);
+  if (!resetResult.ok) {
+    console.error('[SYNC] deferred apply failed');
+    return;
+  }
+
+  const patch = validateNoStaleEntities(state, pending.snapshot);
+  applyStatePatch(state, patch);
+  ensureDefaultIncomeCategories(state);
+  reconcileLegacyTransactions(state);
+  saveState(state, { skipRemote: true });
+  initLastValidStateIfValid();
+  if (pending.meta?.updatedAt) {
+    lastAppliedRemoteUpdatedAt = pending.meta.updatedAt;
+  }
+}
 
 const INVARIANT_ROLLBACK_ALERT = 'Операция отменена: свободный баланс не может быть отрицательным!';
 
@@ -287,7 +317,7 @@ function refreshUiAfterRemoteSync(meta = {}) {
     lastAppliedRemoteUpdatedAt = remoteStamp;
   }
 
-  if (isAnyModalOpen()) {
+  if (shouldDeferRemoteMutationApply()) {
     pendingRemoteUiRefresh = true;
     updateCounters();
     return;
@@ -596,22 +626,33 @@ async function syncFromRemote() {
     const applyDecision = shouldApplyRemoteSnapshot(state, fetchResult.meta ?? {});
 
     if (applyDecision.apply) {
-      const resetResult = await hardResetStateFromRemoteSnapshot(state, fetchResult.snapshot);
-      if (!resetResult.ok) {
-        lastSyncReason = 'hard_reset_failed';
-        showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
-        return { ok: false, error: 'hard_reset_failed' };
-      }
+      if (shouldDeferRemoteMutationApply()) {
+        pendingRemoteSnapshotApply = {
+          snapshot: fetchResult.snapshot,
+          meta: fetchResult.meta ?? {}
+        };
+        pendingRemoteUiRefresh = true;
+        markInitialSyncDone();
+        lastSyncReason = `${applyDecision.reason}_deferred_modal`;
+        showSyncStatusBanner(null);
+      } else {
+        const resetResult = await hardResetStateFromRemoteSnapshot(state, fetchResult.snapshot);
+        if (!resetResult.ok) {
+          lastSyncReason = 'hard_reset_failed';
+          showSyncStatusBanner(getSyncStatusMessage('fetch_failed'));
+          return { ok: false, error: 'hard_reset_failed' };
+        }
 
-      const patch = validateNoStaleEntities(state, fetchResult.snapshot);
-      applyStatePatch(state, patch);
-      ensureDefaultIncomeCategories(state);
-      reconcileLegacyTransactions(state);
-      saveState(state, { skipRemote: true });
-      markInitialSyncDone();
-      initLastValidStateIfValid();
-      lastSyncReason = applyDecision.reason;
-      showSyncStatusBanner(null);
+        const patch = validateNoStaleEntities(state, fetchResult.snapshot);
+        applyStatePatch(state, patch);
+        ensureDefaultIncomeCategories(state);
+        reconcileLegacyTransactions(state);
+        saveState(state, { skipRemote: true });
+        markInitialSyncDone();
+        initLastValidStateIfValid();
+        lastSyncReason = applyDecision.reason;
+        showSyncStatusBanner(null);
+      }
     } else {
       reconcileLegacyTransactions(state);
       ensureDefaultIncomeCategories(state);
@@ -720,8 +761,18 @@ async function bootFinancialApp() {
     });
   }
 
-  document.addEventListener('joint-finance:modal-closed', () => {
-    if (!pendingRemoteUiRefresh) return;
+  document.addEventListener('joint-finance:modal-closed', async () => {
+    if (shouldDeferRemoteMutationApply()) {
+      return;
+    }
+
+    if (pendingRemoteSnapshotApply) {
+      await applyPendingRemoteSnapshot();
+    }
+
+    if (!pendingRemoteUiRefresh) {
+      return;
+    }
     pendingRemoteUiRefresh = false;
     renderTab(state.activeTab || 'accounts', { passiveSync: true });
   });
