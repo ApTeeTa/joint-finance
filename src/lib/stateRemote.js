@@ -72,7 +72,7 @@ function handleHttpAuthFailure(status) {
   }
 }
 
-async function fetchSnapshotRow(snapshotId) {
+async function fetchSnapshotRowOnce(snapshotId) {
   assertSnapshotId(snapshotId, 'read');
 
   const tokenResult = requireAccessToken();
@@ -89,7 +89,7 @@ async function fetchSnapshotRow(snapshotId) {
 
   if (!response.ok || !data?.ok) {
     console.error('[SYNC] GET family-snapshot failed', response.status, data);
-    return { ok: false, error: new Error('fetch_failed') };
+    return { ok: false, error: new Error('fetch_failed'), reason: 'fetch_failed' };
   }
 
   return {
@@ -100,6 +100,23 @@ async function fetchSnapshotRow(snapshotId) {
     },
     rowExists: data.row_exists !== false && data.updated_at != null
   };
+}
+
+async function fetchSnapshotRow(snapshotId, { attempts = 3 } = {}) {
+  let lastResult = { ok: false, error: new Error('fetch_failed'), reason: 'fetch_failed' };
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    lastResult = await fetchSnapshotRowOnce(snapshotId);
+    if (lastResult.ok) return lastResult;
+    if (lastResult.reason === 'unauthorized' || lastResult.reason === 'no_family_token') {
+      return lastResult;
+    }
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 400 * (2 ** attempt));
+      });
+    }
+  }
+  return lastResult;
 }
 
 export function schedulePushSharedState(state) {
@@ -230,6 +247,7 @@ export async function clearRemoteSharedState() {
   const emptyPayload = exportSharedSnapshot({
     accounts: [],
     categories: [],
+    incomeCategories: [],
     transactions: [],
     obligations: [],
     savings: [],

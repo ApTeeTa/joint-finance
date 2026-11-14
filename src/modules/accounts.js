@@ -18,6 +18,8 @@ import {
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { renderIncomeCategoryOptions } from './incomeCategories.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeRoot,
@@ -343,7 +345,7 @@ function deleteAccount(state, accountId) {
   });
 }
 
-function depositToAccount(state, accountId, amount, comment, date) {
+function depositToAccount(state, accountId, amount, comment, date, incomeCategoryId = null) {
   const amountError = validateDepositAmount(amount);
   if (amountError) {
     alert(amountError);
@@ -356,7 +358,8 @@ function depositToAccount(state, accountId, amount, comment, date) {
     amount,
     comment,
     date,
-    state.profile
+    state.profile,
+    incomeCategoryId || null
   );
 
   if (!result.ok) {
@@ -816,7 +819,7 @@ function renderTransferModal() {
   `;
 }
 
-function renderTopUpModal() {
+function renderTopUpModal(state) {
   return `
     <div
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
@@ -857,6 +860,12 @@ function renderTopUpModal() {
               value="${todayIso()}"
               class="${UI.field}"
             >
+          </div>
+          <div>
+            <label class="${UI.label}">Категория дохода</label>
+            <select name="incomeCategoryId" class="${UI.field}">
+              ${renderIncomeCategoryOptions(state)}
+            </select>
           </div>
           <div class="flex gap-2 pt-2">
             <button
@@ -1081,7 +1090,7 @@ export function renderAccounts(state, container) {
     </div>
     ${renderAddAccountModal()}
     ${renderEditAccountModal()}
-    ${renderTopUpModal()}
+    ${renderTopUpModal(state)}
     ${renderTransferModal()}
   `;
 }
@@ -1332,7 +1341,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     }
   });
 
-  document.addEventListener('submit', (event) => {
+  document.addEventListener('submit', async (event) => {
     const submitRoot = event.target.closest?.('form') ?? event.target;
     if (!isWithinAppUi(submitRoot, container)) return;
     event.preventDefault();
@@ -1346,11 +1355,11 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const initialBalance = addForm.initialBalance.value;
       const comment = addForm.comment.value;
 
-      if (createAccount(state, name, currency, initialBalance, comment)) {
-        closeModal('add-account');
-        addForm.reset();
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('add-account', addForm, async () => {
+        const ok = createAccount(state, name, currency, initialBalance, comment);
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
@@ -1359,10 +1368,11 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const accountId = editForm.accountId.value;
       const name = editForm.name.value;
       const balance = editForm.balance.value;
-      if (updateAccount(state, accountId, name, balance)) {
-        closeModal('edit-account');
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('edit-account', editForm, async () => {
+        const ok = updateAccount(state, accountId, name, balance);
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
@@ -1372,11 +1382,12 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const amount = topUpForm.amount.value;
       const comment = topUpForm.comment.value;
       const date = topUpForm.date.value;
-      if (depositToAccount(state, accountId, amount, comment, date)) {
-        closeModal('topup');
-        topUpForm.reset();
-        refresh(state, container, onUpdate);
-      }
+      const incomeCategoryId = topUpForm.incomeCategoryId?.value || null;
+      await runGuardedModalSubmit('topup', topUpForm, async () => {
+        const ok = depositToAccount(state, accountId, amount, comment, date, incomeCategoryId);
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
       return;
     }
 
@@ -1392,11 +1403,11 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
         return;
       }
 
-      if (transferBetweenAccounts(state, sourceAccountId, destAccountId, amount, inputMode)) {
-        closeModal('transfer');
-        transferForm.reset();
-        refresh(state, container, onUpdate);
-      }
+      await runGuardedModalSubmit('transfer', transferForm, async () => {
+        const ok = transferBetweenAccounts(state, sourceAccountId, destAccountId, amount, inputMode);
+        if (ok) refresh(state, container, onUpdate);
+        return ok;
+      });
     }
   });
 }

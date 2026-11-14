@@ -1,5 +1,11 @@
 import { isExperiment } from '../config/environmentConfig.js';
 import { logUiRuleFix } from './uiRulesEngine.js';
+import {
+  clearDraft,
+  confirmDiscardDraft,
+  restoreDraftIntoForm
+} from './modalDraftStore.js';
+import { isModalSubmitting } from './modalFormSubmit.js';
 
 const MODAL_ROOT_ID = 'modal-root';
 
@@ -107,6 +113,10 @@ function syncBodyModalState() {
   }
 }
 
+export function isAnyModalOpen() {
+  return Boolean(document.querySelector(`${MODAL_SELECTOR}:not(.hidden)`));
+}
+
 export function openModal(modalName) {
   const modal = findModal(modalName);
   if (!modal) {
@@ -125,16 +135,40 @@ export function openModal(modalName) {
   }
 
   setModalHidden(modal, false);
+  const form = modal.querySelector('form[data-form]');
+  if (form && modalName) {
+    restoreDraftIntoForm(form, modalName);
+  }
   syncBodyModalState();
   return true;
 }
 
 export function closeModal(modalName) {
+  if (modalName && isModalSubmitting(modalName)) {
+    return false;
+  }
   const modal = findModal(modalName);
   if (modal) {
     setModalHidden(modal, true);
   }
   syncBodyModalState();
+  if (modalName) {
+    document.dispatchEvent(new CustomEvent('joint-finance:modal-closed', {
+      detail: { modalName }
+    }));
+  }
+}
+
+/**
+ * Backdrop / «Отмена» — confirm draft discard; blocked while submitting.
+ */
+export function requestCloseModal(modalName) {
+  if (!modalName) return false;
+  if (isModalSubmitting(modalName)) return false;
+  if (!confirmDiscardDraft(modalName)) return false;
+  clearDraft(modalName);
+  closeModal(modalName);
+  return true;
 }
 
 export function closeAllModals() {
@@ -161,6 +195,14 @@ export function initModalDismissHandlers() {
   }
 
   document.addEventListener('click', (event) => {
+    const closeBtn = event.target.closest('[data-action="close-modal"]');
+    if (closeBtn?.dataset?.modal) {
+      event.preventDefault();
+      event.stopPropagation();
+      requestCloseModal(closeBtn.dataset.modal);
+      return;
+    }
+
     const modal = event.target.closest('[data-modal]');
     if (!modal || modal.classList.contains('hidden')) {
       return;
@@ -172,7 +214,7 @@ export function initModalDismissHandlers() {
 
     const modalName = modal.dataset.modal;
     if (modalName) {
-      closeModal(modalName);
+      requestCloseModal(modalName);
     }
-  });
+  }, true);
 }

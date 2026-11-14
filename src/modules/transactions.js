@@ -352,7 +352,15 @@ function addTransaction(state, data) {
   return record;
 }
 
-export function recordAccountDeposit(state, accountId, amount, comment, date, author) {
+export function recordAccountDeposit(
+  state,
+  accountId,
+  amount,
+  comment,
+  date,
+  author,
+  incomeCategoryId = null
+) {
   const blocked = guardFinanceEntry('depositAccount');
   if (blocked) return blocked;
 
@@ -367,6 +375,12 @@ export function recordAccountDeposit(state, accountId, amount, comment, date, au
   account.balance = (account.balance ?? 0) + value;
   const currency = account.currency ?? 'RUB';
 
+  let incomeCategoryName;
+  if (incomeCategoryId) {
+    const cat = (state.incomeCategories ?? []).find((item) => item.id === incomeCategoryId);
+    incomeCategoryName = cat?.name;
+  }
+
   const tx = addTransaction(state, {
     type: TRANSACTION_TYPES.ACCOUNT_DEPOSIT,
     amount: value,
@@ -374,7 +388,9 @@ export function recordAccountDeposit(state, accountId, amount, comment, date, au
     currency,
     comment,
     date,
-    author
+    author,
+    incomeCategoryId: incomeCategoryId || undefined,
+    incomeCategoryName
   });
 
   enforceFinancialInvariants(state, { operation: 'recordAccountDeposit', accountId });
