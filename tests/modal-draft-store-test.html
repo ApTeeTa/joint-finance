@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: modalDraftStore</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>modalDraftStore</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      readDraft,
+      hasDraft,
+      clearDraft,
+      scheduleDraftSave,
+      restoreDraftIntoForm
+    } from '../src/modules/modalDraftStore.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    async function run(name, key, fn) {
+      try {
+        await fn();
+        results[key] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[key] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    const MODAL = 'test-topup-draft';
+
+    await run('черновик сохраняется и восстанавливается', 'draft-restore', async () => {
+      clearDraft(MODAL);
+      const form = document.createElement('form');
+      form.setAttribute('data-form', 'topup');
+      form.innerHTML = `
+        <input name="amount" value="">
+        <input name="comment" value="">
+        <input name="passphrase" value="">
+      `;
+      document.body.appendChild(form);
+
+      form.amount.value = '1500';
+      form.comment.value = 'тест';
+      form.passphrase.value = 'secret-should-not-save';
+      scheduleDraftSave(MODAL, form);
+      await new Promise((r) => setTimeout(r, 400));
+
+      const fields = readDraft(MODAL);
+      assert(fields?.amount === '1500', 'amount saved');
+      assert(fields?.comment === 'тест', 'comment saved');
+      assert(fields?.passphrase == null, 'passphrase not saved');
+
+      form.amount.value = '';
+      form.comment.value = '';
+      restoreDraftIntoForm(form, MODAL);
+      assert(form.amount.value === '1500', 'amount restored');
+      assert(form.comment.value === 'тест', 'comment restored');
+
+      form.remove();
+      clearDraft(MODAL);
+    });
+
+    await run('устаревший черновик очищается', 'draft-ttl', async () => {
+      const key = `jf-modal-draft-${MODAL}`;
+      const expired = { fields: { amount: '1' }, savedAt: Date.now() - (8 * 24 * 60 * 60 * 1000) };
+      localStorage.setItem(key, JSON.stringify(expired));
+      assert(!readDraft(MODAL), 'expired draft removed');
+      assert(!localStorage.getItem(key), 'storage key removed');
+    });
+
+    await run('разные модалки не смешиваются', 'draft-isolation', async () => {
+      clearDraft('modal-a');
+      clearDraft('modal-b');
+      const formA = document.createElement('form');
+      formA.innerHTML = '<input name="x" value="aaa">';
+      const formB = document.createElement('form');
+      formB.innerHTML = '<input name="x" value="bbb">';
+      scheduleDraftSave('modal-a', formA);
+      scheduleDraftSave('modal-b', formB);
+      await new Promise((r) => setTimeout(r, 400));
+      assert(readDraft('modal-a')?.x === 'aaa', 'modal a');
+      assert(readDraft('modal-b')?.x === 'bbb', 'modal b');
+      clearDraft('modal-a');
+      clearDraft('modal-b');
+    });
+
+    log('Summary: ' + Object.values(results).every((v) => v === 'PASS') ? 'ALL PASS' : 'HAS FAILURES');
+  </script>
+</body>
+</html>

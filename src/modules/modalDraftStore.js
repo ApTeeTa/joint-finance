@@ -121,6 +121,20 @@ export function confirmDiscardDraft(modalName) {
 
 let draftSystemBound = false;
 
+export function flushVisibleModalDrafts() {
+  try {
+    document.querySelectorAll('[data-modal]:not(.hidden)').forEach((modal) => {
+      const modalName = modal.dataset?.modal;
+      const form = modal.querySelector('form[data-form]');
+      if (modalName && form) {
+        saveDraft(modalName, form);
+      }
+    });
+  } catch {
+    /* noop */
+  }
+}
+
 export function initModalDraftSystem() {
   if (draftSystemBound) return;
   draftSystemBound = true;
@@ -142,4 +156,14 @@ export function initModalDraftSystem() {
     if (!modalName || modal.classList.contains('hidden')) return;
     scheduleDraftSave(modalName, form);
   }, true);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushVisibleModalDrafts();
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    flushVisibleModalDrafts();
+  });
 }

@@ -10,6 +10,7 @@ import {
 } from './transactions.js';
 import { undoTransaction } from './financeGate.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
+import { runGuardedModalSubmit } from './modalFormSubmit.js';
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -255,24 +256,24 @@ export function initHistoryHandlers(state, container, onUpdate) {
     }
   });
 
-  document.addEventListener('submit', (event) => {
+  document.addEventListener('submit', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
     const form = event.target.closest('[data-form="edit-transaction"]');
     if (!form) return;
 
-    const result = updateTransactionMeta(state, form.transactionId.value, {
-      comment: form.comment.value,
-      date: form.date.value
+    await runGuardedModalSubmit('edit-transaction', form, async () => {
+      const result = updateTransactionMeta(state, form.transactionId.value, {
+        comment: form.comment.value,
+        date: form.date.value
+      });
+      if (!result.ok) {
+        alert(result.error);
+        return false;
+      }
+      refresh(state, container, onUpdate);
+      return true;
     });
-
-    if (!result.ok) {
-      alert(result.error);
-      return;
-    }
-
-    closeModal('edit-transaction');
-    refresh(state, container, onUpdate);
   });
 }

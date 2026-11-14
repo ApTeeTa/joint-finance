@@ -17,6 +17,7 @@ import {
   formatOverdueDaysLabel
 } from './obligations.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAllInAppUi } from './modalLayer.js';
+import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -524,109 +525,109 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
     }
   });
 
-  document.addEventListener('submit', (event) => {
+  document.addEventListener('submit', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const form = event.target.closest('[data-form]');
     if (!form) return;
     event.preventDefault();
 
     const formKey = form.dataset.form;
+    const modalName = formKey;
     const formData = new FormData(form);
 
     if (formKey === 'add-debt-owed') {
-      const result = createDebtOwedToUs(state, {
-        title: formData.get('title'),
-        amount: formData.get('amount'),
-        accountId: formData.get('accountId'),
-        comment: formData.get('comment'),
-        date: formData.get('date'),
-        author: state.profile
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const result = createDebtOwedToUs(state, {
+          title: formData.get('title'),
+          amount: formData.get('amount'),
+          accountId: formData.get('accountId'),
+          comment: formData.get('comment'),
+          date: formData.get('date'),
+          author: state.profile
+        });
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh();
+        return true;
       });
-
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-
-      closeModal('add-debt-owed');
-      form.reset();
-      refresh();
       return;
     }
 
     if (formKey === 'add-debt-we-owe') {
-      const result = createDebtWeOwe(state, {
-        title: formData.get('title'),
-        amount: formData.get('amount'),
-        accountId: formData.get('accountId'),
-        comment: formData.get('comment'),
-        date: formData.get('date'),
-        author: state.profile
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const result = createDebtWeOwe(state, {
+          title: formData.get('title'),
+          amount: formData.get('amount'),
+          accountId: formData.get('accountId'),
+          comment: formData.get('comment'),
+          date: formData.get('date'),
+          author: state.profile
+        });
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh();
+        return true;
       });
-
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-
-      closeModal('add-debt-we-owe');
-      form.reset();
-      refresh();
       return;
     }
 
     if (formKey === 'add-manual-debt') {
-      const result = createManualDebtEvent(state, {
-        description: formData.get('description'),
-        amount: formData.get('amount'),
-        category: formData.get('category'),
-        comment: formData.get('comment'),
-        date: formData.get('date')
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const result = createManualDebtEvent(state, {
+          description: formData.get('description'),
+          amount: formData.get('amount'),
+          category: formData.get('category'),
+          comment: formData.get('comment'),
+          date: formData.get('date')
+        });
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh();
+        return true;
       });
-
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-
-      closeModal('add-manual-debt');
-      form.reset();
-      refresh();
       return;
     }
 
     if (formKey === 'edit-manual-debt') {
-      const result = updateManualDebtEvent(state, formData.get('debtId'), {
-        description: formData.get('description'),
-        date: formData.get('date')
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const result = updateManualDebtEvent(state, formData.get('debtId'), {
+          description: formData.get('description'),
+          date: formData.get('date')
+        });
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh();
+        return true;
       });
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-      closeModal('edit-manual-debt');
-      refresh();
       return;
     }
 
     if (formKey === 'repay-debt') {
-      const result = repayDebt(
-        state,
-        formData.get('debtId'),
-        formData.get('amount'),
-        formData.get('accountId'),
-        formData.get('comment'),
-        formData.get('date'),
-        state.profile
-      );
-
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-
-      closeModal('repay-debt');
-      refresh();
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const result = repayDebt(
+          state,
+          formData.get('debtId'),
+          formData.get('amount'),
+          formData.get('accountId'),
+          formData.get('comment'),
+          formData.get('date'),
+          state.profile
+        );
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh();
+        return true;
+      });
       return;
     }
 
@@ -635,21 +636,21 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      const result = writeOffDebt(
-        state,
-        formData.get('debtId'),
-        formData.get('comment'),
-        formData.get('date'),
-        state.profile
-      );
-
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-
-      closeModal('write-off-debt');
-      refresh();
+      await runGuardedModalSubmit(modalName, form, async () => {
+        const result = writeOffDebt(
+          state,
+          formData.get('debtId'),
+          formData.get('comment'),
+          formData.get('date'),
+          state.profile
+        );
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh();
+        return true;
+      });
     }
   });
 }
