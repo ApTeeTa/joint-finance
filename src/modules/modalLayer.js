@@ -36,7 +36,7 @@ function setModalHidden(modal, hidden) {
  * MODAL_LIFECYCLE_RULE: relocate modals from tab container → #modal-root once per tab render.
  * If container has no modals (already relocated), keep existing #modal-root modals intact.
  */
-export function relocateModals(fromContainer) {
+export function relocateModals(fromContainer, options = {}) {
   const root = getModalRoot();
   if (!root || !fromContainer) return;
 
@@ -44,6 +44,11 @@ export function relocateModals(fromContainer) {
   if (incoming.length === 0) {
     return;
   }
+
+  const keepOpenNames = new Set(
+    options.preserveOpenNames ?? getOpenModalNames()
+  );
+  const preserveOpen = options.preserveOpen === true && keepOpenNames.size > 0;
 
   const incomingNames = new Set(
     [...incoming].map((modal) => modal.dataset.modal).filter(Boolean)
@@ -65,9 +70,14 @@ export function relocateModals(fromContainer) {
         }
       });
     }
-    setModalHidden(modal, true);
+    const stayOpen = preserveOpen && name && keepOpenNames.has(name);
+    setModalHidden(modal, !stayOpen);
     root.appendChild(modal);
   });
+
+  if (preserveOpen) {
+    syncBodyModalState();
+  }
 }
 
 function findModal(modalName) {
@@ -114,7 +124,63 @@ function syncBodyModalState() {
 }
 
 export function isAnyModalOpen() {
-  return Boolean(document.querySelector(`${MODAL_SELECTOR}:not(.hidden)`));
+  return getOpenModalNames().length > 0;
+}
+
+/** Visible modals in DOM (modal-root or elsewhere). */
+export function getOpenModalNames() {
+  const names = [];
+  document.querySelectorAll(`${MODAL_SELECTOR}:not(.hidden)`).forEach((modal) => {
+    const name = modal.dataset?.modal;
+    if (name) names.push(name);
+  });
+  return names;
+}
+
+const SESSION_OPEN_MODALS_KEY = 'jf-session-open-modals';
+
+export function persistOpenModalsForSession() {
+  const names = getOpenModalNames();
+  try {
+    if (names.length > 0) {
+      sessionStorage.setItem(SESSION_OPEN_MODALS_KEY, JSON.stringify(names));
+    } else {
+      sessionStorage.removeItem(SESSION_OPEN_MODALS_KEY);
+    }
+  } catch {
+    /* private mode */
+  }
+}
+
+export function clearOpenModalsSession() {
+  try {
+    sessionStorage.removeItem(SESSION_OPEN_MODALS_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
+/**
+ * After full tab re-render (e.g. cold resume), reopen modals the user had open.
+ * Draft fields are restored via openModal → restoreDraftIntoForm.
+ */
+export function restoreOpenModalsFromSession() {
+  let names = [];
+  try {
+    const raw = sessionStorage.getItem(SESSION_OPEN_MODALS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        names = parsed.filter((n) => typeof n === 'string' && n.length > 0);
+      }
+    }
+  } catch {
+    return;
+  }
+  if (!names.length) return;
+  names.forEach((modalName) => {
+    openModal(modalName);
+  });
 }
 
 export function openModal(modalName) {
@@ -140,6 +206,7 @@ export function openModal(modalName) {
     restoreDraftIntoForm(form, modalName);
   }
   syncBodyModalState();
+  persistOpenModalsForSession();
   return true;
 }
 
@@ -152,6 +219,7 @@ export function closeModal(modalName) {
     setModalHidden(modal, true);
   }
   syncBodyModalState();
+  persistOpenModalsForSession();
   if (modalName) {
     document.dispatchEvent(new CustomEvent('joint-finance:modal-closed', {
       detail: { modalName }
@@ -176,6 +244,7 @@ export function closeAllModals() {
     setModalHidden(modal, true);
   });
   syncBodyModalState();
+  persistOpenModalsForSession();
 }
 
 let modalDismissHandlersBound = false;

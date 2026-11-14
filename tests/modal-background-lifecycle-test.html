@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: modal background lifecycle</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Modal — background, relocate, session</h1>
+  <div id="modal-root"></div>
+  <div id="tab-content"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      relocateModals,
+      openModal,
+      closeModal,
+      requestCloseModal,
+      getOpenModalNames,
+      restoreOpenModalsFromSession,
+      getModalRoot
+    } from '../src/modules/modalLayer.js';
+    import {
+      scheduleDraftSave,
+      readDraft,
+      clearDraft,
+      flushVisibleModalDrafts,
+      initModalDraftSystem
+    } from '../src/modules/modalDraftStore.js';
+
+    const out = document.getElementById('out');
+    const results = {};
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    function run(name, fn) {
+      try {
+        fn();
+        results[name] = 'PASS';
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        results[name] = 'FAIL';
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    function mountShell(modalName) {
+      const root = document.getElementById('modal-root');
+      root.id = 'modal-root';
+      root.innerHTML = '';
+      const tab = document.getElementById('tab-content');
+      tab.innerHTML = `
+        <div data-modal="${modalName}" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35">
+          <form data-form="test-form">
+            <input name="amount" value="">
+          </form>
+        </div>
+      `;
+      relocateModals(tab);
+    }
+
+    initModalDraftSystem();
+
+    run('relocate preserves open modal on passive re-render', () => {
+      mountShell('deposit-modal');
+      assert(openModal('deposit-modal'), 'open');
+      const tab = document.getElementById('tab-content');
+      tab.innerHTML = `
+        <div data-modal="deposit-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35">
+          <form data-form="test-form"><input name="amount" value=""></form>
+        </div>
+      `;
+      relocateModals(tab, { preserveOpen: true, preserveOpenNames: ['deposit-modal'] });
+      assert(getOpenModalNames().includes('deposit-modal'), 'still open after relocate');
+      closeModal('deposit-modal');
+    });
+
+    run('background flush keeps draft in localStorage', async () => {
+      mountShell('draft-modal');
+      openModal('draft-modal');
+      const form = document.querySelector('[data-form="test-form"]');
+      form.amount.value = '12345';
+      scheduleDraftSave('draft-modal', form);
+      await new Promise((r) => setTimeout(r, 400));
+      flushVisibleModalDrafts();
+      assert(readDraft('draft-modal')?.amount === '12345', 'draft survives background flush');
+      clearDraft('draft-modal');
+      closeModal('draft-modal');
+    });
+
+    run('session restore reopens modal after simulated boot', () => {
+      mountShell('restore-modal');
+      sessionStorage.setItem('jf-session-open-modals', JSON.stringify(['restore-modal']));
+      closeModal('restore-modal');
+      assert(getOpenModalNames().length === 0, 'closed');
+      restoreOpenModalsFromSession();
+      assert(getOpenModalNames().includes('restore-modal'), 'restored from session');
+      closeModal('restore-modal');
+      sessionStorage.removeItem('jf-session-open-modals');
+    });
+
+    run('user dismiss still closes modal', () => {
+      mountShell('dismiss-modal');
+      openModal('dismiss-modal');
+      const prevConfirm = window.confirm;
+      window.confirm = () => true;
+      try {
+        assert(requestCloseModal('dismiss-modal'), 'request close');
+        assert(getOpenModalNames().length === 0, 'closed by user');
+      } finally {
+        window.confirm = prevConfirm;
+      }
+      clearDraft('dismiss-modal');
+    });
+
+    const allOk = Object.values(results).every((v) => v === 'PASS');
+    log(allOk ? 'ALL PASSED' : 'HAS FAILURES', allOk ? 'pass' : 'fail');
+  </script>
+</body>
+</html>
