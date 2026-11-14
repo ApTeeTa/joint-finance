@@ -45,6 +45,7 @@
     } from '../src/lib/familySession.js';
     import { getProfileLabel } from '../src/lib/householdMemberLabels.js';
     import { FAMILY_SNAPSHOT_ID, getActiveSnapshotId } from '../src/config/environmentConfig.js';
+    import { ensureDefaultIncomeCategories } from '../src/modules/incomeCategories.js';
 
     const out = document.getElementById('out');
     const summary = { passed: 0, failed: 0, failures: [] };
@@ -238,6 +239,38 @@
       assert(norm.accounts.length === 2, 'accounts');
       assert(norm.accounts[0].balance === 10_000, 'balance preserved');
       assert(norm.exchangeRate === 92, 'rate');
+    });
+
+    await run('storage — legacy snapshot without incomeCategories', () => {
+      const legacy = {
+        accounts: [{ id: 'a1', name: 'Main', currency: 'RUB', balance: 1000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 5000, reserved: 0, spent: 0 }],
+        transactions: [{ id: 't1', type: 'deposit', accountId: 'a1', amount: 100, date: todayIso() }],
+        obligations: [],
+        savings: [],
+        debts: [],
+        exchangeRate: 92
+      };
+      const norm = normalizeSharedSnapshot(legacy);
+      assert(Array.isArray(norm.incomeCategories), 'incomeCategories array');
+      assert(norm.incomeCategories.length === 0, 'defaults empty until UI seeds');
+      assert(norm.transactions.length === 1, 'transactions preserved');
+      assert(norm.transactions[0].incomeCategoryId == null, 'legacy tx without incomeCategoryId');
+      assert(norm.categories.length === 1 && norm.categories[0].id === 'food', 'expense categories intact');
+    });
+
+    await run('income — defaults and deposit with/without category', () => {
+      const state = baseState();
+      const expenseBefore = JSON.stringify(state.categories);
+      ensureDefaultIncomeCategories(state);
+      assert(state.incomeCategories.length >= 5, 'system income defaults');
+      assert(JSON.stringify(state.categories) === expenseBefore, 'expense categories untouched');
+      const noCat = depositAccount(state, 'a1', 100, '', todayIso(), 'husband');
+      assert(noCat.ok, noCat.error ?? 'deposit without category');
+      const withCat = depositAccount(state, 'a1', 50, '', todayIso(), 'husband', 'income-salary');
+      assert(withCat.ok, withCat.error ?? 'deposit with category');
+      const withCatTx = state.transactions.find((t) => t.amount === 50);
+      assert(withCatTx?.incomeCategoryId === 'income-salary', 'incomeCategoryId stored');
     });
 
     await run('scenario — multi-step invariants hold', () => {

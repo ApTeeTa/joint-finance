@@ -16,7 +16,9 @@ $tests = @(
   'tests/finance-validation-test.html',
   'tests/finance-core-hardening-test.html',
   'tests/family-mode-module-test.html',
-  'tests/pre-beta-family-flow-simulation.html'
+  'tests/pre-beta-family-flow-simulation.html',
+  'tests/analytics-read-model-test.html',
+  'tests/modal-draft-store-test.html'
 )
 
 $server = Start-Process powershell -ArgumentList @(
@@ -27,6 +29,25 @@ $server = Start-Process powershell -ArgumentList @(
 
 Start-Sleep -Seconds 2
 
+function Invoke-HeadlessChromeDomDump {
+  param(
+    [string]$Url,
+    [string]$OutFile,
+    [int]$TimeBudgetMs = 15000
+  )
+  $chromeArgs =
+    "--headless=new --disable-gpu --virtual-time-budget=$TimeBudgetMs " +
+    '--run-all-compositor-stages-before-draw --dump-dom ' +
+    "`"$Url`""
+  $prevEa = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    cmd /c "`"$chrome`" $chromeArgs 2>nul" > $OutFile
+  } finally {
+    $ErrorActionPreference = $prevEa
+  }
+}
+
 $totalPass = 0
 $totalFail = 0
 $failedSuites = @()
@@ -35,8 +56,7 @@ try {
   foreach ($rel in $tests) {
     $url = "http://127.0.0.1:$Port/$rel"
     $outFile = Join-Path $env:TEMP "prebeta-$(Get-Random).html"
-    & $chrome --headless=new --disable-gpu --virtual-time-budget=15000 `
-      --run-all-compositor-stages-before-draw --dump-dom $url 2>$null | Out-File -FilePath $outFile -Encoding utf8
+    Invoke-HeadlessChromeDomDump -Url $url -OutFile $outFile
     $html = Get-Content -Raw -LiteralPath $outFile
     Remove-Item -LiteralPath $outFile -ErrorAction SilentlyContinue
 

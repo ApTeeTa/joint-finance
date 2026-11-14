@@ -104,7 +104,8 @@
       clearDraft('modal-b');
     });
 
-    log('Summary: ' + Object.values(results).every((v) => v === 'PASS') ? 'ALL PASS' : 'HAS FAILURES');
+    const allOk = Object.values(results).every((v) => v === 'PASS');
+    log(allOk ? 'ALL PASSED' : 'HAS FAILURES', allOk ? 'pass' : 'fail');
   </script>
 </body>
 </html>
