@@ -623,7 +623,7 @@ function renderSpendModal(state) {
           <input type="hidden" name="savingId" value="">
           <div>
             <label class="${UI.label}">Сумма покупки (RUB)</label>
-            <input type="number" name="amount" required min="0.01" step="1" class="${UI.field}" placeholder="0">
+            <input type="number" name="amount" required min="0.01" step="0.01" class="${UI.field}" placeholder="0">
           </div>
           <div>
             <label class="${UI.label}">Счет</label>
