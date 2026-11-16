@@ -251,7 +251,7 @@ await runSuite('A3.5 — Financial Core Hardening', [
     };
     try {
       const state = baseState();
-      const result = spendSaving(state, 's1', 'acc1', '', todayIso(), 'husband');
+      const result = spendSaving(state, 's1', 'acc1', 10000, '', todayIso(), 'husband');
       assert(result.ok, result.error);
       assert(gateLogs.some((e) => e.operation === 'spendSaving'), 'gate logged spendSaving');
     } finally {

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Копилки: частичная трата и резерв</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>SAVING_SPEND — частичная трата</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      calculateFreeBalance,
+      calculateReservedBalance,
+      calculateTotalBalance
+    } from '../src/modules/financeEngine.js';
+    import { checkFinancialInvariants } from '../src/modules/financeCoreInvariants.js';
+    import { spendSaving, undoTransaction } from '../src/modules/financeGate.js';
+    import { todayIso } from '../src/modules/transactions.js';
+    import { getSavingAccumulated } from '../src/modules/transactions.js';
+    import { isMiscCategory } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState(overrides = {}) {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 500000, owner: 'husband' }],
+        categories: [{ id: 'misc', name: 'Прочее', limit: 0, reserved: 0, spent: 0, isMisc: true }],
+        savings: [{
+          id: 's1',
+          name: 'Машина',
+          accumulated: 300000,
+          targetAmount: 400000,
+          savingType: 'recurring',
+          createdAt: new Date().toISOString()
+        }],
+        transactions: [],
+        obligations: [],
+        debts: [],
+        ...overrides
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('частичная трата 220k при 300k резерве — free +80k', () => {
+      const state = baseState();
+      const freeBefore = calculateFreeBalance(state);
+      const totalBefore = calculateTotalBalance(state);
+      const reservedBefore = calculateReservedBalance(state);
+      const result = spendSaving(state, 's1', 'acc', 220000, 'ремонт', todayIso(), 'husband');
+      assert(result.ok, result.error);
+      assert(state.accounts[0].balance === 280000, 'account debit 220k');
+      assert(getSavingAccumulated(state.savings[0]) === 0, 'reserve cleared');
+      const freeAfter = calculateFreeBalance(state);
+      assert(freeAfter === freeBefore + 80000, `free +80k, got ${freeAfter - freeBefore}`);
+      assert(calculateTotalBalance(state) === totalBefore - 220000, 'total -220k');
+      assert(calculateReservedBalance(state) === reservedBefore - 300000, 'reserved -300k');
+      const misc = state.categories.find((c) => isMiscCategory(c));
+      assert(misc.spent === 220000, 'misc spent');
+      assert(result.transaction.comment.includes('Машина'), 'name in comment');
+      assert(checkFinancialInvariants(state).ok, 'invariants');
+    });
+
+    await run('трата до 100% цели разрешена', () => {
+      const state = baseState();
+      const result = spendSaving(state, 's1', 'acc', 100000, '', todayIso(), 'husband');
+      assert(result.ok, result.error);
+    });
+
+    await run('покупка больше резерва — отказ', () => {
+      const state = baseState();
+      const result = spendSaving(state, 's1', 'acc', 350000, '', todayIso(), 'husband');
+      assert(!result.ok, 'must fail');
+    });
+
+    await run('отмена восстанавливает snapshot.accumulated', () => {
+      const state = baseState();
+      const spend = spendSaving(state, 's1', 'acc', 220000, '', todayIso(), 'husband');
+      assert(spend.ok, spend.error);
+      assert(spend.transaction.savingSnapshot.accumulated === 300000, 'snapshot reserve');
+      const undo = undoTransaction(state, spend.transaction.id);
+      assert(undo.ok, undo.error);
+      assert(getSavingAccumulated(state.savings[0]) === 300000, 'restored reserve');
+      assert(state.accounts[0].balance === 500000, 'account restored');
+    });
+
+    await run('single_use: удаление и отмена', () => {
+      const state = baseState({
+        savings: [{
+          id: 'su',
+          name: 'Разовая',
+          accumulated: 50000,
+          targetAmount: 100000,
+          savingType: 'single_use',
+          createdAt: new Date().toISOString()
+        }]
+      });
+      const spend = spendSaving(state, 'su', 'acc', 30000, '', todayIso(), 'husband');
+      assert(spend.ok, spend.error);
+      assert(state.savings.length === 0, 'removed from list');
+      const undo = undoTransaction(state, spend.transaction.id);
+      assert(undo.ok, undo.error);
+      assert(state.savings.length === 1, 'restored entity');
+      assert(getSavingAccumulated(state.savings[0]) === 50000, 'restored from snapshot');
+    });
+
+    await run('recurring: остаётся, можно снова копить', () => {
+      const state = baseState();
+      const spend = spendSaving(state, 's1', 'acc', 50000, '', todayIso(), 'husband');
+      assert(spend.ok, spend.error);
+      assert(state.savings.length === 1, 'still listed');
+      assert(getSavingAccumulated(state.savings[0]) === 0, 'zeroed');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`);
+    if (fail === 0) log('ALL PASSED', 'pass');
+  </script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Копилки: HTML5 validity суммы «Потратить»</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>SPEND_SAVING — HTML5 amount input</h1>
+  <p class="info">Атрибуты должны совпадать с renderSpendModal() в src/modules/savings.js</p>
+  <pre id="out"></pre>
+  <div id="fixture" hidden>
+    <input
+      id="amount"
+      type="number"
+      name="amount"
+      required
+      min="0.01"
+      step="0.01"
+      placeholder="0"
+    >
+  </div>
+  <script type="module">
+    const out = document.getElementById('out');
+    const input = document.getElementById('amount');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    function expectValidity(value, shouldBeValid, label) {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      const valid = input.checkValidity();
+      assert(
+        valid === shouldBeValid,
+        `${label}: value=${JSON.stringify(value)} expected valid=${shouldBeValid}, got valid=${valid}` +
+          (valid ? '' : ` (${input.validationMessage})`)
+      );
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('attrs: min/step/type', () => {
+      assert(input.type === 'number', `type=${input.type}`);
+      assert(input.min === '0.01', `min=${input.min}`);
+      assert(input.step === '0.01', `step=${input.step}`);
+      assert(input.required, 'required');
+    });
+
+    await run('целые суммы валидны', () => {
+      for (const v of ['1', '100', '10000']) {
+        expectValidity(v, true, v);
+      }
+    });
+
+    await run('суммы с копейками валидны', () => {
+      for (const v of ['0.01', '5000.01', '10000.01']) {
+        expectValidity(v, true, v);
+      }
+    });
+
+    await run('ноль и отрицательные невалидны', () => {
+      expectValidity('0', false, '0');
+      expectValidity('-1', false, '-1');
+      expectValidity('-0.01', false, '-0.01');
+    });
+
+    await run('пустое значение невалидно (required)', () => {
+      input.value = '';
+      assert(!input.checkValidity(), 'empty should be invalid');
+    });
+
+  const total = pass + fail;
+  log(`\nSUMMARY: ${pass}/${total} passed, ${fail} failed`, fail ? 'fail' : 'pass');
+  if (fail === 0) log('ALL PASSED', 'pass');
+  </script>
+</body>
+</html>

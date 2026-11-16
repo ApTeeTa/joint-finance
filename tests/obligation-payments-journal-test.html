@@ -13,7 +13,8 @@
   <h1>Журнал payments для обязательств</h1>
   <pre id="out"></pre>
   <script type="module">
-    import { recordObligationPayment, cancelTransaction, todayIso } from '../src/modules/transactions.js';
+    import { todayIso } from '../src/modules/transactions.js';
+    import { recordObligationPayment, cancelTransaction } from './helpers/financeTestBridge.js';
     import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
 
     const out = document.getElementById('out');

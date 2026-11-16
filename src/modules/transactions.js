@@ -1183,11 +1183,24 @@ export function recordObligationUpdated(state, obligationId, data, author) {
   }
 
   const oldName = obligation.name;
+  const oldPaidUntil = obligation.paidUntil ?? null;
+  const newPaidUntil = data.paidUntil;
   obligation.name = String(data.name).trim();
   obligation.targetAmount = targetAmount;
-  obligation.paidUntil = data.paidUntil;
+  obligation.paidUntil = newPaidUntil;
   obligation.comment = String(data.comment ?? '').trim();
   syncObligationStatusFromPayments(obligation, todayIso());
+
+  const commentParts = [];
+  if (oldName !== obligation.name) {
+    commentParts.push(`название: «${oldName}» → «${obligation.name}»`);
+  }
+  if (oldPaidUntil !== newPaidUntil) {
+    commentParts.push(`Оплачено до: ${oldPaidUntil ?? '—'} → ${newPaidUntil}`);
+  }
+  if (commentParts.length === 0) {
+    commentParts.push(`Изменено обязательство «${obligation.name}»`);
+  }
 
   const tx = addTransaction(state, {
     type: TRANSACTION_TYPES.OBLIGATION_UPDATED,
@@ -1195,9 +1208,7 @@ export function recordObligationUpdated(state, obligationId, data, author) {
     obligationId: obligation.id,
     obligationName: obligation.name,
     currency: 'RUB',
-    comment: oldName === obligation.name
-      ? `Изменено обязательство «${obligation.name}»`
-      : `Изменено обязательство: «${oldName}» → «${obligation.name}»`,
+    comment: commentParts.join('; '),
     author
   });
 
@@ -1540,21 +1551,36 @@ export function recordSavingDelete(state, saving, author, customComment, options
   return { ok: true, transaction: tx };
 }
 
-export function recordSavingSpend(state, savingId, accountId, comment, date, author) {
+function formatSavingSpendComment(savingName, userComment, accountCurrency, accountDebitAmount) {
+  const namePart = `Копилка «${savingName}»`;
+  const trimmed = String(userComment ?? '').trim();
+  const usdSuffix = accountCurrency === 'USD'
+    ? ` (${formatMoney(accountDebitAmount, 'USD')})`
+    : '';
+  if (trimmed) {
+    return `${namePart}: ${trimmed}${usdSuffix}`;
+  }
+  return `${namePart}${usdSuffix}`;
+}
+
+export function recordSavingSpend(state, savingId, accountId, amount, comment, date, author) {
   const blocked = guardFinanceEntry('spendSaving');
   if (blocked) return blocked;
 
   const saving = findSaving(state, savingId);
   if (!saving) return { ok: false, error: 'Копилка не найдена' };
 
-  const rubAmount = getSavingAccumulated(saving);
-  if (rubAmount <= 0) {
+  const reserveBefore = getSavingAccumulated(saving);
+  if (reserveBefore <= 0) {
     return { ok: false, error: 'В копилке нет накоплений' };
   }
 
-  const targetAmount = saving.targetAmount;
-  if (targetAmount != null && targetAmount > 0 && rubAmount < targetAmount) {
-    return { ok: false, error: 'Цель ещё не достигнута' };
+  const purchaseAmount = Number(amount);
+  if (!Number.isFinite(purchaseAmount) || purchaseAmount <= 0) {
+    return { ok: false, error: 'Сумма покупки должна быть больше 0' };
+  }
+  if (purchaseAmount > reserveBefore) {
+    return { ok: false, error: `Сумма не может превышать накоплено: ${formatMoney(reserveBefore, 'RUB')}` };
   }
 
   const account = findAccount(state, accountId);
@@ -1563,8 +1589,8 @@ export function recordSavingSpend(state, savingId, accountId, comment, date, aut
   const accountCurrency = account.currency ?? 'RUB';
   const exchangeRate = getExchangeRate(state);
   const accountDebitAmount = accountCurrency === 'USD'
-    ? roundMoney(rubAmount / exchangeRate, 'USD')
-    : roundMoney(rubAmount, 'RUB');
+    ? roundMoney(purchaseAmount / exchangeRate, 'USD')
+    : roundMoney(purchaseAmount, 'RUB');
   const accountBalance = account.balance ?? 0;
 
   if (accountDebitAmount > accountBalance) {
@@ -1572,7 +1598,7 @@ export function recordSavingSpend(state, savingId, accountId, comment, date, aut
   }
 
   const gateBlock = rejectGateDecision(
-    runFinanceGate('spendSaving', rubAmount, state, { savingId, accountId, action: 'spend' })
+    runFinanceGate('spendSaving', purchaseAmount, state, { savingId, accountId, action: 'spend' })
   );
   if (gateBlock) return gateBlock;
 
@@ -1581,7 +1607,7 @@ export function recordSavingSpend(state, savingId, accountId, comment, date, aut
   const savingSnapshot = {
     id: saving.id,
     name: saving.name,
-    accumulated: rubAmount,
+    accumulated: reserveBefore,
     targetAmount: saving.targetAmount ?? null,
     deadlineType: saving.deadlineType ?? 'none',
     deadlineDate: saving.deadlineDate ?? null,
@@ -1591,16 +1617,20 @@ export function recordSavingSpend(state, savingId, accountId, comment, date, aut
 
   saving.accumulated = 0;
   account.balance = accountBalance - accountDebitAmount;
-  category.spent = (category.spent ?? 0) + rubAmount;
+  category.spent = (category.spent ?? 0) + purchaseAmount;
 
-  const spendComment = comment
-    || `Трата из копилки «${saving.name}»${accountCurrency === 'USD' ? ` (${formatMoney(accountDebitAmount, 'USD')})` : ''}`;
+  const spendComment = formatSavingSpendComment(
+    saving.name,
+    comment,
+    accountCurrency,
+    accountDebitAmount
+  );
 
   const groupId = createGroupId();
 
   const tx = addTransaction(state, {
     type: TRANSACTION_TYPES.SAVING_SPEND,
-    amount: rubAmount,
+    amount: purchaseAmount,
     savingId,
     savingName: saving.name,
     savingType,
@@ -1624,7 +1654,7 @@ export function recordSavingSpend(state, savingId, accountId, comment, date, aut
         saving,
         author,
         `Удалена разовая копилка «${saving.name}» после траты`,
-        { service: true, linkedTransactionId: tx.id, amount: rubAmount, groupId }
+        { service: true, linkedTransactionId: tx.id, amount: reserveBefore, groupId }
       )
     );
     tx.linkedDeleteTransactionId = deleteResult.transaction.id;
@@ -1677,6 +1707,8 @@ function reverseSavingSpend(state, tx) {
 
   let saving = findSaving(state, tx.savingId);
 
+  const reserveRestore = tx.savingSnapshot?.accumulated ?? tx.amount;
+
   if (tx.savingType === 'single_use' && tx.savingSnapshot) {
     if (!saving) {
       if (!Array.isArray(state.savings)) {
@@ -1684,11 +1716,11 @@ function reverseSavingSpend(state, tx) {
       }
       saving = {
         ...tx.savingSnapshot,
-        accumulated: tx.amount
+        accumulated: reserveRestore
       };
       state.savings.push(saving);
     } else {
-      saving.accumulated = tx.amount;
+      saving.accumulated = reserveRestore;
     }
     cancelLinkedServiceDelete(state, tx);
     return { ok: true };
@@ -1698,7 +1730,7 @@ function reverseSavingSpend(state, tx) {
     return { ok: false, error: 'Копилка не найдена' };
   }
 
-  saving.accumulated = tx.amount;
+  saving.accumulated = reserveRestore;
   return { ok: true };
 }
 

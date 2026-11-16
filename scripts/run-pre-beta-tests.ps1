@@ -19,7 +19,11 @@ $tests = @(
   'tests/pre-beta-family-flow-simulation.html',
   'tests/analytics-read-model-test.html',
   'tests/modal-draft-store-test.html',
-  'tests/modal-background-lifecycle-test.html'
+  'tests/modal-background-lifecycle-test.html',
+  'tests/saving-spend-amount-validity-test.html',
+  'tests/saving-spend-partial-test.html',
+  'tests/obligation-payment-reserve-test.html',
+  'tests/obligation-stability-fix-test.html'
 )
 
 $server = Start-Process powershell -ArgumentList @(

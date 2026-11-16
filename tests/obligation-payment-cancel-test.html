@@ -13,13 +13,9 @@
   <h1>Отмена оплаты обязательства</h1>
   <pre id="out"></pre>
   <script type="module">
-    import {
-      recordObligationPayment,
-      recordExpense,
-      recordReserve,
-      cancelTransaction,
-      todayIso
-    } from '../src/modules/transactions.js';
+    import { todayIso } from '../src/modules/transactions.js';
+    import { reserveCategory, createExpense } from '../src/modules/financeGate.js';
+    import { recordObligationPayment, cancelTransaction } from './helpers/financeTestBridge.js';
     import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
 
     const out = document.getElementById('out');
@@ -166,10 +162,11 @@
     await run('Тест 4. Расход категории не затронут', () => {
       const state = createState();
       const cat = state.categories[0];
-      recordReserve(state, 'cat', 3000, '', todayIso(), 'husband');
+      const reserved = reserveCategory(state, 'cat', 3000, '', todayIso(), 'husband');
+      assert(reserved.ok, reserved.error);
       assert(cat.reserved === 8000, `reserved=${cat.reserved}`);
 
-      const expense = recordExpense(state, 'cat', 1500, 'acc', 'обед', todayIso(), 'husband');
+      const expense = createExpense(state, 'cat', 1500, 'acc', 'обед', todayIso(), 'husband');
       assert(expense.ok, expense.error);
       assert(cat.reserved === 6500, `reserved after=${cat.reserved}`);
       assert(cat.spent === 1500, `spent=${cat.spent}`);

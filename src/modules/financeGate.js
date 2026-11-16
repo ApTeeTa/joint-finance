@@ -133,9 +133,9 @@ export function updateSavings(state, { action, savingId, amount, comment, date, 
   });
 }
 
-export function spendSaving(state, savingId, accountId, comment, date, author) {
+export function spendSaving(state, savingId, accountId, amount, comment, date, author) {
   return runProtected(FINANCE_ENTRY_POINTS.SPEND_SAVING, () =>
-    recordSavingSpend(state, savingId, accountId, comment, date, author)
+    recordSavingSpend(state, savingId, accountId, amount, comment, date, author)
   );
 }
 

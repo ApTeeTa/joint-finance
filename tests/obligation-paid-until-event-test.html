@@ -13,7 +13,8 @@
   <h1>Event-based paidUntil (финальный набор)</h1>
   <pre id="out"></pre>
   <script type="module">
-    import { recordObligationPayment, cancelTransaction, todayIso } from '../src/modules/transactions.js';
+    import { todayIso } from '../src/modules/transactions.js';
+    import { recordObligationPayment, cancelTransaction } from './helpers/financeTestBridge.js';
     import { computePaidUntilFromPayments } from '../src/modules/obligationPaidUntil.js';
     import { isObligationOverdue } from '../src/modules/obligations.js';
 
@@ -25,6 +26,13 @@
       out.appendChild(div);
     }
     function assert(c, m) { if (!c) throw new Error(m); }
+
+    function addDays(iso, days) {
+      const [y, m, d] = String(iso).split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      dt.setUTCDate(dt.getUTCDate() + days);
+      return dt.toISOString().slice(0, 10);
+    }
 
     const baseState = () => ({
       profile: 'husband',
@@ -57,10 +65,13 @@
 
     await run('1. Full event-based consistency', () => {
       const state = baseState();
-      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-09-01', '', todayIso(), 'husband');
-      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-11-01', '', '2026-10-01', 'husband');
+      const today = todayIso();
+      const until1 = addDays(today, 60);
+      const until2 = addDays(today, 120);
+      recordObligationPayment(state, 'obl', 1000, 'acc', until1, '', today, 'husband');
+      recordObligationPayment(state, 'obl', 1000, 'acc', until2, '', addDays(today, 30), 'husband');
       const o = state.obligations[0];
-      assert(computePaidUntilFromPayments(o) === '2026-11-01', 'last payment wins');
+      assert(computePaidUntilFromPayments(o) === until2, 'last payment wins');
       assert(o.payments.length === 2, 'two events');
       assert(o.paidUntil === '2026-06-01', 'legacy snapshot untouched');
       assert(!isObligationOverdue(o), 'UI overdue from payments');
@@ -84,12 +95,19 @@
       assert(state.obligations[0].payments.length === 2, 'two remain');
     });
 
-    await run('4. Snapshot isolation — правка snapshot не влияет на UI', () => {
+    await run('4. Ручная дата в прошлом не перебивает журнал', () => {
       const state = baseState();
       recordObligationPayment(state, 'obl', 1000, 'acc', '2026-12-01', '', todayIso(), 'husband');
       state.obligations[0].paidUntil = '2020-01-01';
-      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-12-01', 'payments define UI');
-      assert(!isObligationOverdue(state.obligations[0]), 'not overdue despite snapshot');
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2026-12-01', 'effective = max');
+      assert(!isObligationOverdue(state.obligations[0]), 'not overdue despite старая ручная дата');
+    });
+
+    await run('5. Ручная дата впереди журнала учитывается', () => {
+      const state = baseState();
+      recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', todayIso(), 'husband');
+      state.obligations[0].paidUntil = '2027-06-01';
+      assert(computePaidUntilFromPayments(state.obligations[0]) === '2027-06-01', 'manual ahead wins');
     });
 
     log('\nГотово.');

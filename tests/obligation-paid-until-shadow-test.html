@@ -14,7 +14,8 @@
   <h1>computePaidUntilFromPayments</h1>
   <pre id="out"></pre>
   <script type="module">
-    import { recordObligationPayment, cancelTransaction, todayIso } from '../src/modules/transactions.js';
+    import { todayIso } from '../src/modules/transactions.js';
+    import { recordObligationPayment, cancelTransaction } from './helpers/financeTestBridge.js';
     import {
       computePaidUntilFromPayments,
       diagnosePaidUntilSnapshotDrift

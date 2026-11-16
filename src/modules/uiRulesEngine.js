@@ -725,9 +725,9 @@ const ENTITY_ACTION_CATALOG = Object.freeze({
     detail: ['open-topup', 'open-transfer']
   }),
   [ENTITY_TYPES.SAVING]: Object.freeze({
-    listPrimary: ['open-deposit-saving'],
+    listPrimary: ['open-deposit-saving', 'open-spend-saving'],
     card: ['open-edit-saving', 'delete-saving'],
-    detail: ['open-deposit-saving']
+    detail: ['open-deposit-saving', 'open-spend-saving']
   }),
   [ENTITY_TYPES.CATEGORY]: Object.freeze({
     listPrimary: ['open-reserve', 'open-expense'],
@@ -801,6 +801,10 @@ function resolveSecondaryActions(entityType) {
 export function isActionAllowedForEntity(actionId, entityType, entityContext = {}) {
   if (entityType === ENTITY_TYPES.SAVING && actionId === 'open-deposit-saving') {
     return entityContext.goalReached !== true;
+  }
+
+  if (entityType === ENTITY_TYPES.SAVING && actionId === 'open-spend-saving') {
+    return entityContext.hasAccumulated === true;
   }
 
   if (entityType === ENTITY_TYPES.DEBT && actionId === 'open-write-off-debt') {
