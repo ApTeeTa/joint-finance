@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Stability fix — obligations &amp; paidUntil</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Stability fix (обязательства)</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { todayIso } from '../src/modules/transactions.js';
+    import { recordObligationPayment, recordObligationUpdated } from './helpers/financeTestBridge.js';
+    import {
+      resolveEffectivePaidUntil,
+      getObligationDueUiStatus,
+      isObligationOverdueByDate
+    } from '../src/modules/obligationPaidUntil.js';
+    import { isObligationOverdue } from '../src/modules/obligations.js';
+    import { payObligation } from '../src/modules/financeGate.js';
+
+    const out = document.getElementById('out');
+  let pass = 0;
+  let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    const baseState = () => ({
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+      obligations: [{
+        id: 'obl',
+        name: 'X',
+        accountId: 'acc',
+        reserveAmount: 0,
+        paidUntil: '2026-06-01',
+        status: 'active',
+        payments: [],
+        createdAt: new Date().toISOString()
+      }],
+      transactions: [],
+      categories: [],
+      savings: [],
+      debts: []
+    });
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('резерв 0 — оплата со счёта', () => {
+      const state = baseState();
+      const result = payObligation(state, 'obl', 3000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(result.ok, result.error);
+      assert(state.obligations[0].reserveAmount === 0, 'резерв не менялся');
+      assert(state.accounts[0].balance === 97000, 'списание со счёта');
+    });
+
+    await run('частичное списание резерва', () => {
+      const state = baseState();
+      state.obligations[0].reserveAmount = 1500;
+      const result = payObligation(state, 'obl', 4000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(result.ok, result.error);
+      assert(state.obligations[0].reserveAmount === 0, 'резерв −1500, не −4000');
+    });
+
+    await run('effective paidUntil = max(ручная, журнал)', () => {
+      const state = baseState();
+      const pay = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      state.obligations[0].paidUntil = '2027-01-01';
+      assert(resolveEffectivePaidUntil(state.obligations[0]) === '2027-01-01', 'ручная позже журнала');
+      const journalLen = state.obligations[0].payments.length;
+      const upd = recordObligationUpdated(state, 'obl', {
+        name: 'X',
+        targetAmount: '',
+        paidUntil: '2026-10-01',
+        comment: ''
+      }, 'husband');
+      assert(upd.ok, upd.error);
+      assert(state.obligations[0].payments.length === journalLen, 'без фиктивного payment');
+      assert(resolveEffectivePaidUntil(state.obligations[0]) === '2026-10-01', 'max после ручной правки');
+    });
+
+    await run('UI статус: зелёный / жёлтый / красный', () => {
+      const obligation = { paidUntil: '2026-12-01', payments: [] };
+      const green = getObligationDueUiStatus(obligation, '2026-11-01');
+      assert(green.tier === 'paid', ' >7 дней');
+      const yellow = getObligationDueUiStatus(obligation, '2026-11-28');
+      assert(yellow.tier === 'warning', '≤7 дней');
+      const red = getObligationDueUiStatus(obligation, '2026-12-02');
+      assert(red.tier === 'overdue', 'после paidUntil');
+      const overdueObl = { paidUntil: '2020-01-01', payments: [] };
+      assert(isObligationOverdueByDate(overdueObl, '2026-01-01'), 'overdue flag');
+      assert(isObligationOverdue(overdueObl), 'isObligationOverdue uses effective date');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`);
+    if (fail === 0) {
+      log('ALL PASSED', 'pass');
+    }
+  </script>
+</body>
+</html>

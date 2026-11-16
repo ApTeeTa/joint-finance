@@ -44,11 +44,20 @@ function wasRecentlySubmitted(key) {
   return true;
 }
 
+function findModalPanel(modal) {
+  if (!modal) return null;
+  return modal.querySelector('.jf-modal-panel') ?? modal.querySelector('[class*="modalShell"]');
+}
+
 function setModalSubmittingUi(modalName, submitting) {
   const modal = document.querySelector(`[data-modal="${modalName}"]:not(.hidden)`)
     ?? document.querySelector(`[data-modal="${modalName}"]`);
   if (!modal) return;
-  modal.dataset.submitting = submitting ? 'true' : 'false';
+  modal.dataset.submitting = 'false';
+  const panel = findModalPanel(modal);
+  if (panel) {
+    panel.dataset.submitting = submitting ? 'true' : 'false';
+  }
   const form = modal.querySelector('form');
   if (form) {
     form.querySelectorAll('button[type="submit"], button[data-action="close-modal"]').forEach((btn) => {
@@ -78,8 +87,10 @@ export async function runGuardedModalSubmit(modalName, form, task) {
     if (ok) {
       markIdempotentSuccess(idempotencyKey);
       clearDraft(modalName);
-      form.reset();
+      submittingModals.delete(modalName);
+      setModalSubmittingUi(modalName, false);
       closeModal(modalName);
+      form.reset();
     }
     return ok;
   } finally {

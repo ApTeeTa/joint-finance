@@ -820,16 +820,37 @@ function renderTransferModal() {
   `;
 }
 
+function syncTopUpAccountSelect(state, container, selectedId = '') {
+  const form = findAppForm('topup', container);
+  const select = form?.accountId;
+  if (!select || select.tagName !== 'SELECT') {
+    return;
+  }
+  select.innerHTML = `
+    <option value="">Выберите счёт</option>
+    ${renderAccountSelectOptions(state, selectedId)}
+  `.trim();
+  if (selectedId) {
+    select.value = selectedId;
+  }
+}
+
 function renderTopUpModal(state) {
   return `
     <div
       class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
       data-modal="topup"
     >
-      <div class="${UI.modalShell} ${UI.modalBody}">
+      <div class="${UI.modalShell} ${UI.modalBody} jf-modal-panel">
         <h3 class="${UI.modalTitle} mb-4">Пополнение счета</h3>
         <form data-form="topup" class="space-y-4">
-          <input type="hidden" name="accountId" value="">
+          <div>
+            <label class="${UI.label}">Счёт</label>
+            <select name="accountId" required class="${UI.field}">
+              <option value="">Выберите счёт</option>
+              ${renderAccountSelectOptions(state)}
+            </select>
+          </div>
           <div>
             <label class="${UI.label}">Сумма</label>
             <input
@@ -1270,8 +1291,9 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
     if (target.closest('[data-action="open-topup"]')) {
       const btn = target.closest('[data-action="open-topup"]');
       const form = findAppForm('topup', container);
+      const presetAccountId = btn.dataset.accountId || '';
+      syncTopUpAccountSelect(state, container, presetAccountId);
       if (form) {
-        form.accountId.value = btn.dataset.accountId;
         form.amount.value = '';
         form.comment.value = '';
         form.date.value = todayIso();
@@ -1370,11 +1392,10 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
       const initialBalance = addForm.initialBalance.value;
       const comment = addForm.comment.value;
 
-      await runGuardedModalSubmit('add-account', addForm, async () => {
-        const ok = createAccount(state, name, currency, initialBalance, comment);
-        if (ok) refresh(state, container, onUpdate);
-        return ok;
-      });
+      const ok = await runGuardedModalSubmit('add-account', addForm, async () =>
+        createAccount(state, name, currency, initialBalance, comment)
+      );
+      if (ok) refresh(state, container, onUpdate);
       return;
     }
 
@@ -1383,11 +1404,10 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
       const accountId = editForm.accountId.value;
       const name = editForm.name.value;
       const balance = editForm.balance.value;
-      await runGuardedModalSubmit('edit-account', editForm, async () => {
-        const ok = updateAccount(state, accountId, name, balance);
-        if (ok) refresh(state, container, onUpdate);
-        return ok;
-      });
+      const ok = await runGuardedModalSubmit('edit-account', editForm, async () =>
+        updateAccount(state, accountId, name, balance)
+      );
+      if (ok) refresh(state, container, onUpdate);
       return;
     }
 
@@ -1398,11 +1418,14 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
       const comment = topUpForm.comment.value;
       const date = topUpForm.date.value;
       const incomeCategoryId = topUpForm.incomeCategoryId?.value || null;
-      await runGuardedModalSubmit('topup', topUpForm, async () => {
-        const ok = depositToAccount(state, accountId, amount, comment, date, incomeCategoryId);
-        if (ok) refresh(state, container, onUpdate);
-        return ok;
-      });
+      if (!accountId) {
+        alert('Выберите счёт для зачисления дохода');
+        return;
+      }
+      const ok = await runGuardedModalSubmit('topup', topUpForm, async () =>
+        depositToAccount(state, accountId, amount, comment, date, incomeCategoryId)
+      );
+      if (ok) refresh(state, container, onUpdate);
       return;
     }
 
@@ -1418,11 +1441,10 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
         return;
       }
 
-      await runGuardedModalSubmit('transfer', transferForm, async () => {
-        const ok = transferBetweenAccounts(state, sourceAccountId, destAccountId, amount, inputMode);
-        if (ok) refresh(state, container, onUpdate);
-        return ok;
-      });
+      const ok = await runGuardedModalSubmit('transfer', transferForm, async () =>
+        transferBetweenAccounts(state, sourceAccountId, destAccountId, amount, inputMode)
+      );
+      if (ok) refresh(state, container, onUpdate);
     }
   });
 }

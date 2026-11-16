@@ -398,18 +398,22 @@
       pointer-events: auto;
     }
 
-    [data-modal][data-submitting="true"]::after {
+    [data-modal] .jf-modal-panel[data-submitting="true"] {
+      position: relative;
+    }
+
+    [data-modal] .jf-modal-panel[data-submitting="true"]::after {
       content: 'Сохранение…';
-      position: fixed;
-      bottom: max(1rem, env(safe-area-inset-bottom));
+      position: absolute;
+      bottom: 0.75rem;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 120;
-      padding: 0.5rem 1rem;
+      z-index: 2;
+      padding: 0.35rem 0.75rem;
       border-radius: 9999px;
       background: rgba(15, 23, 42, 0.92);
       color: #fff;
-      font-size: 0.875rem;
+      font-size: 0.75rem;
       pointer-events: none;
     }
 
@@ -597,8 +601,14 @@
     .display-item-expanded-actions {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.5rem;
+      gap: 0.625rem;
       margin-top: 0.75rem;
+    }
+
+    .display-item-expanded-actions .jf-interactive {
+      width: 100%;
+      justify-content: center;
+      text-align: center;
     }
 
     .display-item-expanded-info {

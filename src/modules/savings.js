@@ -616,7 +616,7 @@ function renderWithdrawModal() {
 function renderSpendModal(state) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="spend-saving">
-      <div class="${UI.modalShell} ${UI.modalBody}">
+      <div class="${UI.modalShell} ${UI.modalBody} jf-modal-panel">
         <h3 class="${UI.modalTitle} mb-1">Потратить копилку</h3>
         <p class="text-sm text-slate-500 mb-4" data-spend-saving-reserve-hint>В резерве: —</p>
         <form data-form="spend-saving" class="space-y-4">
@@ -921,7 +921,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
 
     const spendForm = event.target.closest('[data-form="spend-saving"]');
     if (spendForm) {
-      await runGuardedModalSubmit('spend-saving', spendForm, async () => {
+      const ok = await runGuardedModalSubmit('spend-saving', spendForm, async () => {
         const result = spendSaving(
           state,
           spendForm.savingId.value,

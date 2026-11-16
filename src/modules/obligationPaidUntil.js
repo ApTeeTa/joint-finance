@@ -9,32 +9,97 @@ function comparePaymentsForLifoOrder(a, b) {
   return String(a.transactionId ?? '').localeCompare(String(b.transactionId ?? ''));
 }
 
-export function computePaidUntilFromPayments(obligation) {
+/** Latest paidUntil from payment journal only (ignores manual snapshot). */
+export function computePaidUntilFromPaymentJournal(obligation) {
   const payments = Array.isArray(obligation?.payments) ? obligation.payments : [];
-
   if (payments.length === 0) {
-    return obligation?.paidUntil ?? null;
+    return null;
   }
 
-  const lastPayment = payments.reduce((latest, payment) => {
-    if (!latest) {
-      return payment;
+  let latest = null;
+  for (const payment of payments) {
+    const iso = payment?.paidUntil;
+    if (!iso) continue;
+    if (!latest || iso > latest) {
+      latest = iso;
     }
-
-    return comparePaymentsForLifoOrder(payment, latest) > 0 ? payment : latest;
-  }, null);
-
-  return lastPayment?.paidUntil ?? obligation?.paidUntil ?? null;
+  }
+  return latest;
 }
 
+/** Manual / admin date stored on obligation entity (not a payment row). */
+export function getManualPaidUntil(obligation) {
+  const value = obligation?.paidUntil;
+  return value ? String(value) : null;
+}
+
+export function maxIsoDate(a, b) {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+
+/**
+ * Effective «Оплачено до»: поздняя из ручной даты и журнала платежей.
+ */
+export function resolveEffectivePaidUntil(obligation) {
+  const manual = getManualPaidUntil(obligation);
+  const fromJournal = computePaidUntilFromPaymentJournal(obligation);
+  return maxIsoDate(manual, fromJournal);
+}
+
+/** @deprecated Use resolveEffectivePaidUntil — kept for existing imports. */
+export function computePaidUntilFromPayments(obligation) {
+  return resolveEffectivePaidUntil(obligation);
+}
+
+export function diffCalendarDaysUntilPaidUntil(paidUntilIso, todayIso) {
+  if (!paidUntilIso || !todayIso) return null;
+  const [y1, m1, d1] = String(todayIso).split('-').map(Number);
+  const [y2, m2, d2] = String(paidUntilIso).split('-').map(Number);
+  const today = Date.UTC(y1, m1 - 1, d1);
+  const until = Date.UTC(y2, m2 - 1, d2);
+  return Math.round((until - today) / 86400000);
+}
+
+/**
+ * UI status from effective paidUntil and today (calendar days).
+ * green: >7 days left; yellow: 0–7; red: overdue (today after paidUntil).
+ */
+export function getObligationDueUiStatus(obligation, todayIso) {
+  const paidUntil = resolveEffectivePaidUntil(obligation);
+  if (!paidUntil) {
+    return { tier: 'neutral', label: 'Без срока', paidUntil: null, daysLeft: null };
+  }
+
+  const daysLeft = diffCalendarDaysUntilPaidUntil(paidUntil, todayIso);
+  if (daysLeft === null) {
+    return { tier: 'neutral', label: 'Без срока', paidUntil, daysLeft: null };
+  }
+
+  if (daysLeft < 0) {
+    return { tier: 'overdue', label: 'Просрочено', paidUntil, daysLeft };
+  }
+  if (daysLeft <= 7) {
+    return { tier: 'warning', label: 'Скоро срок', paidUntil, daysLeft };
+  }
+  return { tier: 'paid', label: 'Оплачено', paidUntil, daysLeft };
+}
+
+export function isObligationOverdueByDate(obligation, todayIso) {
+  const paidUntil = resolveEffectivePaidUntil(obligation);
+  if (!paidUntil) return false;
+  const daysLeft = diffCalendarDaysUntilPaidUntil(paidUntil, todayIso);
+  return daysLeft !== null && daysLeft < 0;
+}
 
 export function syncObligationStatusFromPayments(obligation, todayIso) {
-  const paidUntil = computePaidUntilFromPayments(obligation);
+  const paidUntil = resolveEffectivePaidUntil(obligation);
   if (!paidUntil) {
     return;
   }
 
-  obligation.status = paidUntil >= todayIso ? 'active' : 'overdue';
+  obligation.status = isObligationOverdueByDate(obligation, todayIso) ? 'overdue' : 'active';
 }
 
 /** Dev-only: snapshot drift when payments journal exists. Not used in production flow. */
@@ -47,14 +112,15 @@ export function diagnosePaidUntilSnapshotDrift(state, { log = PAID_UNTIL_DEV_DIA
       continue;
     }
 
-    const computedPaidUntil = computePaidUntilFromPayments(obligation);
+    const computedPaidUntil = computePaidUntilFromPaymentJournal(obligation);
     const snapshotPaidUntil = obligation.paidUntil ?? null;
 
-    if (computedPaidUntil !== snapshotPaidUntil) {
+    if (computedPaidUntil !== snapshotPaidUntil && snapshotPaidUntil !== resolveEffectivePaidUntil(obligation)) {
       const entry = {
         obligationId: obligation.id,
         computedPaidUntil,
-        snapshotPaidUntil
+        snapshotPaidUntil,
+        effectivePaidUntil: resolveEffectivePaidUntil(obligation)
       };
       drifts.push(entry);
 

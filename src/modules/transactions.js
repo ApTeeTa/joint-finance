@@ -737,12 +737,7 @@ export function recordObligationPayment(state, obligationId, amount, accountId, 
   if (gateBlock) return gateBlock;
 
   const reserveAmount = obligation.reserveAmount ?? 0;
-  if (rubAmount > reserveAmount) {
-    return {
-      ok: false,
-      error: 'Недостаточно средств в резерве обязательства. Сначала зарезервируйте деньги.'
-    };
-  }
+  const reserveUse = Math.min(rubAmount, reserveAmount);
 
   const accountCurrency = account.currency ?? 'RUB';
   const exchangeRate = getExchangeRate(state);
@@ -760,7 +755,7 @@ export function recordObligationPayment(state, obligationId, amount, accountId, 
   const obligationStatusBefore = obligation.status
     ?? (obligationPaidUntilBefore >= todayIso() ? 'active' : 'overdue');
 
-  obligation.reserveAmount = reserveAmount - rubAmount;
+  obligation.reserveAmount = reserveAmount - reserveUse;
   account.balance = accountBalance - accountDebitAmount;
 
   const paymentComment = comment
@@ -1183,11 +1178,24 @@ export function recordObligationUpdated(state, obligationId, data, author) {
   }
 
   const oldName = obligation.name;
+  const oldPaidUntil = obligation.paidUntil ?? null;
+  const newPaidUntil = data.paidUntil;
   obligation.name = String(data.name).trim();
   obligation.targetAmount = targetAmount;
-  obligation.paidUntil = data.paidUntil;
+  obligation.paidUntil = newPaidUntil;
   obligation.comment = String(data.comment ?? '').trim();
   syncObligationStatusFromPayments(obligation, todayIso());
+
+  const commentParts = [];
+  if (oldName !== obligation.name) {
+    commentParts.push(`название: «${oldName}» → «${obligation.name}»`);
+  }
+  if (oldPaidUntil !== newPaidUntil) {
+    commentParts.push(`Оплачено до: ${oldPaidUntil ?? '—'} → ${newPaidUntil}`);
+  }
+  if (commentParts.length === 0) {
+    commentParts.push(`Изменено обязательство «${obligation.name}»`);
+  }
 
   const tx = addTransaction(state, {
     type: TRANSACTION_TYPES.OBLIGATION_UPDATED,
@@ -1195,9 +1203,7 @@ export function recordObligationUpdated(state, obligationId, data, author) {
     obligationId: obligation.id,
     obligationName: obligation.name,
     currency: 'RUB',
-    comment: oldName === obligation.name
-      ? `Изменено обязательство «${obligation.name}»`
-      : `Изменено обязательство: «${oldName}» → «${obligation.name}»`,
+    comment: commentParts.join('; '),
     author
   });
 

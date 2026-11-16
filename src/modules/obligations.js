@@ -13,6 +13,10 @@ import {
 } from './transactions.js';
 import {
   computePaidUntilFromPayments,
+  resolveEffectivePaidUntil,
+  getObligationDueUiStatus,
+  isObligationOverdueByDate,
+  syncObligationStatusFromPayments,
   diagnosePaidUntilSnapshotDrift,
   diagnosePaidUntilShadow,
   validatePaidUntilConsistency
@@ -35,14 +39,20 @@ import { renderEntityCard } from './uiActionRenderer.js';
 
 export {
   computePaidUntilFromPayments,
+  resolveEffectivePaidUntil,
+  getObligationDueUiStatus,
+  isObligationOverdueByDate,
+  syncObligationStatusFromPayments,
   diagnosePaidUntilSnapshotDrift,
   diagnosePaidUntilShadow,
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
 
 const STATUS_CARD_CLASS = {
-  current: 'border-emerald-300 bg-emerald-50/60',
-  overdue: 'border-red-300 bg-red-50/60'
+  paid: 'border border-slate-200 bg-white shadow-sm ring-1 ring-inset ring-emerald-200',
+  warning: 'border border-slate-200 bg-white shadow-sm ring-1 ring-inset ring-amber-300',
+  overdue: 'border border-slate-200 bg-white shadow-sm ring-1 ring-inset ring-red-300',
+  neutral: 'border border-slate-200 bg-white'
 };
 
 const DISPATCH_SOURCE = 'obligations.js';
@@ -78,22 +88,12 @@ function formatPaidUntilLabel(iso) {
 }
 
 function syncStoredStatus(obligation) {
-  const paidUntil = computePaidUntilFromPayments(obligation);
-  if (!paidUntil) {
-    return;
-  }
-
-  obligation.status = paidUntil >= todayIso() ? 'active' : 'overdue';
+  syncObligationStatusFromPayments(obligation, todayIso());
 }
 
 function getUiStatus(obligation) {
-  const paidUntil = computePaidUntilFromPayments(obligation);
-
-  if (!paidUntil || paidUntil >= todayIso()) {
-    return { ui: 'current', label: 'К оплате' };
-  }
-
-  return { ui: 'overdue', label: 'Просрочено' };
+  const status = getObligationDueUiStatus(obligation, todayIso());
+  return { ui: status.tier, label: status.label };
 }
 
 export function getOverdueDays(paidUntil) {
@@ -104,9 +104,7 @@ export function getOverdueDays(paidUntil) {
 }
 
 export function isObligationOverdue(obligation) {
-  const paidUntil = computePaidUntilFromPayments(obligation);
-  if (!paidUntil) return false;
-  return paidUntil <= todayIso();
+  return isObligationOverdueByDate(obligation, todayIso());
 }
 
 export function formatOverdueDaysLabel(overdueDays) {
@@ -331,6 +329,9 @@ function formatObligationDueMeta(item) {
   if (uiStatus.ui === 'overdue') {
     return `просрочено · ${duePhrase}`;
   }
+  if (uiStatus.ui === 'warning') {
+    return `скоро срок · ${duePhrase}`;
+  }
 
   return duePhrase;
 }
@@ -338,7 +339,7 @@ function formatObligationDueMeta(item) {
 function renderObligationCard(state, obligation) {
   const item = normalizeObligation(obligation);
   const uiStatus = getUiStatus(item);
-  const cardClass = STATUS_CARD_CLASS[uiStatus.ui] ?? STATUS_CARD_CLASS.current;
+  const cardClass = STATUS_CARD_CLASS[uiStatus.ui] ?? STATUS_CARD_CLASS.neutral;
   const reservedAmount = item.reserveAmount ?? 0;
   const paymentsTotal = (item.payments ?? []).reduce(
     (sum, payment) => sum + (Number(payment.amount) || 0),
@@ -660,25 +661,21 @@ export function initObligationsHandlers(state, container, onStateChange) {
     const data = readFormData(form);
 
     if (formKey === 'add-obligation') {
-      await runGuardedModalSubmit(modalName, form, async () => {
-        const ok = createObligation(state, data);
-        if (ok) refresh();
-        return ok;
-      });
+      const ok = await runGuardedModalSubmit(modalName, form, async () => createObligation(state, data));
+      if (ok) refresh();
       return;
     }
 
     if (formKey === 'edit-obligation') {
-      await runGuardedModalSubmit(modalName, form, async () => {
-        const ok = updateObligation(state, data.obligationId, data);
-        if (ok) refresh();
-        return ok;
-      });
+      const ok = await runGuardedModalSubmit(modalName, form, async () =>
+        updateObligation(state, data.obligationId, data)
+      );
+      if (ok) refresh();
       return;
     }
 
     if (formKey === 'pay-obligation') {
-      await runGuardedModalSubmit(modalName, form, async () => {
+      const ok = await runGuardedModalSubmit(modalName, form, async () => {
         const result = payObligation(
           state,
           data.obligationId,
@@ -693,27 +690,25 @@ export function initObligationsHandlers(state, container, onStateChange) {
           alert(result.error);
           return false;
         }
-        refresh();
         return true;
       });
+      if (ok) refresh();
       return;
     }
 
     if (formKey === 'reserve-obligation') {
-      await runGuardedModalSubmit(modalName, form, async () => {
-        const ok = reserveFunds(state, data.obligationId, data.amount);
-        if (ok) refresh();
-        return ok;
-      });
+      const ok = await runGuardedModalSubmit(modalName, form, async () =>
+        reserveFunds(state, data.obligationId, data.amount)
+      );
+      if (ok) refresh();
       return;
     }
 
     if (formKey === 'unreserve-obligation') {
-      await runGuardedModalSubmit(modalName, form, async () => {
-        const ok = unreserveFunds(state, data.obligationId, data.amount);
-        if (ok) refresh();
-        return ok;
-      });
+      const ok = await runGuardedModalSubmit(modalName, form, async () =>
+        unreserveFunds(state, data.obligationId, data.amount)
+      );
+      if (ok) refresh();
     }
   });
 }
