@@ -15,8 +15,14 @@
     import {
       matchesExperimentHost,
       matchesBetaHost,
-      isLocalOnlyTestMode,
-      getFinancialStorageKey
+      matchesExperimentBuildRef,
+      resolveIsExperimentDeployment,
+      getFinancialStorageKey,
+      isExperimentDeployment,
+      getVercelGitCommitRef,
+      getVercelDeployEnvironment,
+      getDeploymentHostname,
+      EXPERIMENT_GIT_BRANCH
     } from '../src/config/environmentConfig.js';
     import {
       getExperimentMeta,
@@ -35,43 +41,104 @@
     }
     function assert(c, m) { if (!c) throw new Error(m); }
 
-  const tests = [
-    ['experiment host', () => {
-      assert(matchesExperimentHost('joint-finance-git-experiment-full-sync-apteetas-projects.vercel.app'), 'match');
-      assert(!matchesExperimentHost('joint-finance-git-beta-apteetas-projects.vercel.app'), 'not beta');
-      assert(!matchesExperimentHost('joint-finance.vercel.app'), 'not prod');
-    }],
-    ['beta host', () => {
-      assert(matchesBetaHost('joint-finance-git-beta-apteetas-projects.vercel.app'), 'beta');
-      assert(!matchesBetaHost('joint-finance-git-experiment-full-sync-apteetas-projects.vercel.app'), 'not exp');
-    }],
-    ['local dev not experiment', () => {
-      assert(!isLocalOnlyTestMode(), 'localhost is not auto demo');
-      assert(getFinancialStorageKey() === 'joint-finance-state-v2-family', 'family key on localhost');
-    }],
-    ['demo seed invariants', () => {
-      const check = checkFinancialInvariants(createDemoSeedState());
-      assert(check.ok, check.errors?.join('; ') ?? 'invariants');
-    }],
-    ['production not experiment', () => {
-      assert(!matchesExperimentHost('joint-finance.vercel.app'), 'prod host');
-      assert(!matchesBetaHost('joint-finance.vercel.app'), 'prod not beta');
-    }],
-    ['beta never experiment', () => {
-      const beta = 'joint-finance-git-beta-apteetas-projects.vercel.app';
-      assert(matchesBetaHost(beta), 'is beta');
-      assert(!matchesExperimentHost(beta), 'beta is not experiment');
-    }],
-    ['experiment meta skipAutoSeed', () => {
-      localStorage.removeItem('joint-finance-experiment-meta');
-      assert(!getExperimentMeta().skipAutoSeed, 'initial');
-      markExperimentUserClearedData();
-      assert(getExperimentMeta().skipAutoSeed === true, 'marked');
-      clearExperimentSkipAutoSeed();
-      assert(!getExperimentMeta().skipAutoSeed, 'cleared');
-      localStorage.removeItem('joint-finance-experiment-meta');
-    }]
-  ];
+    const deployedOnExperimentHost = matchesExperimentHost(getDeploymentHostname());
+
+    const tests = [
+      ['experiment branch hostname', () => {
+        assert(matchesExperimentHost('joint-finance-git-experiment-full-sync-apteetas-projects.vercel.app'), 'match');
+        assert(resolveIsExperimentDeployment({
+          hostname: 'joint-finance-git-experiment-full-sync-apteetas-projects.vercel.app',
+          gitRef: '',
+          vercelEnv: 'preview'
+        }), 'resolve host');
+      }],
+      ['deployment hash + experiment ref', () => {
+        const hashHost = 'joint-finance-eo0pf94q7-apteetas-projects.vercel.app';
+        assert(!matchesExperimentHost(hashHost), 'hash host not in pattern');
+        assert(resolveIsExperimentDeployment({
+          hostname: hashHost,
+          gitRef: EXPERIMENT_GIT_BRANCH,
+          vercelEnv: 'preview'
+        }), 'preview hash + ref');
+        assert(!resolveIsExperimentDeployment({
+          hostname: hashHost,
+          gitRef: EXPERIMENT_GIT_BRANCH,
+          vercelEnv: 'production'
+        }), 'prod env blocks ref');
+      }],
+      ['beta preview build', () => {
+        const beta = 'joint-finance-git-beta-apteetas-projects.vercel.app';
+        assert(matchesBetaHost(beta), 'is beta host');
+        assert(!resolveIsExperimentDeployment({
+          hostname: beta,
+          gitRef: 'beta',
+          vercelEnv: 'preview'
+        }), 'beta ref not experiment');
+        assert(!matchesExperimentHost(beta), 'beta host not experiment pattern');
+      }],
+      ['production host never experiment', () => {
+        const prod = 'joint-finance.vercel.app';
+        assert(!matchesExperimentHost(prod), 'prod host');
+        assert(!resolveIsExperimentDeployment({
+          hostname: prod,
+          gitRef: EXPERIMENT_GIT_BRANCH,
+          vercelEnv: 'preview'
+        }), 'prod hostname blocks even with ref');
+        assert(!resolveIsExperimentDeployment({
+          hostname: prod,
+          gitRef: EXPERIMENT_GIT_BRANCH,
+          vercelEnv: 'production'
+        }), 'prod env');
+      }],
+      ['localhost without experiment signals', () => {
+        assert(!resolveIsExperimentDeployment({
+          hostname: 'localhost',
+          gitRef: '',
+          vercelEnv: ''
+        }), 'localhost');
+        assert(!resolveIsExperimentDeployment({
+          hostname: '127.0.0.1',
+          gitRef: '',
+          vercelEnv: 'development'
+        }), '127 dev');
+      }],
+      ['build ref matcher', () => {
+        assert(matchesExperimentBuildRef(EXPERIMENT_GIT_BRANCH), 'exact');
+        assert(!matchesExperimentBuildRef('beta'), 'beta ref');
+        assert(!matchesExperimentBuildRef('main'), 'main ref');
+      }],
+      ['live page context sanity', () => {
+        log(`  hostname=${getDeploymentHostname()} ref=${getVercelGitCommitRef() || '(empty)'} vercelEnv=${getVercelDeployEnvironment() || '(empty)'} isExperiment=${isExperimentDeployment()}`, '');
+        if (deployedOnExperimentHost) {
+          assert(isExperimentDeployment(), 'branch preview must be experiment');
+        }
+      }],
+      ['storage key resolution (synthetic)', () => {
+        const familyKey = (() => {
+          const wasExp = resolveIsExperimentDeployment({
+            hostname: 'localhost',
+            gitRef: '',
+            vercelEnv: ''
+          });
+          assert(!wasExp, 'localhost not experiment');
+          return 'joint-finance-state-v2-family';
+        })();
+        assert(familyKey === 'joint-finance-state-v2-family', 'family key');
+      }],
+      ['demo seed invariants', () => {
+        const check = checkFinancialInvariants(createDemoSeedState());
+        assert(check.ok, check.errors?.join('; ') ?? 'invariants');
+      }],
+      ['experiment meta skipAutoSeed', () => {
+        localStorage.removeItem('joint-finance-experiment-meta');
+        assert(!getExperimentMeta().skipAutoSeed, 'initial');
+        markExperimentUserClearedData();
+        assert(getExperimentMeta().skipAutoSeed === true, 'marked');
+        clearExperimentSkipAutoSeed();
+        assert(!getExperimentMeta().skipAutoSeed, 'cleared');
+        localStorage.removeItem('joint-finance-experiment-meta');
+      }]
+    ];
 
     let fail = 0;
     for (const [name, fn] of tests) {
@@ -83,7 +150,8 @@
         log(`FAIL ${name}: ${e.message}`, 'fail');
       }
     }
-    log(fail ? `Failed: ${fail}` : 'ALL PASS', fail ? 'fail' : 'pass');
+    const allOk = fail === 0;
+    log(allOk ? 'ALL PASSED' : `Failed: ${fail}`, allOk ? 'pass' : 'fail');
   </script>
 </body>
 </html>

@@ -3,7 +3,11 @@
  * Experiment Vercel preview — isolated demo localStorage, no Supabase.
  */
 
+import { VERCEL_ENV, VERCEL_GIT_COMMIT_REF } from './vercelBuildMeta.js';
+
 export const FAMILY_SNAPSHOT_ID = 'family';
+
+export const EXPERIMENT_GIT_BRANCH = 'experiment-full-sync';
 
 export const ENVIRONMENT_ISOLATION_RULE = Object.freeze({
   id: 'FAMILY_MODE',
@@ -16,8 +20,7 @@ const FINANCIAL_STORAGE_KEY_EXPERIMENT = 'joint-finance-state-v2-experiment';
 const PRODUCTION_HOST = 'joint-finance.vercel.app';
 
 /**
- * Experiment preview on Vercel (branch experiment-full-sync).
- * Deliberately does not match beta / production hosts.
+ * Branch preview URL (stable alias).
  */
 export function matchesExperimentHost(hostname) {
   const host = String(hostname ?? '').toLowerCase();
@@ -37,9 +40,48 @@ export function getDeploymentHostname() {
   return window.location.hostname;
 }
 
-/** True only on Experiment Vercel preview — demo sandbox, no Supabase. */
+export function getVercelGitCommitRef() {
+  return String(VERCEL_GIT_COMMIT_REF ?? '').trim();
+}
+
+export function getVercelDeployEnvironment() {
+  return String(VERCEL_ENV ?? '').trim().toLowerCase();
+}
+
+/**
+ * Vercel preview built from experiment-full-sync (incl. deployment-hash URLs).
+ * Never true on Production host or VERCEL_ENV=production.
+ */
+export function matchesExperimentBuildRef(gitRef = getVercelGitCommitRef()) {
+  return String(gitRef ?? '').trim() === EXPERIMENT_GIT_BRANCH;
+}
+
+/**
+ * @param {{ hostname?: string, gitRef?: string, vercelEnv?: string }} [overrides] — for tests
+ */
+export function resolveIsExperimentDeployment(overrides = {}) {
+  const hostname = overrides.hostname ?? getDeploymentHostname();
+  const gitRef = overrides.gitRef ?? getVercelGitCommitRef();
+  const vercelEnv = (overrides.vercelEnv ?? getVercelDeployEnvironment()).toLowerCase();
+
+  if (hostname === PRODUCTION_HOST) {
+    return false;
+  }
+  if (vercelEnv === 'production') {
+    return false;
+  }
+  if (matchesExperimentHost(hostname)) {
+    return true;
+  }
+  if (matchesExperimentBuildRef(gitRef) && vercelEnv === 'preview') {
+    return true;
+  }
+  return false;
+}
+
+/** True on Experiment Vercel deployment (branch or preview hash). */
 export function isExperimentDeployment() {
-  return matchesExperimentHost(getDeploymentHostname());
+  return resolveIsExperimentDeployment();
 }
 
 /**
@@ -61,7 +103,7 @@ export function isLocalOnlyTestMode() {
 }
 
 /**
- * @deprecated Constant ignored — use isLocalOnlyTestMode() (hostname-based).
+ * @deprecated Constant ignored — use isLocalOnlyTestMode() (hostname/build ref).
  */
 export const LOCAL_ONLY_TEST_MODE = false;
 

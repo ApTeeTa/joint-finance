@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/write-vercel-build-meta.mjs",
     "check:architecture": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/architecture-lock-check.ps1"
   },
   "dependencies": {}
