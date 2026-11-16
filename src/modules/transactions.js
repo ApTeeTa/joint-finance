@@ -339,6 +339,8 @@ function addTransaction(state, data) {
     debtSnapshot: data.debtSnapshot,
     categoryName: data.categoryName,
     categorySnapshot: data.categorySnapshot,
+    incomeCategoryId: data.incomeCategoryId,
+    incomeCategoryName: data.incomeCategoryName,
     service: data.service === true,
     linkedTransactionId: data.linkedTransactionId,
     linkedDeleteTransactionId: data.linkedDeleteTransactionId,

@@ -233,7 +233,8 @@
     Object.entries(results).forEach(([key, status]) => {
       log(`${key}: ${status}`, status === 'PASS' ? 'pass' : 'fail');
     });
-    log('\nГотово.');
+    const allOk = Object.values(results).every((v) => v === 'PASS');
+    log(allOk ? '\nALL PASSED' : '\nHAS FAILURES', allOk ? 'pass' : 'fail');
   </script>
 </body>
 </html>
