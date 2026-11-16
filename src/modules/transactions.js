@@ -737,7 +737,12 @@ export function recordObligationPayment(state, obligationId, amount, accountId, 
   if (gateBlock) return gateBlock;
 
   const reserveAmount = obligation.reserveAmount ?? 0;
-  const reserveUse = Math.min(rubAmount, reserveAmount);
+  if (rubAmount > reserveAmount) {
+    return {
+      ok: false,
+      error: 'Недостаточно средств в резерве обязательства. Сначала зарезервируйте деньги.'
+    };
+  }
 
   const accountCurrency = account.currency ?? 'RUB';
   const exchangeRate = getExchangeRate(state);
@@ -755,7 +760,7 @@ export function recordObligationPayment(state, obligationId, amount, accountId, 
   const obligationStatusBefore = obligation.status
     ?? (obligationPaidUntilBefore >= todayIso() ? 'active' : 'overdue');
 
-  obligation.reserveAmount = reserveAmount - reserveUse;
+  obligation.reserveAmount = reserveAmount - rubAmount;
   account.balance = accountBalance - accountDebitAmount;
 
   const paymentComment = comment

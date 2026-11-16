@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Оплата обязательства — резерв</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>OBLIGATION_PAY — полный резерв</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+    import { checkFinancialInvariants } from '../src/modules/financeCoreInvariants.js';
+    import { payObligation, undoTransaction } from '../src/modules/financeGate.js';
+    import { todayIso } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState(overrides = {}) {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 100000, owner: 'husband' }],
+        obligations: [{
+          id: 'obl',
+          name: 'ЖКХ',
+          reserveAmount: 0,
+          paidUntil: '2026-06-01',
+          status: 'active',
+          payments: [],
+          createdAt: new Date().toISOString()
+        }],
+        transactions: [],
+        categories: [],
+        savings: [],
+        debts: [],
+        ...overrides
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('резерв = сумме — оплата разрешена', () => {
+      const state = baseState();
+      state.obligations[0].reserveAmount = 3000;
+      const freeBefore = calculateFreeBalance(state);
+      const result = payObligation(state, 'obl', 3000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(result.ok, result.error);
+      assert(state.obligations[0].reserveAmount === 0, 'резерв исчерпан');
+      assert(state.accounts[0].balance === 97000, 'счёт −3000');
+      assert(calculateFreeBalance(state) === freeBefore, 'free не двойное списание');
+      assert(checkFinancialInvariants(state).ok, 'инварианты');
+    });
+
+    await run('резерв больше суммы — остаток сохраняется', () => {
+      const state = baseState();
+      state.obligations[0].reserveAmount = 8000;
+      const result = payObligation(state, 'obl', 3000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(result.ok, result.error);
+      assert(state.obligations[0].reserveAmount === 5000, 'остаток резерва');
+      assert(state.accounts[0].balance === 97000, 'счёт −3000');
+    });
+
+    await run('резерв меньше суммы — отказ', () => {
+      const state = baseState();
+      state.obligations[0].reserveAmount = 1500;
+      const balanceBefore = state.accounts[0].balance;
+      const result = payObligation(state, 'obl', 4000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(!result.ok, 'must fail');
+      assert(state.obligations[0].reserveAmount === 1500, 'резерв без изменений');
+      assert(state.accounts[0].balance === balanceBefore, 'счёт без изменений');
+    });
+
+    await run('нулевой резерв — отказ', () => {
+      const state = baseState();
+      const result = payObligation(state, 'obl', 1000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(!result.ok, 'must fail');
+    });
+
+    await run('недостаточный баланс счёта — отказ', () => {
+      const state = baseState();
+      state.accounts[0].balance = 2000;
+      state.obligations[0].reserveAmount = 5000;
+      const result = payObligation(state, 'obl', 4000, 'acc', '2026-09-01', '', todayIso(), 'husband');
+      assert(!result.ok, 'must fail');
+      assert(state.obligations[0].reserveAmount === 5000, 'резерв не тронут');
+      assert(state.accounts[0].balance === 2000, 'счёт не тронут');
+    });
+
+    await run('отмена восстанавливает счёт и резерв', () => {
+      const state = baseState();
+      state.obligations[0].reserveAmount = 6000;
+      const freeBefore = calculateFreeBalance(state);
+      const pay = payObligation(state, 'obl', 2500, 'acc', '2026-10-01', '', todayIso(), 'husband');
+      assert(pay.ok, pay.error);
+      const undo = undoTransaction(state, pay.transaction.id);
+      assert(undo.ok, undo.error);
+      assert(state.accounts[0].balance === 100000, 'счёт восстановлен');
+      assert(state.obligations[0].reserveAmount === 6000, 'резерв восстановлен');
+      assert(calculateFreeBalance(state) === freeBefore, 'free восстановлен');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`);
+    if (fail === 0) log('ALL PASSED', 'pass');
+  </script>
+</body>
+</html>

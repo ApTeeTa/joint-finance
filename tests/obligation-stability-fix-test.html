@@ -66,24 +66,15 @@
       }
     }
 
-    await run('резерв 0 — оплата со счёта', () => {
+    await run('резерв 0 — оплата запрещена', () => {
       const state = baseState();
       const result = payObligation(state, 'obl', 3000, 'acc', '2026-09-01', '', todayIso(), 'husband');
-      assert(result.ok, result.error);
-      assert(state.obligations[0].reserveAmount === 0, 'резерв не менялся');
-      assert(state.accounts[0].balance === 97000, 'списание со счёта');
-    });
-
-    await run('частичное списание резерва', () => {
-      const state = baseState();
-      state.obligations[0].reserveAmount = 1500;
-      const result = payObligation(state, 'obl', 4000, 'acc', '2026-09-01', '', todayIso(), 'husband');
-      assert(result.ok, result.error);
-      assert(state.obligations[0].reserveAmount === 0, 'резерв −1500, не −4000');
+      assert(!result.ok, 'need reserve first');
     });
 
     await run('effective paidUntil = max(ручная, журнал)', () => {
       const state = baseState();
+      state.obligations[0].reserveAmount = 1000;
       const pay = recordObligationPayment(state, 'obl', 1000, 'acc', '2026-08-01', '', todayIso(), 'husband');
       assert(pay.ok, pay.error);
       state.obligations[0].paidUntil = '2027-01-01';
