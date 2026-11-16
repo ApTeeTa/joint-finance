@@ -129,6 +129,11 @@ const ACTION_DEFS = Object.freeze({
     markup: '+',
     tone: 'text-emerald-600 hover:bg-emerald-100 text-base leading-none font-semibold'
   },
+  'open-spend-saving': {
+    title: 'Потратить',
+    menuLabel: 'Потратить',
+    tone: 'text-primary-600 hover:bg-primary-50'
+  },
   'open-edit-saving': {
     title: 'Редактировать',
     menuLabel: 'Редактировать',

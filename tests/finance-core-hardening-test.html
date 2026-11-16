@@ -132,7 +132,7 @@
 
       try {
         const state = baseState();
-        const result = spendSaving(state, 's1', 'acc1', '', todayIso(), 'husband');
+        const result = spendSaving(state, 's1', 'acc1', 10000, '', todayIso(), 'husband');
         assert(result.ok, result.error);
         assert(gateLogs.some((entry) => entry.operation === 'spendSaving'), 'gate logged spendSaving');
       } finally {

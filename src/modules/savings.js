@@ -504,7 +504,7 @@ function renderSavingCard(state, saving) {
       ...(recommendedPayment != null ? { recommendedPayment: createRawMoney(recommendedPayment) } : {})
     },
     flags: { goalReached },
-    entityContext: { goalReached },
+    entityContext: { goalReached, hasAccumulated: balance > 0 },
     viewMode: displayContext.viewMode,
     displayRules
   });
@@ -617,9 +617,14 @@ function renderSpendModal(state) {
   return `
     <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="spend-saving">
       <div class="${UI.modalShell} ${UI.modalBody}">
-        <h3 class="${UI.modalTitle} mb-4">Потратить копилку</h3>
+        <h3 class="${UI.modalTitle} mb-1">Потратить копилку</h3>
+        <p class="text-sm text-slate-500 mb-4" data-spend-saving-reserve-hint>В резерве: —</p>
         <form data-form="spend-saving" class="space-y-4">
           <input type="hidden" name="savingId" value="">
+          <div>
+            <label class="${UI.label}">Сумма покупки (RUB)</label>
+            <input type="number" name="amount" required min="0.01" step="1" class="${UI.field}" placeholder="0">
+          </div>
           <div>
             <label class="${UI.label}">Счет</label>
             <select name="accountId" required class="${UI.field}">
@@ -787,9 +792,18 @@ export function initSavingsHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-spend-saving"]')) {
       const btn = target.closest('[data-action="open-spend-saving"]');
+      const saving = findSaving(state, btn.dataset.savingId);
       const form = findAppForm('spend-saving', container);
+      const accumulated = saving ? getSavingAccumulated(saving) : 0;
+      const hint = findInAppUi('[data-spend-saving-reserve-hint]', container);
+      if (hint) {
+        hint.textContent = saving
+          ? `В резерве: ${formatMoney(accumulated)}${saving.name ? ` · ${saving.name}` : ''}`
+          : 'В резерве: —';
+      }
       if (form) {
         form.savingId.value = btn.dataset.savingId;
+        form.amount.value = accumulated > 0 ? accumulated : '';
         form.comment.value = '';
         if (form.accountId.options.length) {
           form.accountId.selectedIndex = 0;
@@ -912,6 +926,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
           state,
           spendForm.savingId.value,
           spendForm.accountId.value,
+          spendForm.amount.value,
           spendForm.comment.value,
           todayIso(),
           state.profile
@@ -920,9 +935,9 @@ export function initSavingsHandlers(state, container, onUpdate) {
           alert(result.error);
           return false;
         }
-        refresh(state, container, onUpdate);
         return true;
       });
+      if (ok) refresh(state, container, onUpdate);
     }
   });
 }
