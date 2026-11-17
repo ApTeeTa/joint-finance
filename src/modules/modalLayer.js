@@ -1,9 +1,14 @@
 import { isExperiment } from '../config/environmentConfig.js';
-import { logUiRuleFix, MODAL_OPEN_OVERLAY_SELECTOR, MODAL_OVERLAY_SELECTOR } from './uiRulesEngine.js';
+import {
+  logUiRuleFix,
+  MODAL_OPEN_OVERLAY_SELECTOR,
+  MODAL_OVERLAY_SELECTOR
+} from './uiRulesEngine.js';
 import {
   clearDraft,
   confirmDiscardDraft,
-  restoreDraftIntoForm
+  restoreDraftIntoForm,
+  applyFormFields
 } from './modalDraftStore.js';
 import { isModalSubmitting } from './modalFormSubmit.js';
 
@@ -62,7 +67,7 @@ export function relocateModals(fromContainer, options = {}) {
   incoming.forEach((modal) => {
     const name = modal.dataset.modal;
     if (name) {
-      root.querySelectorAll(`${MODAL_OVERLAY_SELECTOR}[data-modal="${name}"]`).forEach((existing) => {
+      root.querySelectorAll(`${MODAL_SELECTOR}[data-modal="${name}"]`).forEach((existing) => {
         if (existing !== modal) {
           existing.remove();
         }
@@ -135,6 +140,28 @@ export function getOpenModalNames() {
   return names;
 }
 
+export function filterRestorableSessionModalNames(rawNames) {
+  if (!Array.isArray(rawNames)) {
+    return [];
+  }
+  const unique = [];
+  const seen = new Set();
+  for (const name of rawNames) {
+    if (typeof name !== 'string' || !name.length || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    if (!findModal(name)) {
+      continue;
+    }
+    unique.push(name);
+  }
+  if (unique.length > 1) {
+    return [unique[unique.length - 1]];
+  }
+  return unique;
+}
+
 const SESSION_OPEN_MODALS_KEY = 'jf-session-open-modals';
 
 export function persistOpenModalsForSession() {
@@ -159,32 +186,6 @@ export function clearOpenModalsSession() {
 }
 
 /**
- * Session list may contain spurious names from legacy builds (3775a2e registry bug).
- * Only names that resolve to a modal overlay shell in the current DOM are restorable.
- */
-export function filterRestorableSessionModalNames(rawNames) {
-  if (!Array.isArray(rawNames)) {
-    return [];
-  }
-  const unique = [];
-  const seen = new Set();
-  for (const name of rawNames) {
-    if (typeof name !== 'string' || !name.length || seen.has(name)) {
-      continue;
-    }
-    seen.add(name);
-    if (!findModal(name)) {
-      continue;
-    }
-    unique.push(name);
-  }
-  if (unique.length > 1) {
-    return [unique[unique.length - 1]];
-  }
-  return unique;
-}
-
-/**
  * After full tab re-render (e.g. cold resume), reopen modals the user had open.
  * Draft fields are restored via openModal → restoreDraftIntoForm.
  */
@@ -195,15 +196,13 @@ export function restoreOpenModalsFromSession() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        rawNames = parsed;
+        rawNames = parsed.filter((n) => typeof n === 'string' && n.length > 0);
       }
     }
   } catch {
     return;
   }
-
   const names = filterRestorableSessionModalNames(rawNames);
-
   try {
     if (names.length > 0) {
       sessionStorage.setItem(SESSION_OPEN_MODALS_KEY, JSON.stringify(names));
@@ -213,15 +212,11 @@ export function restoreOpenModalsFromSession() {
   } catch {
     /* private mode */
   }
-
-  if (!names.length) {
-    return;
-  }
-
+  if (!names.length) return;
   openModal(names[0]);
 }
 
-export function openModal(modalName) {
+export function openModal(modalName, options = {}) {
   const modal = findModal(modalName);
   if (!modal) {
     if (isExperiment()) {
@@ -242,6 +237,9 @@ export function openModal(modalName) {
   const form = modal.querySelector('form[data-form]');
   if (form && modalName) {
     restoreDraftIntoForm(form, modalName);
+    if (options.pinnedFields) {
+      applyFormFields(form, options.pinnedFields);
+    }
   }
   syncBodyModalState();
   persistOpenModalsForSession();
@@ -310,8 +308,8 @@ export function initModalDismissHandlers() {
       return;
     }
 
-    const modal = event.target.closest(MODAL_OVERLAY_SELECTOR);
-    if (!modal?.classList || modal.classList.contains('hidden')) {
+    const modal = event.target.closest('[data-modal]');
+    if (!modal || modal.classList.contains('hidden')) {
       return;
     }
 

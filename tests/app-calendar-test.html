@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: appCalendar (Asia/Dubai)</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>appCalendar — Asia/Dubai</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      APP_TIMEZONE,
+      getAppCalendarIsoDate,
+      getAppYearMonth,
+      todayIsoApp
+    } from '../src/modules/appCalendar.js';
+    import { getCurrentYearMonth, getCategorySpentInMonth } from '../src/modules/categoryMonth.js';
+    import { refreshCategorySpentCachesForCurrentMonth, TRANSACTION_STATUS } from '../src/modules/transactions.js';
+    import {
+      MODAL_DRAFT_ENTITY_FIELD_NAMES,
+      restoreDraftIntoForm,
+      applyFormFields,
+      clearDraft
+    } from '../src/modules/modalDraftStore.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = line;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    let pass = 0;
+    let fail = 0;
+    async function test(name, fn) {
+      try {
+        fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    test('константа часового пояса', () => {
+      assert(APP_TIMEZONE === 'Asia/Dubai', 'timezone');
+    });
+
+    test('23:59 31-го по Дубаю', () => {
+    const d = new Date(Date.UTC(2025, 0, 31, 19, 59, 0));
+    assert(getAppCalendarIsoDate(d) === '2025-01-31', getAppCalendarIsoDate(d));
+    assert(getAppYearMonth(d) === '2025-01', getAppYearMonth(d));
+    assert(getCurrentYearMonth(d) === '2025-01', getCurrentYearMonth(d));
+  });
+
+  // 31 Jan 2025 20:00 UTC → 1 Feb 00:00 Dubai
+    test('00:00 1-го по Дубаю (граница UTC)', () => {
+    const d = new Date(Date.UTC(2025, 0, 31, 20, 0, 0));
+    assert(getAppCalendarIsoDate(d) === '2025-02-01', getAppCalendarIsoDate(d));
+    assert(getAppYearMonth(d) === '2025-02', getAppYearMonth(d));
+  });
+
+    test('одинаковый месяц на любом устройстве (функция TZ)', () => {
+    const d = new Date(Date.UTC(2026, 2, 15, 22, 0, 0));
+    const a = getAppYearMonth(d);
+    const b = getAppYearMonth(d);
+    assert(a === b && a === '2026-03', a);
+  });
+
+    test('debtId не перезаписывается черновиком', () => {
+    clearDraft('edit-manual-debt');
+    localStorage.setItem('jf-modal-draft-edit-manual-debt', JSON.stringify({
+      savedAt: Date.now(),
+      fields: { debtId: 'wrong', description: 'draft' }
+    }));
+    const form = document.createElement('form');
+    form.innerHTML = '<input name="debtId" value=""><input name="description" value="">';
+    document.body.appendChild(form);
+    form.debtId.value = 'debt-A';
+    restoreDraftIntoForm(form, 'edit-manual-debt');
+    applyFormFields(form, { debtId: 'debt-A' });
+    assert(form.debtId.value === 'debt-A', 'debtId pinned');
+    assert(form.description.value === 'draft', 'description from draft');
+    assert(MODAL_DRAFT_ENTITY_FIELD_NAMES.has('debtId'), 'debtId in set');
+    form.remove();
+    clearDraft('edit-manual-debt');
+  });
+
+    test('пропущенные месяцы — кэш spent только для текущего (Dubai) месяца', () => {
+      const state = {
+        categories: [{ id: 'f', name: 'X', limit: 100000, reserved: 50000, spent: 999 }],
+        transactions: [
+          {
+            id: '1',
+            type: 'expense',
+            status: TRANSACTION_STATUS.ACTIVE,
+            categoryId: 'f',
+            amount: 100,
+            date: '2025-01-10'
+          },
+          {
+            id: '2',
+            type: 'expense',
+            status: TRANSACTION_STATUS.ACTIVE,
+            categoryId: 'f',
+            amount: 200,
+            date: '2025-03-15'
+          }
+        ]
+      };
+      refreshCategorySpentCachesForCurrentMonth(state, '2025-03-20');
+      assert(state.categories[0].spent === 200, `cache march got ${state.categories[0].spent}`);
+      assert(getCategorySpentInMonth(state, 'f', '2025-01') === 100, 'jan history');
+      assert(getCategorySpentInMonth(state, 'f', '2025-02') === 0, 'feb empty');
+    });
+
+    log(`SUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');
+  </script>
+</body>
+</html>

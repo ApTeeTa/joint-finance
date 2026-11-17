@@ -307,7 +307,13 @@ function computeRemaining(rawValues) {
 }
 
 function computeAvailable(rawValues) {
-  return pickRaw(rawValues, RAW_VALUE_KEYS.LIMIT) - pickRaw(rawValues, RAW_VALUE_KEYS.SPENT);
+  const limit = pickRaw(rawValues, RAW_VALUE_KEYS.LIMIT);
+  const spent = pickRaw(rawValues, RAW_VALUE_KEYS.SPENT);
+  const reserve = pickRaw(rawValues, RAW_VALUE_KEYS.RESERVE);
+  if (limit <= 0) {
+    return Math.max(0, reserve);
+  }
+  return Math.min(Math.max(0, reserve), Math.max(0, limit - spent));
 }
 
 function computeProgressPercent(rawValues) {
@@ -397,11 +403,15 @@ function buildReserveDisplayContract(entity, viewMode, entityType) {
 function buildMiscCategoryDisplayContract(entity, viewMode) {
   const contract = createEmptyEntityDisplay();
   const rawValues = entity.rawValues ?? {};
-  const spent = pickRaw(rawValues, RAW_VALUE_KEYS.SPENT);
+  const savingSpend = pickRaw(rawValues, 'savingSpend');
+  const journalExpense = pickRaw(rawValues, 'journalExpense');
 
   contract.line1.title = entity.title ?? '';
   contract.line1.meta = entity.meta ?? 'Системная категория';
-  contract.line3.metrics = [createMetric(RAW_VALUE_KEYS.SPENT, '', spent, 'money')];
+  contract.line3.metrics = [
+    createMetric('savingSpend', 'Из копилок', savingSpend, 'money'),
+    createMetric('journalExpense', 'Расходы', journalExpense, 'money')
+  ];
   contract.line4.metrics = [];
   contract.expanded.fields = buildExpandedFields(ENTITY_TYPES.CATEGORY, rawValues, {
     ...entity,
@@ -483,7 +493,10 @@ function buildExpandedFields(entityType, rawValues, entity = {}) {
 
   if (entityType === ENTITY_TYPES.CATEGORY) {
     if (flags.isMiscCategory) {
-      fields.push(createMetric(RAW_VALUE_KEYS.SPENT, 'Потрачено', pickRaw(rawValues, RAW_VALUE_KEYS.SPENT), 'money'));
+      fields.push(
+        createMetric('savingSpend', 'Траты через копилки (журнал)', pickRaw(rawValues, 'savingSpend'), 'money'),
+        createMetric('journalExpense', 'Обычные расходы (журнал)', pickRaw(rawValues, 'journalExpense'), 'money')
+      );
       return cloneMetrics(fields);
     }
     fields.push(
@@ -821,6 +834,18 @@ export function isActionAllowedForEntity(actionId, entityType, entityContext = {
     if (actionId === 'open-edit-manual-debt' || actionId === 'delete-manual-debt') {
       return isManual;
     }
+  }
+
+  if (entityType === ENTITY_TYPES.CATEGORY && entityContext.isMiscCategory) {
+    const blocked = new Set([
+      'open-reserve',
+      'open-unreserve',
+      'fill-to-limit',
+      'open-edit',
+      'delete-category',
+      'open-expense'
+    ]);
+    return !blocked.has(actionId);
   }
 
   return true;

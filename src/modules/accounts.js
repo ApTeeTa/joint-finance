@@ -11,13 +11,14 @@ import {
 } from './mutationContract.js';
 import {
   getAccountTransactions,
-  getUserTransactions,
+  getActiveUserTransactions,
   getSavingAccumulated,
   renderAccountSelectOptions,
-  TYPE_LABELS
+  TYPE_LABELS,
+  todayIso
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
-import { openModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import { renderIncomeCategoryOptions } from './incomeCategories.js';
 import {
@@ -68,10 +69,6 @@ function createId(prefix) {
     return crypto.randomUUID();
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function getExchangeRate(state) {
@@ -907,7 +904,7 @@ function renderTopUpModal(state) {
 }
 
 function renderRecentTransactions(state, limit = 5) {
-  const recent = getUserTransactions(state).slice(0, limit);
+  const recent = getActiveUserTransactions(state).slice(0, limit);
   if (!recent.length) {
     return `<p class="text-sm text-slate-500 py-2">Операций пока нет</p>`;
   }
@@ -1098,7 +1095,6 @@ export function renderAccounts(state, container) {
         </div>
 
         ${accountsList}
-
       </div>
       `)}
     </div>
@@ -1244,6 +1240,12 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       return;
     }
 
+    if (target.closest('[data-action="close-modal"]')) {
+      const btn = target.closest('[data-action="close-modal"]');
+      closeModal(btn.dataset.modal);
+      return;
+    }
+
     if (target.closest('[data-action="navigate-tab"]')) {
       const btn = target.closest('[data-action="navigate-tab"]');
       const tab = btn?.dataset.tab;
@@ -1258,19 +1260,30 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const form = findAppForm('topup', container);
       const presetAccountId = btn.dataset.accountId || '';
       syncTopUpAccountSelect(state, container, presetAccountId);
-      if (form) {
-        form.amount.value = '';
-        form.comment.value = '';
-        form.date.value = todayIso();
-      }
-      openModal('topup');
+      openModal('topup', {
+        pinnedFields: {
+          accountId: presetAccountId,
+          amount: '',
+          comment: '',
+          date: todayIso()
+        }
+      });
       return;
     }
 
     if (target.closest('[data-action="open-transfer"]')) {
       const btn = target.closest('[data-action="open-transfer"]');
       populateTransferForm(state, container, btn.dataset.accountId);
-      openModal('transfer');
+      const form = findAppForm('transfer', container);
+      openModal('transfer', {
+        pinnedFields: form ? {
+          sourceAccountId: form.sourceAccountId?.value ?? btn.dataset.accountId ?? '',
+          destAccountId: form.destAccountId?.value ?? '',
+          amount: '',
+          comment: '',
+          date: todayIso()
+        } : undefined
+      });
       return;
     }
 
@@ -1278,12 +1291,14 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
       const btn = target.closest('[data-action="open-edit"]');
       const account = findAccount(state, btn.dataset.accountId);
       const form = findAppForm('edit-account', container);
-      if (account && form) {
-        form.accountId.value = account.id;
-        form.name.value = account.name;
-        form.balance.value = account.balance ?? 0;
-      }
-      openModal('edit-account');
+      if (!account) return;
+      openModal('edit-account', {
+        pinnedFields: {
+          accountId: account.id,
+          name: account.name,
+          balance: String(account.balance ?? 0)
+        }
+      });
       return;
     }
 

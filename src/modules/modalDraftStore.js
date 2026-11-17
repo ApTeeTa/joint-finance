@@ -1,4 +1,4 @@
-import { MODAL_OPEN_OVERLAY_SELECTOR, MODAL_OVERLAY_SELECTOR } from './uiRulesEngine.js';
+import { MODAL_OPEN_OVERLAY_SELECTOR } from './uiRulesEngine.js';
 
 /**
  * Local modal form drafts (device-only). No secrets/passphrases/tokens.
@@ -9,6 +9,33 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEBOUNCE_MS = 300;
 
 const timers = new Map();
+
+/** Поля сущности — не восстанавливать из черновика (иначе подмена categoryId и т.д.). */
+export const MODAL_DRAFT_ENTITY_FIELD_NAMES = new Set([
+  'categoryId',
+  'obligationId',
+  'savingId',
+  'transactionId',
+  'debtId'
+]);
+
+export function applyFormFields(form, fields) {
+  if (!form || !fields || typeof fields !== 'object') return;
+  Object.entries(fields).forEach(([name, value]) => {
+    const elements = form.elements?.namedItem?.(name);
+    if (!elements) return;
+    const list = elements.length != null ? [...elements] : [elements];
+    list.forEach((el) => {
+      if (el.type === 'checkbox') {
+        el.checked = Boolean(value);
+      } else if (el.type === 'radio') {
+        el.checked = el.value === String(value);
+      } else {
+        el.value = value ?? '';
+      }
+    });
+  });
+}
 
 function storageKey(modalName) {
   return `${STORAGE_PREFIX}${modalName}`;
@@ -97,11 +124,15 @@ export function scheduleDraftSave(modalName, form) {
   }, DEBOUNCE_MS));
 }
 
-export function restoreDraftIntoForm(form, modalName) {
+export function restoreDraftIntoForm(form, modalName, options = {}) {
   if (!form) return;
   const fields = readDraft(modalName);
   if (!fields) return;
+  const skipEntityFields = options.skipEntityFields !== false;
   Object.entries(fields).forEach(([name, value]) => {
+    if (skipEntityFields && MODAL_DRAFT_ENTITY_FIELD_NAMES.has(name)) {
+      return;
+    }
     const elements = form.elements?.namedItem?.(name);
     if (!elements) return;
     const list = elements.length != null ? [...elements] : [elements];
@@ -162,7 +193,7 @@ export function initModalDraftSystem() {
   document.addEventListener('input', (event) => {
     const form = event.target.closest?.('form[data-form]');
     if (!form) return;
-    const modal = form.closest(MODAL_OVERLAY_SELECTOR);
+    const modal = form.closest('[data-modal]');
     const modalName = modal?.dataset?.modal;
     if (!modalName || modal.classList.contains('hidden')) return;
     scheduleDraftSave(modalName, form);
@@ -171,7 +202,7 @@ export function initModalDraftSystem() {
   document.addEventListener('change', (event) => {
     const form = event.target.closest?.('form[data-form]');
     if (!form) return;
-    const modal = form.closest(MODAL_OVERLAY_SELECTOR);
+    const modal = form.closest('[data-modal]');
     const modalName = modal?.dataset?.modal;
     if (!modalName || modal.classList.contains('hidden')) return;
     scheduleDraftSave(modalName, form);

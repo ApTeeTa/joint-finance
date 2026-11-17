@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: audit regression</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Audit regression</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      MODAL_DRAFT_ENTITY_FIELD_NAMES,
+      restoreDraftIntoForm,
+      applyFormFields,
+      clearDraft
+    } from '../src/modules/modalDraftStore.js';
+    import {
+      getCategorySpentInMonth,
+      getCategorySpendAvailability,
+      getCurrentYearMonth,
+      syncCategorySpentCacheForMonth,
+      syncCategorySpentForTransactionMonths
+    } from '../src/modules/categoryMonth.js';
+    import {
+      recordExpense,
+      recordUncategorizedExpense,
+      reassignExpenseCategory,
+      cancelTransaction,
+      updateTransactionMeta,
+      refreshCategorySpentCachesForCurrentMonth,
+      TRANSACTION_STATUS,
+      todayIso
+    } from '../src/modules/transactions.js';
+    import {
+      createExpense,
+      createUncategorizedExpense,
+      undoTransaction
+    } from '../src/modules/financeGate.js';
+    import { withGateContext } from '../src/modules/financeGateHelpers.js';
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+
+    const out = document.getElementById('out');
+    function log(line, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = line;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+        return true;
+      } catch (e) {
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+        return false;
+      }
+    }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 100,
+        accounts: [
+          { id: 'usd', name: 'USD', currency: 'USD', balance: 1000, owner: 'husband' },
+          { id: 'rub', name: 'RUB', currency: 'RUB', balance: 500000, owner: 'husband' }
+        ],
+        categories: [
+          { id: 'misc', name: 'Прочее', isSystem: true, limit: 0, reserved: 0, spent: 0 },
+          { id: 'food', name: 'Еда', limit: 100000, reserved: 50000, spent: 0 }
+        ],
+        transactions: [],
+        obligations: [],
+        savings: [],
+        debts: []
+      };
+    }
+
+    let pass = 0;
+    let fail = 0;
+
+    async function test(name, fn) {
+      if (await run(name, fn)) pass += 1; else fail += 1;
+    }
+
+    await test('draft: categoryId не перезаписывается черновиком', async () => {
+      clearDraft('reserve');
+      localStorage.setItem('jf-modal-draft-reserve', JSON.stringify({
+        savedAt: Date.now(),
+        fields: { categoryId: 'food', amount: '2500', comment: 'черновик' }
+      }));
+      const form = document.createElement('form');
+      form.setAttribute('data-form', 'reserve');
+      form.innerHTML = `
+        <input type="hidden" name="categoryId" value="">
+        <input name="amount" value="">
+        <input name="comment" value="">
+      `;
+      document.body.appendChild(form);
+      form.categoryId.value = 'cat-B';
+      restoreDraftIntoForm(form, 'reserve');
+      applyFormFields(form, { categoryId: 'cat-B' });
+      assert(form.categoryId.value === 'cat-B', 'pinned category');
+      assert(form.amount.value === '2500', 'draft amount kept');
+      assert(form.comment.value === 'черновик', 'draft comment kept');
+      form.remove();
+      clearDraft('reserve');
+    });
+
+    await test('месячный rollover: 100/80/20 → новый месяц spent=0, reserve=20', async () => {
+      const state = baseState();
+      state.categories[1].reserved = 100000;
+      state.categories[1].spent = 80000;
+      state.transactions.push({
+        id: 'tx1',
+        type: 'expense',
+        status: TRANSACTION_STATUS.ACTIVE,
+        categoryId: 'food',
+        accountId: 'usd',
+        amount: 80000,
+        date: '2025-10-15',
+        createdAt: '2025-10-15T10:00:00.000Z',
+        author: 'husband'
+      });
+      const ym = '2025-11';
+      const spentOld = getCategorySpentInMonth(state, 'food', '2025-10');
+      const spentNew = getCategorySpentInMonth(state, 'food', ym);
+      assert(spentOld === 80000, 'old month');
+      assert(spentNew === 0, 'new month');
+      assert(state.categories[1].reserved === 100000, 'reserve unchanged until op');
+      state.categories[1].reserved = 20000;
+      const avail = getCategorySpendAvailability(state.categories[1], 20000, spentNew);
+      assert(avail === 20000, 'avail from reserve');
+    });
+
+    await test('fillToLimit delta = limit - reserved (80k)', async () => {
+      const state = baseState();
+      const cat = state.categories[1];
+      cat.limit = 100000;
+      cat.reserved = 20000;
+      const needed = cat.limit - cat.reserved;
+      assert(needed === 80000, 'needed');
+    });
+
+    await test('расход без категории: списание со счёта, userCategoryPending', async () => {
+      const state = baseState();
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = recordUncategorizedExpense(state, 5000, 'usd', 'test', todayIso(), 'husband');
+        assert(r.ok, r.error);
+        assert(r.transaction.userCategoryPending === true, 'flag');
+        assert(state.accounts[0].balance === 950, 'usd debit');
+        assert(state.categories[1].reserved === 50000, 'food reserve untouched');
+      });
+    });
+
+    await test('переназначение категории без повторного списания', async () => {
+      const state = baseState();
+      let txId;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = recordUncategorizedExpense(state, 10000, 'usd', 'x', todayIso(), 'husband');
+        txId = r.transaction.id;
+      });
+      const balBefore = state.accounts[0].balance;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = reassignExpenseCategory(state, txId, 'food', 'husband');
+        assert(r.ok, r.error);
+        assert(!r.transaction.userCategoryPending, 'flag cleared');
+        assert(state.accounts[0].balance === balBefore, 'no double debit');
+        assert(state.categories[1].reserved === 40000, 'reserve applied');
+      });
+    });
+
+    await test('отмена расхода прошлого месяца не портит кэш текущего', async () => {
+      const state = baseState();
+      const cat = state.categories[1];
+      cat.spent = 5000;
+      const tx = {
+        id: 'tx-old',
+        type: 'expense',
+        status: TRANSACTION_STATUS.ACTIVE,
+        categoryId: 'food',
+        accountId: 'rub',
+        amount: 80000,
+        date: '2025-10-10',
+        author: 'husband'
+      };
+      state.transactions.push(tx);
+      withGateContext(FINANCE_ENTRY_POINTS.UNDO, () => {
+        cancelTransaction(state, tx.id);
+      });
+      syncCategorySpentForTransactionMonths(state, tx, '2025-10-10');
+      assert(cat.spent === 5000, `cache stays current month, got ${cat.spent}`);
+      assert(getCategorySpentInMonth(state, 'food', '2025-10') === 0, 'old month aggregate');
+    });
+
+    await test('смена даты расхода между месяцами', async () => {
+      const state = baseState();
+      const tx = {
+        id: 'tx-move',
+        type: 'expense',
+        status: TRANSACTION_STATUS.ACTIVE,
+        categoryId: 'food',
+        accountId: 'rub',
+        amount: 10000,
+        date: '2025-10-05',
+        author: 'husband'
+      };
+      state.transactions.push(tx);
+      updateTransactionMeta(state, tx.id, { date: '2025-11-05' });
+      assert(getCategorySpentInMonth(state, 'food', '2025-10') === 0, 'left old month');
+      assert(getCategorySpentInMonth(state, 'food', '2025-11') === 10000, 'in new month');
+    });
+
+    await test('refreshCategorySpentCaches идемпотентен', async () => {
+      const state = baseState();
+      state.categories[1].reserved = 100000;
+      state.transactions.push({
+        id: 'tx2',
+        type: 'expense',
+        status: TRANSACTION_STATUS.ACTIVE,
+        categoryId: 'food',
+        accountId: 'rub',
+        amount: 3000,
+        date: todayIso(),
+        author: 'husband'
+      });
+      const ref = todayIso();
+      refreshCategorySpentCachesForCurrentMonth(state, ref);
+      const once = state.categories[1].spent;
+      refreshCategorySpentCachesForCurrentMonth(state, ref);
+      assert(state.categories[1].spent === once, 'same after second refresh');
+      assert(state.categories[1].reserved === 100000, 'reserve unchanged');
+    });
+
+    await test('переназначение отклоняется без резерва', async () => {
+      const state = baseState();
+      state.categories[1].reserved = 1000;
+      let txId;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = recordUncategorizedExpense(state, 10000, 'rub', '', todayIso(), 'husband');
+        txId = r.transaction.id;
+      });
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = reassignExpenseCategory(state, txId, 'food', 'husband');
+        assert(!r.ok, 'must fail');
+      });
+    });
+
+    await test('undo после переназначения', async () => {
+      const state = baseState();
+      let txId;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = recordUncategorizedExpense(state, 5000, 'rub', '', todayIso(), 'husband');
+        txId = r.transaction.id;
+      });
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        reassignExpenseCategory(state, txId, 'food', 'husband');
+      });
+      const reservedAfter = state.categories[1].reserved;
+      withGateContext(FINANCE_ENTRY_POINTS.UNDO, () => {
+        undoTransaction(state, txId);
+      });
+      assert(state.categories[1].reserved === reservedAfter + 5000, 'reserve restored');
+    });
+
+    await test('FX: расход 80k RUB @100 → 800 USD, undo возвращает 800', async () => {
+      const state = baseState();
+      let txId;
+      state.categories[1].reserved = 100000;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = recordExpense(state, 'food', 80000, 'usd', '', todayIso(), 'husband');
+        assert(r.ok, r.error);
+        txId = r.transaction.id;
+        assert(state.accounts[0].balance === 200, 'balance after');
+      });
+      state.exchangeRate = 50;
+      withGateContext(FINANCE_ENTRY_POINTS.UNDO, () => {
+        const u = undoTransaction(state, txId);
+        assert(u.ok, u.error);
+        assert(state.accounts[0].balance === 1000, 'undo restores 800 usd');
+      });
+    });
+
+    log(`SUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');
+  </script>
+</body>
+</html>

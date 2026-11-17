@@ -14,7 +14,7 @@ import {
   getSavingAccumulated,
   todayIso
 } from './transactions.js';
-import { openModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
@@ -753,34 +753,44 @@ export function initSavingsHandlers(state, container, onUpdate) {
       return;
     }
 
+    if (target.closest('[data-action="close-modal"]')) {
+      const btn = target.closest('[data-action="close-modal"]');
+      closeModal(btn.dataset.modal);
+      return;
+    }
+
     if (target.closest('[data-action="open-edit-saving"]')) {
       const btn = target.closest('[data-action="open-edit-saving"]');
       fillEditSavingForm(state, container, btn.dataset.savingId);
-      openModal('edit-saving');
+      openModal('edit-saving', {
+        pinnedFields: { savingId: btn.dataset.savingId }
+      });
       return;
     }
 
     if (target.closest('[data-action="open-deposit-saving"]')) {
       const btn = target.closest('[data-action="open-deposit-saving"]');
       const form = findAppForm('deposit-saving', container);
-      if (form) {
-        form.savingId.value = btn.dataset.savingId;
-        form.amount.value = '';
-        form.comment.value = '';
-      }
-      openModal('deposit-saving');
+      openModal('deposit-saving', {
+        pinnedFields: {
+          savingId: btn.dataset.savingId,
+          amount: '',
+          comment: ''
+        }
+      });
       return;
     }
 
     if (target.closest('[data-action="open-withdraw-saving"]')) {
       const btn = target.closest('[data-action="open-withdraw-saving"]');
       const form = findAppForm('withdraw-saving', container);
-      if (form) {
-        form.savingId.value = btn.dataset.savingId;
-        form.amount.value = '';
-        form.comment.value = '';
-      }
-      openModal('withdraw-saving');
+      openModal('withdraw-saving', {
+        pinnedFields: {
+          savingId: btn.dataset.savingId,
+          amount: '',
+          comment: ''
+        }
+      });
       return;
     }
 
@@ -795,15 +805,13 @@ export function initSavingsHandlers(state, container, onUpdate) {
           ? `В резерве: ${formatMoney(accumulated)}${saving.name ? ` · ${saving.name}` : ''}`
           : 'В резерве: —';
       }
-      if (form) {
-        form.savingId.value = btn.dataset.savingId;
-        form.amount.value = accumulated > 0 ? accumulated : '';
-        form.comment.value = '';
-        if (form.accountId.options.length) {
-          form.accountId.selectedIndex = 0;
+      openModal('spend-saving', {
+        pinnedFields: {
+          savingId: btn.dataset.savingId,
+          amount: accumulated > 0 ? String(accumulated) : '',
+          comment: ''
         }
-      }
-      openModal('spend-saving');
+      });
       return;
     }
 

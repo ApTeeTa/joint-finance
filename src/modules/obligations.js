@@ -21,7 +21,7 @@ import {
   diagnosePaidUntilShadow,
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
-import { openModal, isWithinAppUi, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
+import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
@@ -555,6 +555,12 @@ export function initObligationsHandlers(state, container, onStateChange) {
 
   document.addEventListener('click', (event) => {
     if (!isWithinAppUi(event.target, container)) return;
+    const closeBtn = event.target.closest('[data-action="close-modal"]');
+    if (closeBtn) {
+      closeModal(closeBtn.dataset.modal);
+      return;
+    }
+
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (!action) return;
 
@@ -577,7 +583,9 @@ export function initObligationsHandlers(state, container, onStateChange) {
       const modal = findAppModal('edit-obligation', container);
       if (!modal) return;
       modal.outerHTML = renderFormModal('edit-obligation', 'Редактирование', 'Сохранить', obligation);
-      openModal('edit-obligation');
+      openModal('edit-obligation', {
+        pinnedFields: { obligationId: obligation.id }
+      });
       return;
     }
 
@@ -601,35 +609,39 @@ export function initObligationsHandlers(state, container, onStateChange) {
       const titleEl = findInAppUi('[data-pay-obligation-title]', container);
       if (titleEl) titleEl.textContent = obligation.name;
 
-      openModal('pay-obligation');
+      openModal('pay-obligation', {
+        pinnedFields: {
+          obligationId: obligation.id,
+          amount: obligation.targetAmount != null && obligation.targetAmount > 0
+            ? String(obligation.targetAmount)
+            : '',
+          accountId: '',
+          paidUntil: computePaidUntilFromPayments(obligation) || todayIso(),
+          comment: ''
+        }
+      });
       refreshSelects(state, container);
       return;
     }
 
     if (action === 'open-reserve-obligation') {
       const obligationId = event.target.closest('[data-action]').dataset.obligationId;
-      const form = findAppForm('reserve-obligation', container);
-      if (form) {
-        form.obligationId.value = obligationId;
-        form.amount.value = '';
-      }
-      openModal('reserve-obligation');
+      openModal('reserve-obligation', {
+        pinnedFields: { obligationId, amount: '' }
+      });
       return;
     }
 
     if (action === 'open-unreserve-obligation') {
       const obligationId = event.target.closest('[data-action]').dataset.obligationId;
       const obligation = findObligation(state, obligationId);
-      const form = findAppForm('unreserve-obligation', container);
-      if (form && obligation) {
-        form.obligationId.value = obligationId;
-        form.amount.value = '';
-        const hint = findInAppUi('[data-unreserve-obligation-hint]', container);
-        if (hint) {
-          hint.textContent = `Доступно к снятию: ${formatMoney(obligation.reserveAmount ?? 0)}`;
-        }
+      const hint = findInAppUi('[data-unreserve-obligation-hint]', container);
+      if (hint && obligation) {
+        hint.textContent = `Доступно к снятию: ${formatMoney(obligation.reserveAmount ?? 0)}`;
       }
-      openModal('unreserve-obligation');
+      openModal('unreserve-obligation', {
+        pinnedFields: { obligationId, amount: '' }
+      });
       return;
     }
 

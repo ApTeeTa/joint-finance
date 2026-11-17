@@ -28,7 +28,10 @@ $tests = @(
   'tests/saving-spend-partial-test.html',
   'tests/obligation-payment-reserve-test.html',
   'tests/obligation-stability-fix-test.html',
-  'tests/obligation-edit-date-ui-test.html'
+  'tests/obligation-edit-date-ui-test.html',
+  'tests/audit-regression-test.html',
+  'tests/app-calendar-test.html',
+  'tests/misc-category-display-test.html'
 )
 
 $server = Start-Process powershell -ArgumentList @(

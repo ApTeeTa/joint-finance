@@ -351,14 +351,14 @@
       }
     }
 
-    div[data-modal].fixed.inset-0 {
+    [data-modal] {
       display: none !important;
       pointer-events: none !important;
       visibility: hidden !important;
     }
 
     /* MODAL_OVERLAY_RULE: full-viewport dim — header included */
-    div[data-modal].fixed.inset-0:not(.hidden) {
+    [data-modal]:not(.hidden) {
       position: fixed !important;
       inset: 0 !important;
       z-index: 100 !important;
@@ -376,14 +376,14 @@
       visibility: visible !important;
     }
 
-    div[data-modal].fixed.inset-0.hidden {
+    [data-modal].hidden {
       display: none !important;
       pointer-events: none !important;
       visibility: hidden !important;
     }
 
-    div[data-modal].fixed.inset-0:not(.hidden)::before,
-    div[data-modal].fixed.inset-0:not(.hidden)::after {
+    [data-modal]:not(.hidden)::before,
+    [data-modal]:not(.hidden)::after {
       content: '';
       flex: 1 1 0;
       width: 100%;
@@ -391,7 +391,7 @@
       pointer-events: none;
     }
 
-    div[data-modal].fixed.inset-0:not(.hidden) > * {
+    [data-modal]:not(.hidden) > * {
       flex: 0 0 auto;
       width: 100%;
       max-width: 28rem;
@@ -594,6 +594,11 @@
       display: block;
     }
 
+    [data-display-mode="medium"] .display-item:has(.display-item-detail.is-open),
+    [data-display-mode="large"] .display-item:has(.display-item-detail.is-open) {
+      grid-column: 1 / -1;
+    }
+
     .display-item-expanded-view {
       min-width: 0;
     }
@@ -609,16 +614,6 @@
       width: 100%;
       justify-content: center;
       text-align: center;
-    }
-
-    .display-item-expanded-actions [data-action]:not([data-action^="delete"]):not([data-action*="write-off"]) {
-      background-color: #1d4ed8 !important;
-      color: #fff !important;
-      border: 1px solid #1e40af !important;
-    }
-
-    .display-item-expanded-actions [data-action]:not([data-action^="delete"]):not([data-action*="write-off"]):hover {
-      background-color: #1e40af !important;
     }
 
     .display-item-expanded-info {
@@ -1005,7 +1000,7 @@
             type="button"
             id="family-lock-btn"
             class="px-3 py-2 min-h-[40px] rounded-xl text-sm font-medium border border-surface-border bg-white text-slate-600 hover:bg-surface-muted transition-colors"
-          >Заблокировать</button>
+          >Выйти / Заблокировать</button>
         <div class="flex gap-2 shrink-0" id="profile-selector">
           <button
             type="button"
@@ -1077,20 +1072,14 @@
   <main id="tab-content" class="max-w-5xl mx-auto px-5 py-6 min-w-0 overflow-x-hidden">
   </main>
 
-  <div id="tab-more-backdrop" class="hidden fixed inset-0 z-[34] bg-slate-900/25" aria-hidden="true"></div>
-  <div id="tab-more-sheet" aria-label="Дополнительные разделы">
-    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 px-1">Ещё разделы</p>
-    <button type="button" data-tab="obligations" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium">Обязательства</button>
-    <button type="button" data-tab="debts" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium">Долги</button>
-    <button type="button" data-tab="stats" class="tab-btn tab-btn--overflow whitespace-nowrap px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium">Статистика</button>
-  </div>
-
   <nav id="tab-nav-mobile-dock" aria-label="Навигация">
     <button type="button" data-tab="accounts" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">🏠</span><span class="tab-label">Счета</span></button>
     <button type="button" data-tab="categories" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">📂</span><span class="tab-label">Категории</span></button>
     <button type="button" data-tab="history" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">📋</span><span class="tab-label">История</span></button>
+    <button type="button" data-tab="obligations" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">📌</span><span class="tab-label">Обязательства</span></button>
     <button type="button" data-tab="savings" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">🐷</span><span class="tab-label">Копилки</span></button>
-    <button type="button" id="tab-more-btn" data-action="toggle-tab-more" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">⋯</span><span class="tab-label">Ещё</span></button>
+    <button type="button" data-tab="debts" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">💳</span><span class="tab-label">Долги</span></button>
+    <button type="button" data-tab="stats" class="tab-btn tab-btn--dock whitespace-nowrap rounded-lg text-sm font-medium"><span class="tab-icon" aria-hidden="true">📊</span><span class="tab-label">Статистика</span></button>
   </nav>
   </div>
 

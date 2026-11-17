@@ -449,12 +449,13 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      const form = findAppForm('edit-manual-debt', container);
-      if (!form) return;
-      form.debtId.value = debt.id;
-      form.description.value = debt.title;
-      form.date.value = debt.eventDate ?? todayIso();
-      openModal('edit-manual-debt');
+      openModal('edit-manual-debt', {
+        pinnedFields: {
+          debtId: debt.id,
+          description: debt.title ?? '',
+          date: debt.eventDate ?? todayIso()
+        }
+      });
       return;
     }
 
@@ -498,7 +499,14 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         remainingEl.textContent = `Максимум: ${formatMoney(debt.remainingAmount)}`;
       }
 
-      openModal('repay-debt');
+      openModal('repay-debt', {
+        pinnedFields: {
+          debtId: debt.id,
+          amount: '',
+          comment: '',
+          date: todayIso()
+        }
+      });
       refreshAccountSelects(state, container);
       return;
     }
@@ -511,17 +519,18 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
         return;
       }
 
-      const form = findAppForm('write-off-debt', container);
-      if (!form) return;
-      form.querySelector('[name="debtId"]').value = debt.id;
-      form.querySelector('[name="comment"]').value = '';
-      form.querySelector('[name="date"]').value = todayIso();
       const titleEl = findInAppUi('[data-write-off-debt-title]', container);
       if (titleEl) {
         titleEl.textContent = `${debt.title} · остаток ${formatMoney(debt.remainingAmount)}`;
       }
 
-      openModal('write-off-debt');
+      openModal('write-off-debt', {
+        pinnedFields: {
+          debtId: debt.id,
+          comment: '',
+          date: todayIso()
+        }
+      });
     }
   });
 

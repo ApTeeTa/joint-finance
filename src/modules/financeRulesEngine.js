@@ -3,6 +3,11 @@ import {
   calculateTotalBalance
 } from './financeEngine.js';
 import { computePaidUntilFromPayments } from './obligationPaidUntil.js';
+import {
+  getCategorySpentInMonth,
+  getCurrentYearMonth
+} from './categoryMonth.js';
+import { todayIsoApp } from './appCalendar.js';
 
 const DECISION_RANK = {
   ALLOW: 0,
@@ -11,7 +16,7 @@ const DECISION_RANK = {
 };
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return todayIsoApp();
 }
 
 function findCategory(state, categoryId) {
@@ -34,8 +39,8 @@ function hasOverdueObligations(state) {
 }
 
 function checkOverspend(context) {
-  const { operation, amount, state, categoryId } = context;
-  if (operation !== 'createExpense' || !categoryId) {
+  const { operation, amount, state, categoryId, userCategoryPending } = context;
+  if (operation !== 'createExpense' || !categoryId || userCategoryPending) {
     return null;
   }
 
@@ -49,7 +54,7 @@ function checkOverspend(context) {
     return null;
   }
 
-  const spent = category.spent ?? 0;
+  const spent = getCategorySpentInMonth(state, categoryId, getCurrentYearMonth());
   const rubAmount = Number(amount);
   if (!Number.isFinite(rubAmount) || rubAmount <= 0) {
     return null;
@@ -120,8 +125,8 @@ function checkSavingsProtection(context) {
 }
 
 function checkObligationSafety(context) {
-  const { operation, state } = context;
-  if (operation !== 'createExpense') {
+  const { operation, state, userCategoryPending } = context;
+  if (operation !== 'createExpense' || userCategoryPending) {
     return null;
   }
 
