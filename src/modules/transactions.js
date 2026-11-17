@@ -1615,7 +1615,11 @@ export function recordSavingSpend(state, savingId, accountId, amount, comment, d
     createdAt: saving.createdAt
   };
 
-  saving.accumulated = 0;
+  if (savingType === 'single_use') {
+    saving.accumulated = 0;
+  } else {
+    saving.accumulated = Math.max(0, reserveBefore - purchaseAmount);
+  }
   account.balance = accountBalance - accountDebitAmount;
   category.spent = (category.spent ?? 0) + purchaseAmount;
 

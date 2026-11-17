@@ -1,4 +1,5 @@
 import { closeModal } from './modalLayer.js';
+import { MODAL_OVERLAY_SELECTOR } from './uiRulesEngine.js';
 import { clearDraft } from './modalDraftStore.js';
 
 const submittingModals = new Set();
@@ -50,8 +51,8 @@ function findModalPanel(modal) {
 }
 
 function setModalSubmittingUi(modalName, submitting) {
-  const modal = document.querySelector(`[data-modal="${modalName}"]:not(.hidden)`)
-    ?? document.querySelector(`[data-modal="${modalName}"]`);
+  const modal = document.querySelector(`${MODAL_OVERLAY_SELECTOR}[data-modal="${modalName}"]:not(.hidden)`)
+    ?? document.querySelector(`${MODAL_OVERLAY_SELECTOR}[data-modal="${modalName}"]`);
   if (!modal) return;
   modal.dataset.submitting = 'false';
   const panel = findModalPanel(modal);

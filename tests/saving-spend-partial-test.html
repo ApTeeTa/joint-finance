@@ -68,7 +68,7 @@
       }
     }
 
-    await run('частичная трата 220k при 300k резерве — free +80k', () => {
+    await run('recurring: частичная трата 220k при 300k — остаток 80k в копилке', () => {
       const state = baseState();
       const freeBefore = calculateFreeBalance(state);
       const totalBefore = calculateTotalBalance(state);
@@ -76,14 +76,63 @@
       const result = spendSaving(state, 's1', 'acc', 220000, 'ремонт', todayIso(), 'husband');
       assert(result.ok, result.error);
       assert(state.accounts[0].balance === 280000, 'account debit 220k');
-      assert(getSavingAccumulated(state.savings[0]) === 0, 'reserve cleared');
-      const freeAfter = calculateFreeBalance(state);
-      assert(freeAfter === freeBefore + 80000, `free +80k, got ${freeAfter - freeBefore}`);
+      assert(getSavingAccumulated(state.savings[0]) === 80000, 'reserve 80k left');
+      assert(calculateFreeBalance(state) === freeBefore, 'free unchanged');
       assert(calculateTotalBalance(state) === totalBefore - 220000, 'total -220k');
-      assert(calculateReservedBalance(state) === reservedBefore - 300000, 'reserved -300k');
+      assert(calculateReservedBalance(state) === reservedBefore - 220000, 'reserved -220k');
       const misc = state.categories.find((c) => isMiscCategory(c));
       assert(misc.spent === 220000, 'misc spent');
       assert(result.transaction.comment.includes('Машина'), 'name in comment');
+      assert(checkFinancialInvariants(state).ok, 'invariants');
+    });
+
+    await run('recurring: отпуск 215k, покупка 200k — остаток 15k, free без +15k', () => {
+      const state = baseState({
+        savings: [{
+          id: 'vac-r',
+          name: 'Отпуск',
+          accumulated: 215000,
+          targetAmount: 400000,
+          savingType: 'recurring',
+          createdAt: new Date().toISOString()
+        }],
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 250000, owner: 'husband' }]
+      });
+      const freeBefore = calculateFreeBalance(state);
+      const reservedBefore = calculateReservedBalance(state);
+      const result = spendSaving(state, 'vac-r', 'acc', 200000, '', todayIso(), 'husband');
+      assert(result.ok, result.error);
+      assert(state.accounts[0].balance === 50000, 'account 50k');
+      assert(getSavingAccumulated(state.savings[0]) === 15000, 'reserve 15k in piggy');
+      assert(calculateFreeBalance(state) === freeBefore, 'free not +15k');
+      assert(calculateReservedBalance(state) === reservedBefore - 200000, 'reserved -200k');
+      const undo = undoTransaction(state, result.transaction.id);
+      assert(undo.ok, undo.error);
+      assert(getSavingAccumulated(state.savings[0]) === 215000, 'undo reserve');
+      assert(state.accounts[0].balance === 250000, 'undo account');
+      assert(calculateFreeBalance(state) === freeBefore, 'undo free');
+      assert(checkFinancialInvariants(state).ok, 'invariants after undo');
+    });
+
+    await run('single_use: отпуск 215k, покупка 200k — free +15k', () => {
+      const state = baseState({
+        savings: [{
+          id: 'vac',
+          name: 'Отпуск',
+          accumulated: 215000,
+          targetAmount: 215000,
+          savingType: 'single_use',
+          createdAt: new Date().toISOString()
+        }],
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 250000, owner: 'husband' }]
+      });
+      const freeBefore = calculateFreeBalance(state);
+      const result = spendSaving(state, 'vac', 'acc', 200000, '', todayIso(), 'husband');
+      assert(result.ok, result.error);
+      assert(state.accounts[0].balance === 50000, 'account 50k');
+      assert(state.savings.length === 0, 'piggy removed');
+      assert(calculateFreeBalance(state) === freeBefore + 15000, 'free +15k surplus');
+      assert(result.transaction.comment.includes('Отпуск'), 'name in comment');
       assert(checkFinancialInvariants(state).ok, 'invariants');
     });
 
@@ -135,7 +184,7 @@
       const spend = spendSaving(state, 's1', 'acc', 50000, '', todayIso(), 'husband');
       assert(spend.ok, spend.error);
       assert(state.savings.length === 1, 'still listed');
-      assert(getSavingAccumulated(state.savings[0]) === 0, 'zeroed');
+      assert(getSavingAccumulated(state.savings[0]) === 250000, 'partial reserve left');
     });
 
     log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`);

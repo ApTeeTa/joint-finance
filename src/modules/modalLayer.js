@@ -1,5 +1,5 @@
 import { isExperiment } from '../config/environmentConfig.js';
-import { logUiRuleFix } from './uiRulesEngine.js';
+import { logUiRuleFix, MODAL_OPEN_OVERLAY_SELECTOR, MODAL_OVERLAY_SELECTOR } from './uiRulesEngine.js';
 import {
   clearDraft,
   confirmDiscardDraft,
@@ -20,8 +20,6 @@ export function isWithinAppUi(target, container) {
 }
 
 const MODAL_SELECTOR = '[data-modal]';
-/** Matches MODAL_OVERLAY_RULE.overlayTemplateClasses — fixed inset-0 backdrop shell. */
-const MODAL_OVERLAY_SELECTOR = 'div[data-modal].fixed.inset-0';
 
 function queryModals(scope = document) {
   return scope.querySelectorAll(MODAL_SELECTOR);
@@ -64,7 +62,7 @@ export function relocateModals(fromContainer, options = {}) {
   incoming.forEach((modal) => {
     const name = modal.dataset.modal;
     if (name) {
-      root.querySelectorAll(`${MODAL_SELECTOR}[data-modal="${name}"]`).forEach((existing) => {
+      root.querySelectorAll(`${MODAL_OVERLAY_SELECTOR}[data-modal="${name}"]`).forEach((existing) => {
         if (existing !== modal) {
           existing.remove();
         }
@@ -115,7 +113,7 @@ export function findAppModal(modalName, container) {
 }
 
 function syncBodyModalState() {
-  const hasOpen = Boolean(document.querySelector(`${MODAL_SELECTOR}:not(.hidden)`));
+  const hasOpen = Boolean(document.querySelector(MODAL_OPEN_OVERLAY_SELECTOR));
   document.body.classList.toggle('modal-open', hasOpen);
   const root = getModalRoot();
   if (root) {
@@ -130,7 +128,7 @@ export function isAnyModalOpen() {
 /** Visible modals in DOM (modal-root or elsewhere). */
 export function getOpenModalNames() {
   const names = [];
-  document.querySelectorAll(`${MODAL_SELECTOR}:not(.hidden)`).forEach((modal) => {
+  document.querySelectorAll(MODAL_OPEN_OVERLAY_SELECTOR).forEach((modal) => {
     const name = modal.dataset?.modal;
     if (name) names.push(name);
   });
@@ -161,26 +159,66 @@ export function clearOpenModalsSession() {
 }
 
 /**
+ * Session list may contain spurious names from legacy builds (3775a2e registry bug).
+ * Only names that resolve to a modal overlay shell in the current DOM are restorable.
+ */
+export function filterRestorableSessionModalNames(rawNames) {
+  if (!Array.isArray(rawNames)) {
+    return [];
+  }
+  const unique = [];
+  const seen = new Set();
+  for (const name of rawNames) {
+    if (typeof name !== 'string' || !name.length || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    if (!findModal(name)) {
+      continue;
+    }
+    unique.push(name);
+  }
+  if (unique.length > 1) {
+    return [unique[unique.length - 1]];
+  }
+  return unique;
+}
+
+/**
  * After full tab re-render (e.g. cold resume), reopen modals the user had open.
  * Draft fields are restored via openModal → restoreDraftIntoForm.
  */
 export function restoreOpenModalsFromSession() {
-  let names = [];
+  let rawNames = [];
   try {
     const raw = sessionStorage.getItem(SESSION_OPEN_MODALS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        names = parsed.filter((n) => typeof n === 'string' && n.length > 0);
+        rawNames = parsed;
       }
     }
   } catch {
     return;
   }
-  if (!names.length) return;
-  names.forEach((modalName) => {
-    openModal(modalName);
-  });
+
+  const names = filterRestorableSessionModalNames(rawNames);
+
+  try {
+    if (names.length > 0) {
+      sessionStorage.setItem(SESSION_OPEN_MODALS_KEY, JSON.stringify(names));
+    } else if (rawNames.length > 0) {
+      sessionStorage.removeItem(SESSION_OPEN_MODALS_KEY);
+    }
+  } catch {
+    /* private mode */
+  }
+
+  if (!names.length) {
+    return;
+  }
+
+  openModal(names[0]);
 }
 
 export function openModal(modalName) {
@@ -240,7 +278,7 @@ export function requestCloseModal(modalName) {
 }
 
 export function closeAllModals() {
-  queryModals(document).forEach((modal) => {
+  document.querySelectorAll(MODAL_OVERLAY_SELECTOR).forEach((modal) => {
     setModalHidden(modal, true);
   });
   syncBodyModalState();
@@ -272,8 +310,8 @@ export function initModalDismissHandlers() {
       return;
     }
 
-    const modal = event.target.closest('[data-modal]');
-    if (!modal || modal.classList.contains('hidden')) {
+    const modal = event.target.closest(MODAL_OVERLAY_SELECTOR);
+    if (!modal?.classList || modal.classList.contains('hidden')) {
       return;
     }
 

@@ -14,7 +14,7 @@ import {
   getSavingAccumulated,
   todayIso
 } from './transactions.js';
-import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import { openModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
@@ -750,12 +750,6 @@ export function initSavingsHandlers(state, container, onUpdate) {
       if (form) form.reset();
       toggleDeadlineDateField(container, 'add', 'none');
       openModal('add-saving');
-      return;
-    }
-
-    if (target.closest('[data-action="close-modal"]')) {
-      const btn = target.closest('[data-action="close-modal"]');
-      closeModal(btn.dataset.modal);
       return;
     }
 

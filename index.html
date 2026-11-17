@@ -351,14 +351,14 @@
       }
     }
 
-    [data-modal] {
+    div[data-modal].fixed.inset-0 {
       display: none !important;
       pointer-events: none !important;
       visibility: hidden !important;
     }
 
     /* MODAL_OVERLAY_RULE: full-viewport dim — header included */
-    [data-modal]:not(.hidden) {
+    div[data-modal].fixed.inset-0:not(.hidden) {
       position: fixed !important;
       inset: 0 !important;
       z-index: 100 !important;
@@ -376,14 +376,14 @@
       visibility: visible !important;
     }
 
-    [data-modal].hidden {
+    div[data-modal].fixed.inset-0.hidden {
       display: none !important;
       pointer-events: none !important;
       visibility: hidden !important;
     }
 
-    [data-modal]:not(.hidden)::before,
-    [data-modal]:not(.hidden)::after {
+    div[data-modal].fixed.inset-0:not(.hidden)::before,
+    div[data-modal].fixed.inset-0:not(.hidden)::after {
       content: '';
       flex: 1 1 0;
       width: 100%;
@@ -391,7 +391,7 @@
       pointer-events: none;
     }
 
-    [data-modal]:not(.hidden) > * {
+    div[data-modal].fixed.inset-0:not(.hidden) > * {
       flex: 0 0 auto;
       width: 100%;
       max-width: 28rem;
@@ -609,6 +609,16 @@
       width: 100%;
       justify-content: center;
       text-align: center;
+    }
+
+    .display-item-expanded-actions [data-action]:not([data-action^="delete"]):not([data-action*="write-off"]) {
+      background-color: #1d4ed8 !important;
+      color: #fff !important;
+      border: 1px solid #1e40af !important;
+    }
+
+    .display-item-expanded-actions [data-action]:not([data-action^="delete"]):not([data-action*="write-off"]):hover {
+      background-color: #1e40af !important;
     }
 
     .display-item-expanded-info {

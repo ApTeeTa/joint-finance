@@ -21,7 +21,7 @@ import {
   diagnosePaidUntilShadow,
   validatePaidUntilConsistency
 } from './obligationPaidUntil.js';
-import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
+import { openModal, isWithinAppUi, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
   DISPLAY_MODULE_KEYS,
@@ -555,12 +555,6 @@ export function initObligationsHandlers(state, container, onStateChange) {
 
   document.addEventListener('click', (event) => {
     if (!isWithinAppUi(event.target, container)) return;
-    const closeBtn = event.target.closest('[data-action="close-modal"]');
-    if (closeBtn) {
-      closeModal(closeBtn.dataset.modal);
-      return;
-    }
-
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (!action) return;
 

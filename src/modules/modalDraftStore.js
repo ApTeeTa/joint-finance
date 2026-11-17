@@ -1,3 +1,5 @@
+import { MODAL_OPEN_OVERLAY_SELECTOR, MODAL_OVERLAY_SELECTOR } from './uiRulesEngine.js';
+
 /**
  * Local modal form drafts (device-only). No secrets/passphrases/tokens.
  */
@@ -125,7 +127,7 @@ let draftSystemBound = false;
 function persistOpenModalsForSessionFromDom() {
   const names = [];
   try {
-    document.querySelectorAll('[data-modal]:not(.hidden)').forEach((modal) => {
+    document.querySelectorAll(MODAL_OPEN_OVERLAY_SELECTOR).forEach((modal) => {
       const name = modal.dataset?.modal;
       if (name) names.push(name);
     });
@@ -141,7 +143,7 @@ function persistOpenModalsForSessionFromDom() {
 
 export function flushVisibleModalDrafts() {
   try {
-    document.querySelectorAll('[data-modal]:not(.hidden)').forEach((modal) => {
+    document.querySelectorAll(MODAL_OPEN_OVERLAY_SELECTOR).forEach((modal) => {
       const modalName = modal.dataset?.modal;
       const form = modal.querySelector('form[data-form]');
       if (modalName && form) {
@@ -160,7 +162,7 @@ export function initModalDraftSystem() {
   document.addEventListener('input', (event) => {
     const form = event.target.closest?.('form[data-form]');
     if (!form) return;
-    const modal = form.closest('[data-modal]');
+    const modal = form.closest(MODAL_OVERLAY_SELECTOR);
     const modalName = modal?.dataset?.modal;
     if (!modalName || modal.classList.contains('hidden')) return;
     scheduleDraftSave(modalName, form);
@@ -169,7 +171,7 @@ export function initModalDraftSystem() {
   document.addEventListener('change', (event) => {
     const form = event.target.closest?.('form[data-form]');
     if (!form) return;
-    const modal = form.closest('[data-modal]');
+    const modal = form.closest(MODAL_OVERLAY_SELECTOR);
     const modalName = modal?.dataset?.modal;
     if (!modalName || modal.classList.contains('hidden')) return;
     scheduleDraftSave(modalName, form);

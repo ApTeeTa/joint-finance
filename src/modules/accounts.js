@@ -17,7 +17,7 @@ import {
   TYPE_LABELS
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
-import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
+import { openModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import { renderIncomeCategoryOptions } from './incomeCategories.js';
 import {
@@ -1099,13 +1099,6 @@ export function renderAccounts(state, container) {
 
         ${accountsList}
 
-        <div class="${UI.listFooter}">
-          <button
-            type="button"
-            data-action="reset-all-data"
-            class="text-sm text-red-500 hover:text-red-700 transition-colors"
-          >Сбросить все данные</button>
-        </div>
       </div>
       `)}
     </div>
@@ -1244,23 +1237,10 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
-    if (target.closest('[data-action="reset-all-data"]')) {
-      if (typeof onReset === 'function') {
-        onReset();
-      }
-      return;
-    }
-
     if (target.closest('[data-action="open-add-account-modal"]')) {
       const form = findAppForm('add-account', container);
       if (form) form.reset();
       openModal('add-account');
-      return;
-    }
-
-    if (target.closest('[data-action="close-modal"]')) {
-      const btn = target.closest('[data-action="close-modal"]');
-      closeModal(btn.dataset.modal);
       return;
     }
 
