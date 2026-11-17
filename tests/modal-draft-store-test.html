@@ -18,7 +18,9 @@
       hasDraft,
       clearDraft,
       scheduleDraftSave,
-      restoreDraftIntoForm
+      restoreDraftIntoForm,
+      applyFormFields,
+      MODAL_DRAFT_ENTITY_FIELD_NAMES
     } from '../src/modules/modalDraftStore.js';
 
     const out = document.getElementById('out');
@@ -86,6 +88,37 @@
       localStorage.setItem(key, JSON.stringify(expired));
       assert(!readDraft(MODAL), 'expired draft removed');
       assert(!localStorage.getItem(key), 'storage key removed');
+    });
+
+    await run('entity id не восстанавливается из черновика', 'draft-entity-skip', async () => {
+      clearDraft('reserve');
+      localStorage.setItem('jf-modal-draft-reserve', JSON.stringify({
+        savedAt: Date.now(),
+        fields: { categoryId: 'draft-cat', amount: '99' }
+      }));
+      const form = document.createElement('form');
+      form.setAttribute('data-form', 'reserve');
+      form.innerHTML = '<input name="categoryId" value=""><input name="amount" value="">';
+      document.body.appendChild(form);
+      form.categoryId.value = 'pinned-cat';
+      restoreDraftIntoForm(form, 'reserve');
+      assert(form.categoryId.value === 'pinned-cat', 'categoryId not overwritten');
+      assert(form.amount.value === '99', 'amount restored');
+      assert(MODAL_DRAFT_ENTITY_FIELD_NAMES.has('categoryId'), 'entity set');
+      form.remove();
+      clearDraft('reserve');
+    });
+
+    await run('applyFormFields закрепляет поля после черновика', 'pinned-fields', async () => {
+      const form = document.createElement('form');
+      form.innerHTML = '<input name="categoryId" value=""><input name="amount" value="">';
+      document.body.appendChild(form);
+      form.categoryId.value = 'draft';
+      form.amount.value = '10';
+      applyFormFields(form, { categoryId: 'A', amount: '' });
+      assert(form.categoryId.value === 'A', 'pin category');
+      assert(form.amount.value === '', 'pin amount');
+      form.remove();
     });
 
     await run('разные модалки не смешиваются', 'draft-isolation', async () => {

@@ -33,7 +33,9 @@ import {
   recordManualDebtDelete,
   recordDebtRepayment,
   recordDebtWriteOff,
-  cancelTransaction
+  cancelTransaction,
+  recordUncategorizedExpense,
+  reassignExpenseCategory
 } from './transactions.js';
 
 export { assertCalledFromAllowedEntryPoint };
@@ -58,6 +60,18 @@ function trackRedistribution(_kind, _result) {
 export function createExpense(state, categoryId, amount, accountId, comment, date, author) {
   return runProtected(FINANCE_ENTRY_POINTS.EXPENSE, () =>
     recordExpense(state, categoryId, amount, accountId, comment, date, author)
+  );
+}
+
+export function createUncategorizedExpense(state, amount, accountId, comment, date, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.EXPENSE, () =>
+    recordUncategorizedExpense(state, amount, accountId, comment, date, author)
+  );
+}
+
+export function reassignExpense(state, transactionId, newCategoryId, author) {
+  return runProtected(FINANCE_ENTRY_POINTS.EXPENSE, () =>
+    reassignExpenseCategory(state, transactionId, newCategoryId, author)
   );
 }
 

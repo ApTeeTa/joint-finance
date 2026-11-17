@@ -324,37 +324,7 @@ body.app-body {
 }
 
 .tab-btn--overflow {
-  /* shown on desktop in row; mobile only in more sheet */
-}
-
-#tab-more-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--jf-nav-height) + env(safe-area-inset-bottom, 0px));
-  z-index: 35;
-  padding: 0.75rem 1rem 1rem;
-  background: var(--jf-white);
-  border-top: 1px solid var(--jf-border);
-  box-shadow: 0 -8px 32px rgba(20, 24, 22, 0.12);
-  border-radius: var(--jf-radius-lg) var(--jf-radius-lg) 0 0;
-  transform: translateY(110%);
-  opacity: 0;
-  pointer-events: none;
-  transition: transform var(--jf-motion) ease, opacity var(--jf-motion) ease;
-}
-
-#tab-more-sheet.is-open {
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-#tab-more-sheet .tab-btn {
-  width: 100%;
-  justify-content: flex-start;
-  min-height: 2.75rem;
-  margin-bottom: 0.35rem;
+  /* legacy class for desktop nav rows with extra tabs */
 }
 
 @media (max-width: 767px) {
@@ -370,8 +340,13 @@ body.app-body {
     z-index: 40;
     display: flex;
     flex-wrap: nowrap;
-    justify-content: space-around;
-    gap: 0;
+    justify-content: flex-start;
+    gap: 0.25rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    scrollbar-width: none;
     padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
     border-radius: 0;
     border: none;
@@ -381,8 +356,8 @@ body.app-body {
   }
 
   #tab-nav-mobile-dock .tab-btn--dock {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 0 auto;
+    min-width: 4.25rem;
     flex-direction: column;
     font-size: 0.625rem;
     padding: 0.35rem 0.15rem;
@@ -405,12 +380,7 @@ body.app-body {
 }
 
 @media (min-width: 768px) {
-  #tab-nav-mobile-dock,
-  #tab-more-backdrop {
-    display: none !important;
-  }
-
-  #tab-more-sheet {
+  #tab-nav-mobile-dock {
     display: none !important;
   }
 

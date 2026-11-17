@@ -1,3 +1,5 @@
+import { MODAL_OPEN_OVERLAY_SELECTOR } from './uiRulesEngine.js';
+
 /**
  * Local modal form drafts (device-only). No secrets/passphrases/tokens.
  */
@@ -7,6 +9,33 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEBOUNCE_MS = 300;
 
 const timers = new Map();
+
+/** Поля сущности — не восстанавливать из черновика (иначе подмена categoryId и т.д.). */
+export const MODAL_DRAFT_ENTITY_FIELD_NAMES = new Set([
+  'categoryId',
+  'obligationId',
+  'savingId',
+  'transactionId',
+  'debtId'
+]);
+
+export function applyFormFields(form, fields) {
+  if (!form || !fields || typeof fields !== 'object') return;
+  Object.entries(fields).forEach(([name, value]) => {
+    const elements = form.elements?.namedItem?.(name);
+    if (!elements) return;
+    const list = elements.length != null ? [...elements] : [elements];
+    list.forEach((el) => {
+      if (el.type === 'checkbox') {
+        el.checked = Boolean(value);
+      } else if (el.type === 'radio') {
+        el.checked = el.value === String(value);
+      } else {
+        el.value = value ?? '';
+      }
+    });
+  });
+}
 
 function storageKey(modalName) {
   return `${STORAGE_PREFIX}${modalName}`;
@@ -95,11 +124,15 @@ export function scheduleDraftSave(modalName, form) {
   }, DEBOUNCE_MS));
 }
 
-export function restoreDraftIntoForm(form, modalName) {
+export function restoreDraftIntoForm(form, modalName, options = {}) {
   if (!form) return;
   const fields = readDraft(modalName);
   if (!fields) return;
+  const skipEntityFields = options.skipEntityFields !== false;
   Object.entries(fields).forEach(([name, value]) => {
+    if (skipEntityFields && MODAL_DRAFT_ENTITY_FIELD_NAMES.has(name)) {
+      return;
+    }
     const elements = form.elements?.namedItem?.(name);
     if (!elements) return;
     const list = elements.length != null ? [...elements] : [elements];
@@ -125,7 +158,7 @@ let draftSystemBound = false;
 function persistOpenModalsForSessionFromDom() {
   const names = [];
   try {
-    document.querySelectorAll('[data-modal]:not(.hidden)').forEach((modal) => {
+    document.querySelectorAll(MODAL_OPEN_OVERLAY_SELECTOR).forEach((modal) => {
       const name = modal.dataset?.modal;
       if (name) names.push(name);
     });
@@ -141,7 +174,7 @@ function persistOpenModalsForSessionFromDom() {
 
 export function flushVisibleModalDrafts() {
   try {
-    document.querySelectorAll('[data-modal]:not(.hidden)').forEach((modal) => {
+    document.querySelectorAll(MODAL_OPEN_OVERLAY_SELECTOR).forEach((modal) => {
       const modalName = modal.dataset?.modal;
       const form = modal.querySelector('form[data-form]');
       if (modalName && form) {

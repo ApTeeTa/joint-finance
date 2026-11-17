@@ -112,6 +112,16 @@ import {
   computePaidUntilFromPayments,
   syncObligationStatusFromPayments
 } from './obligationPaidUntil.js';
+import {
+  getCategorySpentInMonth,
+  getCategorySpendAvailability,
+  getCurrentYearMonth,
+  syncCategorySpentCacheForMonth,
+  syncCategorySpentCachesForMonth,
+  syncCategorySpentForTransactionMonths,
+  syncCategorySpentCacheAfterCategoryMove
+} from './categoryMonth.js';
+import { todayIsoApp } from './appCalendar.js';
 
 function guardFinanceEntry(operation) {
   const guard = requireFinanceEntryPoint(operation);
@@ -136,8 +146,11 @@ export function createGroupId() {
   return createId('group');
 }
 
-export function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+export function todayIso(reference) {
+  if (reference instanceof Date) {
+    return todayIsoApp(reference);
+  }
+  return todayIsoApp();
 }
 
 const DEFAULT_EXCHANGE_RATE = 92;
@@ -254,6 +267,16 @@ export function getUserTransactions(state) {
   return getAllTransactions(state).filter((tx) => !isServiceTransaction(tx));
 }
 
+export function getActiveUserTransactions(state) {
+  return getUserTransactions(state).filter((tx) => tx.status === TRANSACTION_STATUS.ACTIVE);
+}
+
+/** Синхронизировать кэш category.spent с активными расходами текущего календарного месяца. */
+export function refreshCategorySpentCachesForCurrentMonth(state, referenceDate = todayIso()) {
+  const yearMonth = getCurrentYearMonth(referenceDate);
+  syncCategorySpentCachesForMonth(state, yearMonth);
+}
+
 export function getAccountTransactions(state, accountId, limit = 3) {
   return getAllTransactions(state)
     .filter((tx) => {
@@ -348,7 +371,10 @@ function addTransaction(state, data) {
     obligationName: data.obligationName,
     obligationReserveBefore: data.obligationReserveBefore,
     obligationPaidUntilBefore: data.obligationPaidUntilBefore,
-    obligationStatusBefore: data.obligationStatusBefore
+    obligationStatusBefore: data.obligationStatusBefore,
+    userCategoryPending: data.userCategoryPending === true ? true : undefined,
+    reassignedAt: data.reassignedAt,
+    reassignedBy: data.reassignedBy
   };
   state.transactions.unshift(record);
   return record;
@@ -621,11 +647,17 @@ export function recordObligationUnreserve(state, obligationId, amount, comment, 
   return { ok: true, transaction: tx };
 }
 
-export function recordExpense(state, categoryId, amount, accountId, comment, date, author) {
+export function recordExpense(state, categoryId, amount, accountId, comment, date, author, options = {}) {
   const blocked = guardFinanceEntry('createExpense');
   if (blocked) return blocked;
 
-  const category = findCategory(state, categoryId);
+  const userCategoryPending = options.userCategoryPending === true;
+  let resolvedCategoryId = categoryId;
+  if (userCategoryPending || !resolvedCategoryId) {
+    resolvedCategoryId = ensureMiscCategory(state).id;
+  }
+
+  const category = findCategory(state, resolvedCategoryId);
   if (!category) return { ok: false, error: 'Категория не найдена' };
 
   const account = findAccount(state, accountId);
@@ -636,8 +668,17 @@ export function recordExpense(state, categoryId, amount, accountId, comment, dat
     return { ok: false, error: 'Сумма расхода должна быть больше 0' };
   }
 
+  const expenseDate = date || todayIso();
+  const yearMonth = getCurrentYearMonth(expenseDate);
+  const pendingUncategorized = userCategoryPending
+    || (isMiscCategory(category) && !categoryId);
+
   const gateBlock = rejectGateDecision(
-    runFinanceGate('createExpense', rubAmount, state, { categoryId, accountId })
+    runFinanceGate('createExpense', rubAmount, state, {
+      categoryId: pendingUncategorized ? null : resolvedCategoryId,
+      accountId,
+      userCategoryPending: pendingUncategorized
+    })
   );
   if (gateBlock) return gateBlock;
 
@@ -649,16 +690,22 @@ export function recordExpense(state, categoryId, amount, accountId, comment, dat
     : roundMoney(rubAmount, 'RUB');
   const accountBalance = account.balance ?? 0;
 
-  if (rubAmount > reserved) {
-    return { ok: false, error: 'Недостаточно средств в резерве категории. Сначала зарезервируйте деньги.' };
+  if (!pendingUncategorized) {
+    const spentInMonth = getCategorySpentInMonth(state, category.id, yearMonth);
+    const spendCap = getCategorySpendAvailability(category, reserved, spentInMonth);
+    if (rubAmount > spendCap) {
+      if (rubAmount > reserved) {
+        return { ok: false, error: 'Недостаточно средств в резерве категории. Сначала зарезервируйте деньги.' };
+      }
+      return { ok: false, error: 'Превышен месячный лимит категории для этой операции.' };
+    }
+    category.reserved = reserved - rubAmount;
   }
 
   if (accountDebitAmount > accountBalance) {
     return { ok: false, error: 'Недостаточно средств на выбранном счете.' };
   }
 
-  category.reserved = reserved - rubAmount;
-  category.spent = (category.spent ?? 0) + rubAmount;
   account.balance = accountBalance - accountDebitAmount;
 
   const expenseComment = accountCurrency === 'USD'
@@ -668,18 +715,77 @@ export function recordExpense(state, categoryId, amount, accountId, comment, dat
   const tx = addTransaction(state, {
     type: TRANSACTION_TYPES.EXPENSE,
     amount: rubAmount,
-    categoryId,
+    categoryId: category.id,
     accountId,
     currency: 'RUB',
     accountDebitAmount,
     accountCurrency,
     exchangeRate: accountCurrency === 'USD' ? exchangeRate : undefined,
     comment: expenseComment,
-    date,
-    author
+    date: expenseDate,
+    author,
+    userCategoryPending: pendingUncategorized ? true : undefined
   });
 
-  enforceFinancialInvariants(state, { operation: 'recordExpense', categoryId });
+  if (!pendingUncategorized && !isMiscCategory(category)) {
+    syncCategorySpentCacheForMonth(state, category.id, yearMonth);
+  }
+
+  enforceFinancialInvariants(state, { operation: 'recordExpense', categoryId: category.id });
+
+  return { ok: true, transaction: tx };
+}
+
+export function recordUncategorizedExpense(state, amount, accountId, comment, date, author) {
+  return recordExpense(state, null, amount, accountId, comment, date, author, {
+    userCategoryPending: true
+  });
+}
+
+export function reassignExpenseCategory(state, transactionId, newCategoryId, author) {
+  const blocked = guardFinanceEntry('createExpense');
+  if (blocked) return blocked;
+
+  const tx = findTransaction(state, transactionId);
+  if (!tx || tx.type !== TRANSACTION_TYPES.EXPENSE) {
+    return { ok: false, error: 'Операция не найдена' };
+  }
+  if (tx.status !== TRANSACTION_STATUS.ACTIVE) {
+    return { ok: false, error: 'Можно переназначить только активный расход' };
+  }
+  if (!tx.userCategoryPending) {
+    return { ok: false, error: 'Расход уже привязан к категории' };
+  }
+
+  const target = findCategory(state, newCategoryId);
+  if (!target || isMiscCategory(target)) {
+    return { ok: false, error: 'Выберите пользовательскую категорию' };
+  }
+
+  const rubAmount = Number(tx.amount);
+  const expenseDate = tx.date || todayIso();
+  const yearMonth = getCurrentYearMonth(expenseDate);
+  const reserved = target.reserved ?? 0;
+  const spentInMonth = getCategorySpentInMonth(state, target.id, yearMonth);
+  const spendCap = getCategorySpendAvailability(target, reserved, spentInMonth);
+
+  if (rubAmount > spendCap) {
+    if (rubAmount > reserved) {
+      return { ok: false, error: 'В категории недостаточно резерва для переноса расхода.' };
+    }
+    return { ok: false, error: 'Перенос превысит месячный лимит категории.' };
+  }
+
+  const prevCategoryId = tx.categoryId;
+  target.reserved = reserved - rubAmount;
+  tx.categoryId = target.id;
+  tx.userCategoryPending = false;
+  tx.reassignedAt = new Date().toISOString();
+  tx.reassignedBy = author;
+
+  syncCategorySpentCacheAfterCategoryMove(state, prevCategoryId, target.id, expenseDate);
+
+  enforceFinancialInvariants(state, { operation: 'reassignExpenseCategory', transactionId });
 
   return { ok: true, transaction: tx };
 }
@@ -2320,13 +2426,17 @@ function reverseExpense(state, tx) {
     return { ok: true };
   }
 
+  if (tx.userCategoryPending) {
+    return { ok: true };
+  }
+
   const category = findCategory(state, tx.categoryId);
   if (!category) {
     return { ok: false, error: 'Категория или счет не найдены' };
   }
 
   category.reserved = (category.reserved ?? 0) + rubAmount;
-  category.spent = (category.spent ?? 0) - rubAmount;
+
   return { ok: true };
 }
 
@@ -2562,6 +2672,13 @@ export function cancelTransaction(state, transactionId) {
   tx.status = TRANSACTION_STATUS.CANCELLED;
   tx.cancelledAt = new Date().toISOString();
 
+  if (tx.type === TRANSACTION_TYPES.EXPENSE && tx.categoryId && !tx.userCategoryPending) {
+    const category = findCategory(state, tx.categoryId);
+    if (category && !isMiscCategory(category)) {
+      syncCategorySpentForTransactionMonths(state, tx, tx.date);
+    }
+  }
+
   enforceFinancialInvariants(state, { operation: 'cancelTransaction', transactionId });
 
   return { ok: true, transaction: tx };
@@ -2571,11 +2688,25 @@ export function updateTransactionMeta(state, transactionId, { comment, date }) {
   const tx = findTransaction(state, transactionId);
   if (!tx) return { ok: false, error: 'Транзакция не найдена' };
 
+  const prevDate = tx.date;
+
   if (comment !== undefined) {
     tx.comment = String(comment ?? '').trim();
   }
   if (date !== undefined && date) {
     tx.date = date;
+  }
+
+  if (
+    date !== undefined
+    && date
+    && prevDate !== date
+    && tx.type === TRANSACTION_TYPES.EXPENSE
+    && tx.status === TRANSACTION_STATUS.ACTIVE
+    && tx.categoryId
+    && !tx.userCategoryPending
+  ) {
+    syncCategorySpentForTransactionMonths(state, tx, prevDate);
   }
 
   return { ok: true, transaction: tx };

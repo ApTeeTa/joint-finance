@@ -1,9 +1,14 @@
 import { isExperiment } from '../config/environmentConfig.js';
-import { logUiRuleFix } from './uiRulesEngine.js';
+import {
+  logUiRuleFix,
+  MODAL_OPEN_OVERLAY_SELECTOR,
+  MODAL_OVERLAY_SELECTOR
+} from './uiRulesEngine.js';
 import {
   clearDraft,
   confirmDiscardDraft,
-  restoreDraftIntoForm
+  restoreDraftIntoForm,
+  applyFormFields
 } from './modalDraftStore.js';
 import { isModalSubmitting } from './modalFormSubmit.js';
 
@@ -20,8 +25,6 @@ export function isWithinAppUi(target, container) {
 }
 
 const MODAL_SELECTOR = '[data-modal]';
-/** Matches MODAL_OVERLAY_RULE.overlayTemplateClasses — fixed inset-0 backdrop shell. */
-const MODAL_OVERLAY_SELECTOR = 'div[data-modal].fixed.inset-0';
 
 function queryModals(scope = document) {
   return scope.querySelectorAll(MODAL_SELECTOR);
@@ -115,7 +118,7 @@ export function findAppModal(modalName, container) {
 }
 
 function syncBodyModalState() {
-  const hasOpen = Boolean(document.querySelector(`${MODAL_SELECTOR}:not(.hidden)`));
+  const hasOpen = Boolean(document.querySelector(MODAL_OPEN_OVERLAY_SELECTOR));
   document.body.classList.toggle('modal-open', hasOpen);
   const root = getModalRoot();
   if (root) {
@@ -130,11 +133,33 @@ export function isAnyModalOpen() {
 /** Visible modals in DOM (modal-root or elsewhere). */
 export function getOpenModalNames() {
   const names = [];
-  document.querySelectorAll(`${MODAL_SELECTOR}:not(.hidden)`).forEach((modal) => {
+  document.querySelectorAll(MODAL_OPEN_OVERLAY_SELECTOR).forEach((modal) => {
     const name = modal.dataset?.modal;
     if (name) names.push(name);
   });
   return names;
+}
+
+export function filterRestorableSessionModalNames(rawNames) {
+  if (!Array.isArray(rawNames)) {
+    return [];
+  }
+  const unique = [];
+  const seen = new Set();
+  for (const name of rawNames) {
+    if (typeof name !== 'string' || !name.length || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    if (!findModal(name)) {
+      continue;
+    }
+    unique.push(name);
+  }
+  if (unique.length > 1) {
+    return [unique[unique.length - 1]];
+  }
+  return unique;
 }
 
 const SESSION_OPEN_MODALS_KEY = 'jf-session-open-modals';
@@ -165,25 +190,33 @@ export function clearOpenModalsSession() {
  * Draft fields are restored via openModal → restoreDraftIntoForm.
  */
 export function restoreOpenModalsFromSession() {
-  let names = [];
+  let rawNames = [];
   try {
     const raw = sessionStorage.getItem(SESSION_OPEN_MODALS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        names = parsed.filter((n) => typeof n === 'string' && n.length > 0);
+        rawNames = parsed.filter((n) => typeof n === 'string' && n.length > 0);
       }
     }
   } catch {
     return;
   }
+  const names = filterRestorableSessionModalNames(rawNames);
+  try {
+    if (names.length > 0) {
+      sessionStorage.setItem(SESSION_OPEN_MODALS_KEY, JSON.stringify(names));
+    } else if (rawNames.length > 0) {
+      sessionStorage.removeItem(SESSION_OPEN_MODALS_KEY);
+    }
+  } catch {
+    /* private mode */
+  }
   if (!names.length) return;
-  names.forEach((modalName) => {
-    openModal(modalName);
-  });
+  openModal(names[0]);
 }
 
-export function openModal(modalName) {
+export function openModal(modalName, options = {}) {
   const modal = findModal(modalName);
   if (!modal) {
     if (isExperiment()) {
@@ -204,6 +237,9 @@ export function openModal(modalName) {
   const form = modal.querySelector('form[data-form]');
   if (form && modalName) {
     restoreDraftIntoForm(form, modalName);
+    if (options.pinnedFields) {
+      applyFormFields(form, options.pinnedFields);
+    }
   }
   syncBodyModalState();
   persistOpenModalsForSession();
@@ -240,7 +276,7 @@ export function requestCloseModal(modalName) {
 }
 
 export function closeAllModals() {
-  queryModals(document).forEach((modal) => {
+  document.querySelectorAll(MODAL_OVERLAY_SELECTOR).forEach((modal) => {
     setModalHidden(modal, true);
   });
   syncBodyModalState();

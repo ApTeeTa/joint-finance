@@ -11,7 +11,15 @@ import {
   registerMutationStrategy,
   executeMutation
 } from './mutationContract.js';
-import { todayIso, getCategoryTransactions, renderAccountSelectOptions, TYPE_LABELS, isMiscCategory, MISC_CATEGORY_NAME } from './transactions.js';
+import {
+  todayIso,
+  getCategoryTransactions,
+  renderAccountSelectOptions,
+  TYPE_LABELS,
+  isMiscCategory,
+  MISC_CATEGORY_NAME
+} from './transactions.js';
+import { getCategorySpentInMonth, getCurrentYearMonth } from './categoryMonth.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
@@ -453,7 +461,8 @@ function renderCategoryCard(state, category) {
   }
 
   const limit = category.limit ?? 0;
-  const spent = category.spent ?? 0;
+  const spent = getCategorySpentInMonth(state, category.id, getCurrentYearMonth());
+  category.spent = spent;
   const overLimit = isOverLimit(category);
   const cardClass = overLimit
     ? 'border-amber-400 bg-amber-50'
@@ -718,34 +727,40 @@ export function initCategoriesHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-reserve"]')) {
       const btn = target.closest('[data-action="open-reserve"]');
-      const form = findAppForm('reserve', container);
-      if (form) {
-        form.categoryId.value = btn.dataset.categoryId;
-        form.amount.value = '';
-      }
-      openModal('reserve');
+      const category = findCategory(state, btn.dataset.categoryId);
+      if (category && isMiscCategory(category)) return;
+      openModal('reserve', {
+        pinnedFields: {
+          categoryId: btn.dataset.categoryId,
+          amount: ''
+        }
+      });
       return;
     }
 
     if (target.closest('[data-action="open-unreserve"]')) {
       const btn = target.closest('[data-action="open-unreserve"]');
       const category = findCategory(state, btn.dataset.categoryId);
+      if (category && isMiscCategory(category)) return;
       const form = findAppForm('unreserve', container);
       const hint = container.querySelector('[data-unreserve-hint]');
-      if (form && category) {
-        form.categoryId.value = category.id;
-        form.amount.value = '';
-        const available = Math.max(0, category.reserved ?? 0);
-        if (hint) {
-          hint.textContent = `Можно вернуть: ${formatMoney(available)}`;
-        }
+      const available = category ? Math.max(0, category.reserved ?? 0) : 0;
+      if (hint && category) {
+        hint.textContent = `Можно вернуть: ${formatMoney(available)}`;
       }
-      openModal('unreserve');
+      openModal('unreserve', {
+        pinnedFields: {
+          categoryId: btn.dataset.categoryId,
+          amount: ''
+        }
+      });
       return;
     }
 
     if (target.closest('[data-action="fill-to-limit"]')) {
       const btn = target.closest('[data-action="fill-to-limit"]');
+      const category = findCategory(state, btn.dataset.categoryId);
+      if (category && isMiscCategory(category)) return;
       if (fillToLimit(state, btn.dataset.categoryId)) {
         refresh(state, container, onUpdate);
       }
@@ -754,16 +769,15 @@ export function initCategoriesHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-expense"]')) {
       const btn = target.closest('[data-action="open-expense"]');
-      const form = findAppForm('expense', container);
-      if (form) {
-        form.categoryId.value = btn.dataset.categoryId;
-        form.amount.value = '';
-        form.comment.value = '';
-        if (form.accountId.options.length) {
-          form.accountId.selectedIndex = 0;
+      const category = findCategory(state, btn.dataset.categoryId);
+      if (category && isMiscCategory(category)) return;
+      openModal('expense', {
+        pinnedFields: {
+          categoryId: btn.dataset.categoryId,
+          amount: '',
+          comment: ''
         }
-      }
-      openModal('expense');
+      });
       return;
     }
 
@@ -779,12 +793,20 @@ export function initCategoriesHandlers(state, container, onUpdate) {
         form.name.value = category.name;
         form.limit.value = category.limit ?? 0;
       }
-      openModal('edit-category');
+      openModal('edit-category', {
+        pinnedFields: {
+          categoryId: category.id,
+          name: category.name,
+          limit: String(category.limit ?? 0)
+        }
+      });
       return;
     }
 
     if (target.closest('[data-action="delete-category"]')) {
       const btn = target.closest('[data-action="delete-category"]');
+      const category = findCategory(state, btn.dataset.categoryId);
+      if (category && isMiscCategory(category)) return;
       closeAllOverflowMenus();
       if (confirm('Вы уверены? Средства из категории вернутся в общий баланс.')) {
         if (deleteCategory(state, btn.dataset.categoryId)) {

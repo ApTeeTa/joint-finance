@@ -110,7 +110,8 @@ export const MODAL_OVERLAY_RULE = Object.freeze({
   dimIncludesHeader: true,
   overlayTemplateClasses:
     'hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 backdrop-blur-[2px] transition-opacity duration-200',
-  openLayerSelector: '[data-modal]:not(.hidden)',
+  overlaySelector: 'div[data-modal].fixed.inset-0',
+  openLayerSelector: 'div[data-modal].fixed.inset-0:not(.hidden)',
   modalRootZIndex: 100,
   headerStaysBelowOverlay: true
 });
@@ -119,6 +120,10 @@ export const MODAL_OVERLAY_RULE = Object.freeze({
 export function getModalOverlayTemplateClasses() {
   return MODAL_OVERLAY_RULE.overlayTemplateClasses;
 }
+
+/** Modal overlay shells only — excludes [data-modal] on «Отмена» buttons. */
+export const MODAL_OVERLAY_SELECTOR = MODAL_OVERLAY_RULE.overlaySelector;
+export const MODAL_OPEN_OVERLAY_SELECTOR = MODAL_OVERLAY_RULE.openLayerSelector;
 
 /**
  * RULE — dismiss open modal by clicking the dimmed backdrop (not the white panel).
@@ -302,7 +307,13 @@ function computeRemaining(rawValues) {
 }
 
 function computeAvailable(rawValues) {
-  return pickRaw(rawValues, RAW_VALUE_KEYS.LIMIT) - pickRaw(rawValues, RAW_VALUE_KEYS.SPENT);
+  const limit = pickRaw(rawValues, RAW_VALUE_KEYS.LIMIT);
+  const spent = pickRaw(rawValues, RAW_VALUE_KEYS.SPENT);
+  const reserve = pickRaw(rawValues, RAW_VALUE_KEYS.RESERVE);
+  if (limit <= 0) {
+    return Math.max(0, reserve);
+  }
+  return Math.min(Math.max(0, reserve), Math.max(0, limit - spent));
 }
 
 function computeProgressPercent(rawValues) {
@@ -816,6 +827,18 @@ export function isActionAllowedForEntity(actionId, entityType, entityContext = {
     if (actionId === 'open-edit-manual-debt' || actionId === 'delete-manual-debt') {
       return isManual;
     }
+  }
+
+  if (entityType === ENTITY_TYPES.CATEGORY && entityContext.isMiscCategory) {
+    const blocked = new Set([
+      'open-reserve',
+      'open-unreserve',
+      'fill-to-limit',
+      'open-edit',
+      'delete-category',
+      'open-expense'
+    ]);
+    return !blocked.has(actionId);
   }
 
   return true;
