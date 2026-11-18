@@ -6,9 +6,15 @@ import {
   TYPE_LABELS,
   AUTHOR_LABELS,
   TRANSACTION_STATUS,
-  todayIso
+  todayIso,
+  renderAccountSelectOptions,
+  isMiscCategory
 } from './transactions.js';
-import { undoTransaction } from './financeGate.js';
+import {
+  undoTransaction,
+  createUncategorizedExpense,
+  reassignExpense
+} from './financeGate.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 function formatMoney(amount, currency = 'RUB') {
@@ -91,14 +97,50 @@ function getTransactionTypeLabel(tx) {
   return SAVING_HISTORY_LABELS[tx.type] ?? TYPE_LABELS[tx.type] ?? tx.type;
 }
 
+const HISTORY_FILTERS = {
+  ALL: 'all',
+  ACTIVE: 'active',
+  CANCELLED: 'cancelled',
+  UNCATEGORIZED: 'uncategorized'
+};
+
+function getHistoryFilter(container) {
+  const value = container?.dataset?.historyFilter;
+  return Object.values(HISTORY_FILTERS).includes(value) ? value : HISTORY_FILTERS.ALL;
+}
+
+function filterHistoryTransactions(transactions, filter) {
+  if (filter === HISTORY_FILTERS.ACTIVE) {
+    return transactions.filter((tx) => tx.status === TRANSACTION_STATUS.ACTIVE);
+  }
+  if (filter === HISTORY_FILTERS.CANCELLED) {
+    return transactions.filter((tx) => tx.status === TRANSACTION_STATUS.CANCELLED);
+  }
+  if (filter === HISTORY_FILTERS.UNCATEGORIZED) {
+    return transactions.filter((tx) => tx.userCategoryPending === true);
+  }
+  return transactions;
+}
+
+function renderCategoryOptions(state) {
+  const options = (state.categories ?? [])
+    .filter((category) => !isMiscCategory(category))
+    .map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`)
+    .join('');
+  return `<option value="">Выберите категорию</option>${options}`;
+}
+
 function renderTransactionRow(state, tx) {
   const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
   const typeLabel = getTransactionTypeLabel(tx);
   const authorLabel = AUTHOR_LABELS[tx.author] ?? tx.author;
   const isCancelled = tx.status === TRANSACTION_STATUS.CANCELLED;
-  const statusLabel = isCancelled ? 'Отменена' : 'Активна';
+  const pendingBadge = tx.userCategoryPending
+    ? '<span class="ml-1 text-[10px] font-semibold uppercase text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Без категории</span>'
+    : '';
+  const statusLabel = isCancelled ? 'Отменено' : 'Активна';
   const statusClass = isCancelled ? 'text-slate-400 line-through' : 'text-slate-900';
-  const comment = tx.comment ? escapeHtml(tx.comment) : '—';
+  const comment = `${tx.comment ? escapeHtml(tx.comment) : '—'}${pendingBadge}`;
   const amount = formatTransactionAmount(tx);
 
   return `
@@ -117,6 +159,14 @@ function renderTransactionRow(state, tx) {
             data-transaction-id="${tx.id}"
             class="px-2 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100 mr-1"
           >Изменить</button>
+        ` : ''}
+        ${tx.userCategoryPending && canEditTransaction(tx) ? `
+          <button
+            type="button"
+            data-action="reassign-expense"
+            data-transaction-id="${tx.id}"
+            class="px-2 py-1 text-xs font-medium rounded text-amber-700 hover:bg-amber-50 mr-1"
+          >Категория</button>
         ` : ''}
         ${canManageTransaction(state, tx) ? `
           <button
@@ -174,8 +224,59 @@ function renderEditModal() {
   `;
 }
 
+function renderReassignModal(state) {
+  return `
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="reassign-expense">
+      <div class="${UI.modalShell} ${UI.modalBody}">
+        <h3 class="${UI.modalTitle} mb-4">Назначить категорию</h3>
+        <form data-form="reassign-expense" class="space-y-4">
+          <input type="hidden" name="transactionId" value="">
+          <div>
+            <label class="${UI.label}">Категория</label>
+            <select name="categoryId" required class="${UI.field}">${renderCategoryOptions(state)}</select>
+          </div>
+          <p class="text-xs text-slate-400">Сумма, дата и счёт не меняются. Для переноса в категории нужен достаточный резерв.</p>
+          <div class="flex gap-2 pt-2">
+            <button type="button" data-action="close-modal" data-modal="reassign-expense" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderUncategorizedExpenseModal(state) {
+  return `
+    <div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" data-modal="uncategorized-expense">
+      <div class="${UI.modalShell} ${UI.modalBody}">
+        <h3 class="${UI.modalTitle} mb-4">Расход без категории</h3>
+        <form data-form="uncategorized-expense" class="space-y-4">
+          <div>
+            <label class="${UI.label}">Сумма (RUB)</label>
+            <input type="number" name="amount" required min="0.01" step="0.01" class="${UI.field}" placeholder="0">
+          </div>
+          <div>
+            <label class="${UI.label}">Счёт</label>
+            <select name="accountId" required class="${UI.field}">${renderAccountSelectOptions(state)}</select>
+          </div>
+          <div>
+            <label class="${UI.label}">Комментарий</label>
+            <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button type="button" data-action="close-modal" data-modal="uncategorized-expense" class="${UI.btnCancelBlock}">Отмена</button>
+            <button type="submit" class="${UI.btnPrimaryBlock}">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
 export function renderHistory(state, container) {
-  const transactions = getUserTransactions(state);
+  const filter = getHistoryFilter(container);
+  const transactions = filterHistoryTransactions(getUserTransactions(state), filter);
 
   const rows = transactions.length
     ? transactions.map((tx) => renderTransactionRow(state, tx)).join('')
@@ -187,9 +288,21 @@ export function renderHistory(state, container) {
 
   container.innerHTML = `
     <div class="${UI.panel} ${UI.panelPadding}">
-      <h2 class="${UI.panelTitle} mb-4">История</h2>
-      <div class="overflow-x-auto -mx-2 px-2">
-        <table class="w-full min-w-[720px]">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 class="${UI.panelTitle}">История</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="text-xs text-slate-500">Фильтр</label>
+          <select data-history-filter-select class="${UI.field} text-sm py-1.5 min-w-[10rem]">
+            <option value="all" ${filter === 'all' ? 'selected' : ''}>Все</option>
+            <option value="active" ${filter === 'active' ? 'selected' : ''}>Активные</option>
+            <option value="cancelled" ${filter === 'cancelled' ? 'selected' : ''}>Отменённые</option>
+            <option value="uncategorized" ${filter === 'uncategorized' ? 'selected' : ''}>Без категории</option>
+          </select>
+          <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm">Расход без категории</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto -mx-2 px-2 touch-pan-x">
+        <table class="w-full min-w-[720px] history-table">
           <thead>
             <tr class="text-left text-xs font-medium text-slate-400 uppercase tracking-wide">
               <th class="py-2 px-2">Дата</th>
@@ -206,6 +319,8 @@ export function renderHistory(state, container) {
       </div>
     </div>
     ${renderEditModal()}
+    ${renderReassignModal(state)}
+    ${renderUncategorizedExpenseModal(state)}
   `;
 }
 
@@ -246,14 +361,37 @@ export function initHistoryHandlers(state, container, onUpdate) {
     if (target.closest('[data-action="edit-transaction"]')) {
       const btn = target.closest('[data-action="edit-transaction"]');
       const tx = getUserTransactions(state).find((item) => item.id === btn.dataset.transactionId);
-      const form = findAppForm('edit-transaction', container);
-      if (tx && form) {
-        form.transactionId.value = tx.id;
-        form.comment.value = tx.comment ?? '';
-        form.date.value = tx.date || todayIso();
-      }
-      openModal('edit-transaction');
+      if (!tx) return;
+      openModal('edit-transaction', {
+        pinnedFields: {
+          transactionId: tx.id,
+          comment: tx.comment ?? '',
+          date: tx.date || todayIso()
+        }
+      });
+      return;
     }
+
+    if (target.closest('[data-action="reassign-expense"]')) {
+      const btn = target.closest('[data-action="reassign-expense"]');
+      openModal('reassign-expense', {
+        pinnedFields: { transactionId: btn.dataset.transactionId, categoryId: '' }
+      });
+      return;
+    }
+
+    if (target.closest('[data-action="open-uncategorized-expense"]')) {
+      openModal('uncategorized-expense', {
+        pinnedFields: { amount: '', comment: '', accountId: '' }
+      });
+    }
+  });
+
+  container.addEventListener('change', (event) => {
+    const select = event.target.closest('[data-history-filter-select]');
+    if (!select) return;
+    container.dataset.historyFilter = select.value;
+    refresh(state, container, onUpdate);
   });
 
   document.addEventListener('submit', async (event) => {
@@ -275,5 +413,43 @@ export function initHistoryHandlers(state, container, onUpdate) {
       refresh(state, container, onUpdate);
       return true;
     });
+
+    const reassignForm = event.target.closest('[data-form="reassign-expense"]');
+    if (reassignForm) {
+      await runGuardedModalSubmit('reassign-expense', reassignForm, async () => {
+        const result = reassignExpense(
+          state,
+          reassignForm.transactionId.value,
+          reassignForm.categoryId.value,
+          state.profile
+        );
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh(state, container, onUpdate);
+        return true;
+      });
+    }
+
+    const uncategorizedForm = event.target.closest('[data-form="uncategorized-expense"]');
+    if (uncategorizedForm) {
+      await runGuardedModalSubmit('uncategorized-expense', uncategorizedForm, async () => {
+        const result = createUncategorizedExpense(
+          state,
+          uncategorizedForm.amount.value,
+          uncategorizedForm.accountId.value,
+          uncategorizedForm.comment.value,
+          todayIso(),
+          state.profile
+        );
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh(state, container, onUpdate);
+        return true;
+      });
+    }
   });
 }

@@ -11,11 +11,12 @@ import {
 } from './transactions.js';
 import { getRecommendedMonthlyPayment } from './savings.js';
 import { findIncomeCategory, resolveIncomeCategoryName } from './incomeCategories.js';
+import { todayIsoApp } from './appCalendar.js';
 
 const EXPENSE_TOP_LIMIT = 10;
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return todayIsoApp();
 }
 
 export function isAnalyticsTransaction(tx) {
@@ -91,20 +92,22 @@ export function getExpensesByCategory(state, limit = EXPENSE_TOP_LIMIT) {
     if (!isAnalyticsTransaction(tx)) continue;
     if (tx.type !== TRANSACTION_TYPES.EXPENSE) continue;
 
-    const categoryId = tx.categoryId ?? '__none__';
-    const current = totals.get(categoryId) ?? {
-      categoryId: tx.categoryId ?? null,
-      categoryName: findCategoryName(state, tx.categoryId, tx.categoryName),
+    const pendingUncategorized = tx.userCategoryPending === true;
+    const groupKey = pendingUncategorized ? '__pending_uncategorized__' : (tx.categoryId ?? '__none__');
+    const current = totals.get(groupKey) ?? {
+      categoryId: pendingUncategorized ? null : (tx.categoryId ?? null),
+      categoryName: pendingUncategorized ? 'Без категории' : findCategoryName(state, tx.categoryId, tx.categoryName),
       amount: 0,
-      count: 0
+      count: 0,
+      pendingUncategorized
     };
 
     current.amount += Number(tx.amount) || 0;
     current.count += 1;
-    if (!current.categoryName || current.categoryName === 'Без категории') {
+    if (!pendingUncategorized && (!current.categoryName || current.categoryName === 'Без категории')) {
       current.categoryName = findCategoryName(state, tx.categoryId, tx.categoryName);
     }
-    totals.set(categoryId, current);
+    totals.set(groupKey, current);
   }
 
   return [...totals.values()]

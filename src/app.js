@@ -41,7 +41,10 @@ import { renderSavings, initSavingsHandlers } from './modules/savings.js';
 import { renderDebts, initDebtsHandlers } from './modules/debts.js';
 import { renderObligations, initObligationsHandlers } from './modules/obligations.js';
 import { renderStats, initStatsHandlers } from './modules/stats.js';
-import { reconcileLegacyTransactions } from './modules/transactions.js';
+import {
+  reconcileLegacyTransactions,
+  refreshCategorySpentCachesForCurrentMonth
+} from './modules/transactions.js';
 import { saveState, loadState, clearState, hardResetStateFromRemoteSnapshot } from './modules/storage.js';
 import {
   relocateModals,
@@ -163,6 +166,7 @@ async function applyPendingRemoteSnapshot() {
   applyStatePatch(state, patch);
   ensureDefaultIncomeCategories(state);
   reconcileLegacyTransactions(state);
+  refreshCategorySpentCachesForCurrentMonth(state);
   saveState(state, { skipRemote: true });
   initLastValidStateIfValid();
   if (pending.meta?.updatedAt) {
@@ -259,6 +263,7 @@ function applyLoadedState(loaded) {
   state.activeTab = loaded.activeTab;
   ensureDefaultIncomeCategories(state);
   reconcileLegacyTransactions(state);
+  refreshCategorySpentCachesForCurrentMonth(state);
 }
 
 function onStateChange() {
@@ -351,14 +356,9 @@ function renderTab(tab, options = {}) {
 
   state.activeTab = tab;
 
-  const overflowTabs = ['obligations', 'debts', 'stats'];
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.toggle('tab-btn-active', btn.dataset.tab === tab);
   });
-  document.getElementById('tab-more-btn')?.classList.toggle(
-    'tab-btn-active',
-    overflowTabs.includes(tab)
-  );
 
   if (tab === 'accounts') {
     renderAccounts(state, tabContent);
@@ -482,7 +482,7 @@ function initProfileHandlers() {
 
 function initFamilyLockHandlers() {
   document.getElementById('family-lock-btn')?.addEventListener('click', () => {
-    if (!confirm('Заблокировать приложение на этом устройстве? Потребуется семейный пароль.')) {
+    if (!confirm('Выйти / заблокировать приложение на этом устройстве? Потребуется семейный пароль.')) {
       return;
     }
     stopSyncPolling?.();
@@ -494,44 +494,19 @@ function initFamilyLockHandlers() {
   });
 }
 
-function closeTabMoreSheet() {
-  document.getElementById('tab-more-sheet')?.classList.remove('is-open');
-  document.getElementById('tab-more-backdrop')?.classList.add('hidden');
-}
-
-function openTabMoreSheet() {
-  document.getElementById('tab-more-sheet')?.classList.add('is-open');
-  document.getElementById('tab-more-backdrop')?.classList.remove('hidden');
-}
-
 function handleTabNavClick(event) {
-  if (event.target.closest('[data-action="toggle-tab-more"]')) {
-    const sheet = document.getElementById('tab-more-sheet');
-    if (sheet?.classList.contains('is-open')) {
-      closeTabMoreSheet();
-    } else {
-      openTabMoreSheet();
-    }
-    return;
-  }
-
   const btn = event.target.closest('.tab-btn[data-tab]');
   if (!btn?.dataset.tab) return;
-
-  closeTabMoreSheet();
   renderTab(btn.dataset.tab);
 }
 
 function initTabHandlers() {
   document.getElementById('tab-nav')?.addEventListener('click', handleTabNavClick);
   document.getElementById('tab-nav-mobile-dock')?.addEventListener('click', handleTabNavClick);
-  document.getElementById('tab-more-sheet')?.addEventListener('click', handleTabNavClick);
-  document.getElementById('tab-more-backdrop')?.addEventListener('click', closeTabMoreSheet);
 
   document.addEventListener('joint-finance:navigate-tab', (event) => {
     const tab = event.detail?.tab;
     if (tab) {
-      closeTabMoreSheet();
       renderTab(tab);
     }
   });
@@ -544,7 +519,6 @@ function initVisualActionBusyGuard() {
     'toggle-free-help',
     'dismiss-free-help',
     'exchange-rate',
-    'toggle-tab-more',
     'navigate-tab'
   ]);
 
@@ -692,6 +666,7 @@ async function syncFromRemote() {
         applyStatePatch(state, patch);
         ensureDefaultIncomeCategories(state);
         reconcileLegacyTransactions(state);
+        refreshCategorySpentCachesForCurrentMonth(state);
         saveState(state, { skipRemote: true });
         markInitialSyncDone();
         initLastValidStateIfValid();
@@ -701,6 +676,7 @@ async function syncFromRemote() {
     } else {
       reconcileLegacyTransactions(state);
       ensureDefaultIncomeCategories(state);
+      refreshCategorySpentCachesForCurrentMonth(state);
       saveState(state, { skipRemote: true });
       markInitialSyncDone();
       initLastValidStateIfValid();

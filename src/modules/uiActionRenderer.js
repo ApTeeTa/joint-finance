@@ -919,8 +919,20 @@ export function renderEntityExpandedActions({
     }
 
     const label = def.menuLabel ?? def.title;
-    const isDestructive = actionId.startsWith('delete') || actionId.includes('write-off');
-    const btnClass = isDestructive ? UI.btnActionDestructive : UI.btnActionPrimary;
+    let btnClass = UI.btnActionPrimary;
+    if (actionId.startsWith('delete') || actionId.includes('write-off')) {
+      btnClass = UI.btnActionDestructive;
+    } else if (entityType === ENTITY_TYPES.OBLIGATION) {
+      if (actionId === 'open-pay-obligation') {
+        btnClass = UI.btnActionPrimary;
+      } else if (actionId === 'open-reserve-obligation') {
+        btnClass = 'bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100';
+      } else if (actionId === 'open-unreserve-obligation') {
+        btnClass = 'bg-slate-100 text-slate-800 border border-slate-300 hover:bg-slate-200';
+      } else {
+        btnClass = 'bg-white text-slate-800 border border-slate-200 hover:bg-slate-50';
+      }
+    }
 
     return `
       <button
