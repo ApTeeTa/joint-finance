@@ -87,6 +87,68 @@ function canManageTransaction(state, tx) {
 function canEditTransaction(tx) {
   return tx.status === TRANSACTION_STATUS.ACTIVE && !tx.service;
 }
+
+function findAccountById(state, accountId) {
+  if (!accountId) return null;
+  return (state.accounts ?? []).find((account) => account.id === accountId);
+}
+
+function getTransactionAccountLine(state, tx) {
+  if (tx.type === 'account_transfer') {
+    const source = findAccountById(state, tx.sourceAccountId);
+    const dest = findAccountById(state, tx.destAccountId);
+    if (source && dest) {
+      return `${source.name} → ${dest.name}`;
+    }
+    return 'Между счетами';
+  }
+
+  const account = findAccountById(state, tx.accountId ?? tx.sourceAccountId);
+  return account?.name ?? '—';
+}
+
+function getTransactionCategoryLine(state, tx) {
+  if (tx.type === 'account_transfer') {
+    return 'Между счетами';
+  }
+  const category = (state.categories ?? []).find((item) => item.id === tx.categoryId);
+  if (category?.name) {
+    return category.name;
+  }
+  if (tx.categoryName) {
+    return tx.categoryName;
+  }
+  return '';
+}
+
+function renderTransactionActions(state, tx) {
+  return `
+    ${canEditTransaction(tx) ? `
+      <button
+        type="button"
+        data-action="edit-transaction"
+        data-transaction-id="${tx.id}"
+        class="px-2 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100"
+      >Изменить</button>
+    ` : ''}
+    ${tx.userCategoryPending && canEditTransaction(tx) ? `
+      <button
+        type="button"
+        data-action="reassign-expense"
+        data-transaction-id="${tx.id}"
+        class="px-2 py-1 text-xs font-medium rounded text-amber-700 hover:bg-amber-50"
+      >Категория</button>
+    ` : ''}
+    ${canManageTransaction(state, tx) ? `
+      <button
+        type="button"
+        data-action="cancel-transaction"
+        data-transaction-id="${tx.id}"
+        class="px-2 py-1 text-xs font-medium rounded text-red-600 hover:bg-red-50"
+      >Отменить</button>
+    ` : ''}
+  `.trim();
+}
 const SAVING_HISTORY_LABELS = {
   saving_deposit: 'Пополнение',
   saving_withdraw: 'Возврат',
@@ -142,41 +204,56 @@ function renderTransactionRow(state, tx) {
   const statusClass = isCancelled ? 'text-slate-400 line-through' : 'text-slate-900';
   const comment = `${tx.comment ? escapeHtml(tx.comment) : '—'}${pendingBadge}`;
   const amount = formatTransactionAmount(tx);
+  const actions = renderTransactionActions(state, tx);
 
   return `
     <tr class="border-t border-slate-100 ${isCancelled ? 'bg-slate-50/80' : ''}" data-transaction-id="${tx.id}">
       <td class="py-3 px-2 text-sm ${statusClass} whitespace-nowrap">${dateLabel}</td>
-      <td class="py-3 px-2 text-sm ${statusClass}">${typeLabel}</td>
-      <td class="py-3 px-2 text-sm font-medium ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}">${amount}</td>
-      <td class="py-3 px-2 text-sm ${statusClass}">${authorLabel}</td>
+      <td class="py-3 px-2 text-sm ${statusClass} break-words">${typeLabel}</td>
+      <td class="py-3 px-2 text-sm font-medium ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'} break-words">${amount}</td>
+      <td class="py-3 px-2 text-sm ${statusClass} break-words">${authorLabel}</td>
       <td class="py-3 px-2 text-sm ${isCancelled ? 'text-slate-400' : 'text-emerald-700'}">${statusLabel}</td>
-      <td class="py-3 px-2 text-sm ${statusClass} max-w-[160px] truncate" title="${comment}">${comment}</td>
-      <td class="py-3 px-2 text-right whitespace-nowrap">
-        ${canEditTransaction(tx) ? `
-          <button
-            type="button"
-            data-action="edit-transaction"
-            data-transaction-id="${tx.id}"
-            class="px-2 py-1 text-xs font-medium rounded text-slate-600 hover:bg-slate-100 mr-1"
-          >Изменить</button>
-        ` : ''}
-        ${tx.userCategoryPending && canEditTransaction(tx) ? `
-          <button
-            type="button"
-            data-action="reassign-expense"
-            data-transaction-id="${tx.id}"
-            class="px-2 py-1 text-xs font-medium rounded text-amber-700 hover:bg-amber-50 mr-1"
-          >Категория</button>
-        ` : ''}
-        ${canManageTransaction(state, tx) ? `
-          <button
-            type="button"
-            data-action="cancel-transaction"
-            data-transaction-id="${tx.id}"
-            class="px-2 py-1 text-xs font-medium rounded text-red-600 hover:bg-red-50"
-          >Отменить</button>
-        ` : ''}
-      </td>    </tr>
+      <td class="py-3 px-2 text-sm ${statusClass} break-words align-top">${comment}</td>
+      <td class="py-3 px-2 text-right align-top">
+        <div class="flex flex-wrap justify-end gap-1">${actions}</div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderTransactionCard(state, tx) {
+  const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
+  const typeLabel = getTransactionTypeLabel(tx);
+  const isCancelled = tx.status === TRANSACTION_STATUS.CANCELLED;
+  const statusClass = isCancelled ? 'text-slate-400 line-through' : 'text-slate-900';
+  const amount = formatTransactionAmount(tx);
+  const categoryLine = getTransactionCategoryLine(state, tx);
+  const accountLine = escapeHtml(getTransactionAccountLine(state, tx));
+  const metaParts = [dateLabel];
+  if (categoryLine) {
+    metaParts.push(escapeHtml(categoryLine));
+  }
+  const metaLine = metaParts.join(' · ');
+  const commentText = tx.comment ? escapeHtml(tx.comment) : '';
+  const pendingBadge = tx.userCategoryPending
+    ? '<span class="inline-block mt-1 text-[10px] font-semibold uppercase text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Без категории</span>'
+    : '';
+  const actions = renderTransactionActions(state, tx);
+
+  return `
+    <article
+      class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${isCancelled ? 'opacity-80' : ''}"
+      data-transaction-id="${tx.id}"
+      data-history-card
+    >
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">${typeLabel}</p>
+      <p class="mt-1 text-xl font-semibold ${statusClass}">${amount}</p>
+      <p class="mt-2 text-sm text-slate-600">${metaLine}</p>
+      <p class="mt-1 text-sm text-slate-500">${accountLine}</p>
+      ${commentText ? `<p class="mt-2 text-sm text-slate-700 break-words whitespace-normal">${commentText}</p>` : ''}
+      ${pendingBadge}
+      ${actions ? `<div class="mt-3 flex flex-wrap gap-2">${actions}</div>` : ''}
+    </article>
   `;
 }
 
@@ -278,6 +355,8 @@ export function renderHistory(state, container) {
   const filter = getHistoryFilter(container);
   const transactions = filterHistoryTransactions(getUserTransactions(state), filter);
 
+  const emptyHistory = '<p class="py-10 text-center text-slate-500 text-sm">Операций пока нет</p>';
+
   const rows = transactions.length
     ? transactions.map((tx) => renderTransactionRow(state, tx)).join('')
     : `
@@ -285,6 +364,10 @@ export function renderHistory(state, container) {
         <td colspan="7" class="py-10 text-center text-slate-500 text-sm">Операций пока нет</td>
       </tr>
     `;
+
+  const cards = transactions.length
+    ? transactions.map((tx) => renderTransactionCard(state, tx)).join('')
+    : emptyHistory;
 
   container.innerHTML = `
     <div class="${UI.panel} ${UI.panelPadding}">
@@ -301,8 +384,20 @@ export function renderHistory(state, container) {
           <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm">Расход без категории</button>
         </div>
       </div>
-      <div class="overflow-x-auto -mx-2 px-2">
-        <table class="w-full min-w-[720px] history-table">
+      <div class="md:hidden min-w-0 space-y-3" data-history-cards-root>
+        ${cards}
+      </div>
+      <div class="hidden md:block min-w-0 w-full -mx-2 px-2" data-history-table-root>
+        <table class="w-full table-fixed history-table text-sm">
+          <colgroup>
+            <col style="width:11%">
+            <col style="width:12%">
+            <col style="width:17%">
+            <col style="width:10%">
+            <col style="width:10%">
+            <col style="width:24%">
+            <col style="width:16%">
+          </colgroup>
           <thead>
             <tr class="text-left text-xs font-medium text-slate-400 uppercase tracking-wide">
               <th class="py-2 px-2">Дата</th>

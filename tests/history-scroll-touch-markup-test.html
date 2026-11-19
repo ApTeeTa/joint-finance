@@ -68,17 +68,20 @@
 
     renderHistory(state, host);
 
-    run('обёртка таблицы — overflow-x-auto для горизонтального скролла', () => {
-      const wrap = host.querySelector('.overflow-x-auto');
-      assert(wrap, 'overflow-x-auto wrapper missing');
-      assert(wrap.querySelector('table.history-table'), 'history table missing');
-      assert(wrap.querySelector('table')?.classList.contains('min-w-[720px]'), 'min width for horizontal overflow');
+    run('таблица без min-w-[720px] и без overflow-x-auto', () => {
+      assert(!host.querySelector('.overflow-x-auto'), 'no horizontal scroll wrapper');
+      const table = host.querySelector('table.history-table');
+      assert(table, 'history table');
+      assert(!table.classList.contains('min-w-[720px]'), 'no forced min width');
     });
 
-    run('нет touch-pan-x (блокирует вертикальную прокрутку страницы)', () => {
-      const wrap = host.querySelector('.overflow-x-auto');
-      assert(wrap, 'wrapper');
-      assert(!wrap.classList.contains('touch-pan-x'), 'touch-pan-x must not be on history wrapper');
+    run('мобильные карточки истории', () => {
+      assert(host.querySelector('[data-history-cards-root]'), 'cards root');
+      assert(host.querySelector('[data-history-card]'), 'at least one card');
+    });
+
+    run('нет touch-pan-x на корне истории', () => {
+      assert(!host.innerHTML.includes('touch-pan-x'), 'touch-pan-x must not be on history');
     });
 
     run('глобальный стиль .overflow-x-auto допускает pan-x и pan-y', () => {
