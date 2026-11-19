@@ -32,10 +32,17 @@ $tests = @(
   'tests/audit-regression-test.html',
   'tests/app-calendar-test.html',
   'tests/misc-category-display-test.html',
+  'tests/category-monthly-limit-expense-test.html',
+  'tests/category-limit-confirm-flow-test.html',
+  'tests/jf-notify-modal-test.html',
   'tests/modal-cancel-button-layout-test.html',
   'tests/account-transfer-fx-test.html',
   'tests/history-scroll-touch-markup-test.html',
-  'tests/history-responsive-layout-test.html'
+  'tests/history-responsive-layout-test.html',
+  'tests/history-compact-mobile-test.html',
+  'tests/history-category-expense-filter-test.html',
+  'tests/expense-modal-submit-lifecycle-test.html',
+  'tests/transaction-operation-date-test.html'
 )
 
 $server = Start-Process powershell -ArgumentList @(

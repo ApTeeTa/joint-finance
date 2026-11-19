@@ -78,11 +78,14 @@
       const root = host.querySelector('[data-history-cards-root]');
       assert(root, 'cards root');
       assert(root.classList.contains('md:hidden'), 'hidden on md+');
+      assert(root.classList.contains('space-y-1'), 'compact spacing');
       const cards = root.querySelectorAll('[data-history-card]');
       assert(cards.length === 2, `cards=${cards.length}`);
-      assert(root.querySelector('[data-action="cancel-transaction"]'), 'cancel on card');
-      const commentEl = root.querySelector('[data-history-card] .break-words');
-      assert(commentEl?.textContent.includes('Заправка'), 'full comment');
+      assert(root.querySelector('[data-action="toggle-history-card"]'), 'toggle');
+      const details = root.querySelector('[data-history-card-details]');
+      assert(details?.classList.contains('hidden'), 'collapsed by default');
+      const commentEl = root.querySelector('[data-history-card-comment]');
+      assert(commentEl?.textContent.includes('Заправка'), 'full comment in details');
     });
 
     run('десктопная таблица без min-w-[720px]', () => {
@@ -100,11 +103,10 @@
       assert(!host.querySelector('.overflow-x-auto'), 'no horizontal scroll wrapper');
     });
 
-    run('карточка: тип, сумма, счёт, отмена', () => {
-      const card = host.querySelector('[data-history-card]');
-      assert(/Расход|expense/i.test(card.textContent) || card.textContent.includes('Расход'), card.textContent);
-      assert(card.textContent.includes('1'), 'amount present');
-      assert(card.textContent.includes('Основной'), 'account');
+    run('сводка: дата, категория, сумма', () => {
+      const summary = host.querySelector('[data-history-card-summary]');
+      assert(summary?.textContent.includes('Бензин'), 'category in summary');
+      assert(summary?.textContent.includes('1'), 'amount in summary');
     });
 
     log(fail === 0 ? 'SUMMARY: ALL PASSED' : `SUMMARY: ${fail} failed`, fail ? 'fail' : 'pass');

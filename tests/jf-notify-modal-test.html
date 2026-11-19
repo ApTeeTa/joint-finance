@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: jfNotifyModal</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Единые модальные уведомления</h1>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      showJfConfirm,
+      showJfError,
+      notifyConfirm,
+      notifyError
+    } from '../src/modules/jfNotifyModal.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('confirm: Нет → false', async () => {
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-no"]')?.click();
+      }, 0);
+      const ok = await showJfConfirm('Тест подтверждения?');
+      assert(ok === false, 'canceled');
+    });
+
+    await run('confirm: Да → true', async () => {
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-yes"]')?.click();
+      }, 0);
+      const ok = await notifyConfirm('Провести?');
+      assert(ok === true, 'confirmed');
+    });
+
+    await run('error: Понятно закрывает', async () => {
+      const pending = showJfError('Недостаточно денег в резерве категории');
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-ok"]')?.click();
+      }, 0);
+      await pending;
+      const open = document.querySelector('[data-modal="jf-notify"]:not(.hidden)');
+      assert(!open, 'closed after ok');
+    });
+
+    await run('shell: overlay data-modal=jf-notify', () => {
+      const modal = document.querySelector('[data-modal="jf-notify"]');
+      assert(modal, 'shell created after first use');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');
+    window.__QA_RESULT__ = { failed: fail, passed: fail === 0 };
+  </script>
+</body>
+</html>

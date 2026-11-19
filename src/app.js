@@ -54,6 +54,7 @@ import {
   restoreOpenModalsFromSession
 } from './modules/modalLayer.js';
 import { initModalDraftSystem } from './modules/modalDraftStore.js';
+import { notifyConfirm, notifyError } from './modules/jfNotifyModal.js';
 import { isAnyModalSubmitting } from './modules/modalFormSubmit.js';
 import { ensureDefaultIncomeCategories } from './modules/incomeCategories.js';
 import { initDisplayModeSystem } from './modules/displayMode.js';
@@ -280,7 +281,7 @@ function onStateChange() {
       updateCounters();
     }
 
-    alert(INVARIANT_ROLLBACK_ALERT);
+    notifyError(INVARIANT_ROLLBACK_ALERT);
     return;
   }
 
@@ -289,8 +290,8 @@ function onStateChange() {
   saveState(state);
 }
 
-function resetAllData() {
-  if (!confirm('Вы уверены? Все данные будут удалены без возможности восстановления.')) {
+async function resetAllData() {
+  if (!(await notifyConfirm('Вы уверены? Все данные будут удалены без возможности восстановления.'))) {
     return;
   }
   clearState();
@@ -481,8 +482,8 @@ function initProfileHandlers() {
 }
 
 function initFamilyLockHandlers() {
-  document.getElementById('family-lock-btn')?.addEventListener('click', () => {
-    if (!confirm('Выйти / заблокировать приложение на этом устройстве? Потребуется семейный пароль.')) {
+  document.getElementById('family-lock-btn')?.addEventListener('click', async () => {
+    if (!(await notifyConfirm('Выйти / заблокировать приложение на этом устройстве? Потребуется семейный пароль.'))) {
       return;
     }
     stopSyncPolling?.();

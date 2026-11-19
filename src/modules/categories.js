@@ -13,6 +13,7 @@ import {
 } from './mutationContract.js';
 import {
   todayIso,
+  normalizeTransactionIsoDate,
   getCategoryTransactions,
   sumMiscCategoryActiveSavingSpend,
   sumMiscCategoryActiveJournalExpenses,
@@ -22,8 +23,10 @@ import {
   MISC_CATEGORY_NAME
 } from './transactions.js';
 import { getCategorySpentInMonth, getCurrentYearMonth } from './categoryMonth.js';
+import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { notifyConfirm, notifyError, showJfError } from './jfNotifyModal.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -97,15 +100,6 @@ function isOverLimit(category) {
   return getLimitOverflow(category) > 0;
 }
 
-function showLimitWarning(category) {
-  const overflow = getLimitOverflow(category);
-  if (overflow > 0) {
-    alert(
-      `⚠ Вы превысили лимит категории на ${formatMoney(overflow)}. Рекомендуется увеличить лимит.`
-    );
-  }
-}
-
 function renderAccountOptions(state, selectedId = '') {
   return renderAccountSelectOptions(state, selectedId);
 }
@@ -174,18 +168,18 @@ function executeCategoryMutation({
 function createCategory(state, name, limit) {
   const nameError = validateCategoryName(name);
   if (nameError) {
-    alert(nameError);
+    notifyError(nameError);
     return false;
   }
 
   const limitError = validateLimit(limit);
   if (limitError) {
-    alert(limitError);
+    notifyError(limitError);
     return false;
   }
 
   if (String(name).trim() === MISC_CATEGORY_NAME) {
-    alert('Название «Прочее» зарезервировано для системной категории');
+    notifyError('Название «Прочее» зарезервировано для системной категории');
     return false;
   }
 
@@ -206,24 +200,24 @@ function createCategory(state, name, limit) {
 function updateCategory(state, categoryId, name, limit) {
   const nameError = validateCategoryName(name);
   if (nameError) {
-    alert(nameError);
+    notifyError(nameError);
     return false;
   }
 
   const limitError = validateLimit(limit);
   if (limitError) {
-    alert(limitError);
+    notifyError(limitError);
     return false;
   }
 
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Системную категорию нельзя редактировать');
+    notifyError('Системную категорию нельзя редактировать');
     return false;
   }
 
@@ -245,12 +239,12 @@ function updateCategory(state, categoryId, name, limit) {
 function deleteCategory(state, categoryId) {
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Системную категорию «Прочее» нельзя удалить');
+    notifyError('Системную категорию «Прочее» нельзя удалить');
     return false;
   }
 
@@ -273,18 +267,18 @@ function deleteCategory(state, categoryId) {
 function reserveFunds(state, categoryId, amount) {
   const amountError = validatePositiveAmount(amount, 'Сумма');
   if (amountError) {
-    alert(amountError);
+    notifyError(amountError);
     return false;
   }
 
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Для системной категории пополнение недоступно');
+    notifyError('Для системной категории пополнение недоступно');
     return false;
   }
 
@@ -292,7 +286,7 @@ function reserveFunds(state, categoryId, amount) {
   const freeBalance = getFreeBalance(state);
 
   if (value > freeBalance) {
-    alert('Недостаточно средств для пополнения категории.');
+    notifyError('Недостаточно средств для пополнения категории.');
     return false;
   }
 
@@ -306,7 +300,7 @@ function reserveFunds(state, categoryId, amount) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -316,18 +310,18 @@ function reserveFunds(state, categoryId, amount) {
 function unreserveFunds(state, categoryId, amount) {
   const amountError = validatePositiveAmount(amount, 'Сумма возврата');
   if (amountError) {
-    alert(amountError);
+    notifyError(amountError);
     return false;
   }
 
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Для системной категории возврат недоступен');
+    notifyError('Для системной категории возврат недоступен');
     return false;
   }
 
@@ -341,7 +335,7 @@ function unreserveFunds(state, categoryId, amount) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -379,37 +373,39 @@ function fillToLimit(state, categoryId) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
   return true;
 }
 
-function addExpense(state, categoryId, amount, accountId, comment) {
+async function addExpense(state, categoryId, amount, accountId, comment, operationDate, options = {}) {
   const amountError = validatePositiveAmount(amount, 'Сумма расхода');
   if (amountError) {
-    alert(amountError);
+    await showJfError(amountError);
     return false;
   }
 
   if (!accountId) {
-    alert('Выберите счет');
+    await showJfError('Выберите счет');
     return false;
   }
 
+  const expenseDate = normalizeTransactionIsoDate(operationDate) || todayIso();
   const result = createExpense(
     state,
     categoryId,
     amount,
     accountId,
     comment,
-    todayIso(),
-    state.profile
+    expenseDate,
+    state.profile,
+    { monthlyLimitAcknowledged: options.monthlyLimitAcknowledged === true }
   );
 
   if (!result.ok) {
-    alert(result.error);
+    await showJfError(result.error);
     return false;
   }
 
@@ -652,6 +648,10 @@ function renderExpenseModal(state) {
             <label class="${UI.label}">Комментарий</label>
             <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
+          <div>
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" required value="${todayIso()}" class="${UI.field}">
+          </div>
           <p class="text-xs text-slate-400">Автор: ${getProfileLabel(state.profile)}</p>
           <div class="flex gap-2 pt-2">
             <button type="button" data-action="close-modal" data-modal="expense" class="${UI.btnCancelBlock}">Отмена</button>
@@ -715,7 +715,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
   if (container.dataset.categoriesHandlersBound === 'true') return;
   container.dataset.categoriesHandlersBound = 'true';
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
@@ -782,7 +782,8 @@ export function initCategoriesHandlers(state, container, onUpdate) {
         pinnedFields: {
           categoryId: btn.dataset.categoryId,
           amount: '',
-          comment: ''
+          comment: '',
+          date: todayIso()
         }
       });
       return;
@@ -815,7 +816,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
       const category = findCategory(state, btn.dataset.categoryId);
       if (category && isMiscCategory(category)) return;
       closeAllOverflowMenus();
-      if (confirm('Вы уверены? Средства из категории вернутся в общий баланс.')) {
+      if (await notifyConfirm('Вы уверены? Средства из категории вернутся в общий баланс.')) {
         if (deleteCategory(state, btn.dataset.categoryId)) {
           refresh(state, container, onUpdate);
         }
@@ -876,18 +877,29 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     const expenseForm = event.target.closest('[data-form="expense"]');
     if (expenseForm) {
       const categoryId = expenseForm.categoryId.value;
+      const expenseDate = normalizeTransactionIsoDate(expenseForm.date?.value) || todayIso();
+      const amount = expenseForm.amount.value;
+      const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
+        state,
+        categoryId,
+        amount,
+        expenseDate
+      );
+      if (!limitStep.proceed) {
+        return;
+      }
       await runGuardedModalSubmit('expense', expenseForm, async () => {
-        const ok = addExpense(
+        const ok = await addExpense(
           state,
           categoryId,
-          expenseForm.amount.value,
+          amount,
           expenseForm.accountId.value,
-          expenseForm.comment.value
+          expenseForm.comment.value,
+          expenseDate,
+          { monthlyLimitAcknowledged: limitStep.monthlyLimitAcknowledged }
         );
         if (ok) {
           refresh(state, container, onUpdate);
-          const category = findCategory(state, categoryId);
-          if (category && !isMiscCategory(category)) showLimitWarning(category);
         }
         return ok;
       });

@@ -18,6 +18,7 @@ import {
 } from './obligations.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, queryAllInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { notifyConfirm, notifyError } from './jfNotifyModal.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -406,7 +407,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
   }
   container.dataset.debtsHandlersBound = 'true';
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const closeBtn = event.target.closest('[data-action="close-modal"]');
     if (closeBtn) {
@@ -445,7 +446,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
       const debtId = event.target.closest('[data-action]').dataset.debtId;
       const debt = findDebt(state, debtId);
       if (!debt || debt.type !== 'manual_debt_event') {
-        alert('Обязательство не найдено');
+        notifyError('Обязательство не найдено');
         return;
       }
 
@@ -462,12 +463,12 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
     if (action === 'delete-manual-debt') {
       closeAllOverflowMenus();
       const debtId = event.target.closest('[data-action]').dataset.debtId;
-      if (!confirm('Удалить обязательство?')) {
+      if (!(await notifyConfirm('Удалить обязательство?'))) {
         return;
       }
       const result = deleteManualDebtEvent(state, debtId);
       if (!result.ok) {
-        alert(result.error);
+        notifyError(result.error);
         return;
       }
       refresh();
@@ -478,7 +479,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
       const debtId = event.target.closest('[data-action]').dataset.debtId;
       const debt = findDebt(state, debtId);
       if (!debt) {
-        alert('Долг не найден');
+        notifyError('Долг не найден');
         return;
       }
 
@@ -515,7 +516,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
       const debtId = event.target.closest('[data-action]').dataset.debtId;
       const debt = findDebt(state, debtId);
       if (!debt) {
-        alert('Долг не найден');
+        notifyError('Долг не найден');
         return;
       }
 
@@ -555,7 +556,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
           author: state.profile
         });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh();
@@ -575,7 +576,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
           author: state.profile
         });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh();
@@ -594,7 +595,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
           date: formData.get('date')
         });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh();
@@ -610,7 +611,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
           date: formData.get('date')
         });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh();
@@ -631,7 +632,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
           state.profile
         );
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh();
@@ -641,7 +642,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
     }
 
     if (formKey === 'write-off-debt') {
-      if (!confirm('Списать остаток долга? Деньги на счёт не вернутся.')) {
+      if (!(await notifyConfirm('Списать остаток долга? Деньги на счёт не вернутся.'))) {
         return;
       }
 
@@ -654,7 +655,7 @@ export function initDebtsHandlers(state, container, onStateChange, onNavigateTab
           state.profile
         );
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh();

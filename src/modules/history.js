@@ -6,9 +6,13 @@ import {
   TYPE_LABELS,
   AUTHOR_LABELS,
   TRANSACTION_STATUS,
+  TRANSACTION_TYPES,
   todayIso,
+  normalizeTransactionIsoDate,
+  formatTransactionDateLabel,
   renderAccountSelectOptions,
-  isMiscCategory
+  isMiscCategory,
+  findTransaction
 } from './transactions.js';
 import {
   undoTransaction,
@@ -17,6 +21,8 @@ import {
 } from './financeGate.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
+import { notifyConfirm, notifyError, showJfError } from './jfNotifyModal.js';
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -85,7 +91,10 @@ function canManageTransaction(state, tx) {
 }
 
 function canEditTransaction(tx) {
-  return tx.status === TRANSACTION_STATUS.ACTIVE && !tx.service;
+  if (tx.status !== TRANSACTION_STATUS.ACTIVE || tx.service) {
+    return false;
+  }
+  return tx.type === TRANSACTION_TYPES.EXPENSE || tx.type === TRANSACTION_TYPES.ACCOUNT_DEPOSIT;
 }
 
 function findAccountById(state, accountId) {
@@ -105,6 +114,26 @@ function getTransactionAccountLine(state, tx) {
 
   const account = findAccountById(state, tx.accountId ?? tx.sourceAccountId);
   return account?.name ?? '—';
+}
+
+function truncateHistoryPreview(text, maxLen = 28) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) return '';
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen)}…`;
+}
+
+function getHistoryAmountToneClass(tx, isCancelled) {
+  if (isCancelled) return 'text-slate-400';
+  if (tx.type === TRANSACTION_TYPES.EXPENSE || tx.type === TRANSACTION_TYPES.SAVING_SPEND) {
+    return 'text-red-600';
+  }
+  if (tx.type === TRANSACTION_TYPES.ACCOUNT_DEPOSIT
+    || tx.type === TRANSACTION_TYPES.SAVING_DEPOSIT
+    || tx.type === TRANSACTION_TYPES.CATEGORY_UNRESERVE) {
+    return 'text-emerald-600';
+  }
+  return 'text-slate-900';
 }
 
 function getTransactionCategoryLine(state, tx) {
@@ -184,6 +213,94 @@ function filterHistoryTransactions(transactions, filter) {
   return transactions;
 }
 
+function getHistoryCategoryFilter(container) {
+  const value = container?.dataset?.historyCategoryFilter;
+  return typeof value === 'string' ? value : '';
+}
+
+function getHistorySearchQuery(container) {
+  const value = container?.dataset?.historySearch;
+  return typeof value === 'string' ? value : '';
+}
+
+function findCategoryName(state, categoryId) {
+  const category = (state.categories ?? []).find((item) => item.id === categoryId);
+  return category?.name ?? '';
+}
+
+/** Только активные расходы выбранной категории (доходы и прочие типы исключаются). */
+export function applyHistoryCategoryExpenseFilter(transactions, categoryId) {
+  if (!categoryId) {
+    return transactions;
+  }
+  return transactions.filter(
+    (tx) => tx.type === TRANSACTION_TYPES.EXPENSE && tx.categoryId === categoryId
+  );
+}
+
+export function applyHistorySearchFilter(transactions, state, searchQuery) {
+  const query = String(searchQuery ?? '').trim().toLowerCase();
+  if (!query) {
+    return transactions;
+  }
+  return transactions.filter((tx) => {
+    const categoryLine = getTransactionCategoryLine(state, tx);
+    const typeLabel = getTransactionTypeLabel(tx);
+    const haystack = [
+      tx.comment,
+      categoryLine,
+      typeLabel,
+      String(tx.amount ?? ''),
+      tx.date,
+      tx.accountId
+    ].join(' ').toLowerCase();
+    return haystack.includes(query);
+  });
+}
+
+export function applyHistoryViewFilters(state, transactions, options = {}) {
+  const statusFilter = options.statusFilter ?? HISTORY_FILTERS.ALL;
+  const categoryId = options.categoryId ?? '';
+  const searchQuery = options.searchQuery ?? '';
+
+  let list = filterHistoryTransactions(transactions, statusFilter);
+  list = applyHistoryCategoryExpenseFilter(list, categoryId);
+  list = applyHistorySearchFilter(list, state, searchQuery);
+  return list;
+}
+
+function renderHistoryCategoryFilterOptions(state, selectedId) {
+  const categories = (state.categories ?? []).filter((category) => Boolean(category?.id));
+  const options = categories.map((category) => {
+    const selected = category.id === selectedId ? 'selected' : '';
+    return `<option value="${escapeHtml(category.id)}" ${selected}>${escapeHtml(category.name)}</option>`;
+  });
+  return `<option value="" ${selectedId ? '' : 'selected'}>Все категории</option>${options.join('')}`;
+}
+
+function renderHistoryEmptyMessage(state, options, hasRows) {
+  if (hasRows) {
+    return null;
+  }
+  const total = getUserTransactions(state).length;
+  if (total === 0) {
+    return 'Операций пока нет';
+  }
+  const { categoryId, searchQuery } = options;
+  const search = String(searchQuery ?? '').trim();
+  if (categoryId) {
+    const name = findCategoryName(state, categoryId);
+    if (name) {
+      return `По категории «${name}» операций не найдено`;
+    }
+    return 'По выбранной категории операций не найдено';
+  }
+  if (search) {
+    return 'По заданным фильтрам операций не найдено';
+  }
+  return 'Операций не найдено';
+}
+
 function renderCategoryOptions(state) {
   const options = (state.categories ?? [])
     .filter((category) => !isMiscCategory(category))
@@ -193,7 +310,7 @@ function renderCategoryOptions(state) {
 }
 
 function renderTransactionRow(state, tx) {
-  const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
+  const dateLabel = formatTransactionDateLabel(tx.date);
   const typeLabel = getTransactionTypeLabel(tx);
   const authorLabel = AUTHOR_LABELS[tx.author] ?? tx.author;
   const isCancelled = tx.status === TRANSACTION_STATUS.CANCELLED;
@@ -222,37 +339,61 @@ function renderTransactionRow(state, tx) {
 }
 
 function renderTransactionCard(state, tx) {
-  const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
+  const dateLabel = formatTransactionDateLabel(tx.date).replace(/\.\d{4}$/, '');
   const typeLabel = getTransactionTypeLabel(tx);
+  const authorLabel = AUTHOR_LABELS[tx.author] ?? tx.author ?? '—';
   const isCancelled = tx.status === TRANSACTION_STATUS.CANCELLED;
-  const statusClass = isCancelled ? 'text-slate-400 line-through' : 'text-slate-900';
+  const statusLabel = isCancelled ? 'Отменено' : 'Активна';
+  const amountTone = getHistoryAmountToneClass(tx, isCancelled);
+  const amountClass = isCancelled ? `${amountTone} line-through` : amountTone;
   const amount = formatTransactionAmount(tx);
   const categoryLine = getTransactionCategoryLine(state, tx);
+  const headline = escapeHtml(categoryLine || typeLabel);
   const accountLine = escapeHtml(getTransactionAccountLine(state, tx));
-  const metaParts = [dateLabel];
-  if (categoryLine) {
-    metaParts.push(escapeHtml(categoryLine));
-  }
-  const metaLine = metaParts.join(' · ');
+  const commentPreview = truncateHistoryPreview(tx.comment);
   const commentText = tx.comment ? escapeHtml(tx.comment) : '';
   const pendingBadge = tx.userCategoryPending
-    ? '<span class="inline-block mt-1 text-[10px] font-semibold uppercase text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Без категории</span>'
+    ? '<span class="inline-block text-[10px] font-semibold uppercase text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Без категории</span>'
     : '';
   const actions = renderTransactionActions(state, tx);
 
   return `
     <article
-      class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${isCancelled ? 'opacity-80' : ''}"
+      class="rounded-lg border border-slate-200/90 bg-white shadow-sm ${isCancelled ? 'opacity-80' : ''}"
       data-transaction-id="${tx.id}"
       data-history-card
+      data-history-expanded="false"
     >
-      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">${typeLabel}</p>
-      <p class="mt-1 text-xl font-semibold ${statusClass}">${amount}</p>
-      <p class="mt-2 text-sm text-slate-600">${metaLine}</p>
-      <p class="mt-1 text-sm text-slate-500">${accountLine}</p>
-      ${commentText ? `<p class="mt-2 text-sm text-slate-700 break-words whitespace-normal">${commentText}</p>` : ''}
-      ${pendingBadge}
-      ${actions ? `<div class="mt-3 flex flex-wrap gap-2">${actions}</div>` : ''}
+      <button
+        type="button"
+        data-action="toggle-history-card"
+        class="w-full text-left px-2.5 py-2 flex items-center gap-2 min-w-0 touch-manipulation"
+        aria-expanded="false"
+        data-history-card-summary
+      >
+        <span class="text-[11px] tabular-nums text-slate-500 shrink-0 w-[2.75rem]">${dateLabel}</span>
+        <span class="text-xs text-slate-700 truncate min-w-0 flex-1">${headline}</span>
+        <span class="text-sm font-semibold tabular-nums shrink-0 ${amountClass}">${amount}</span>
+        ${commentPreview
+          ? `<span class="text-[11px] text-slate-400 truncate max-w-[4.75rem] sm:max-w-[6.5rem] min-w-0">${escapeHtml(commentPreview)}</span>`
+          : ''}
+        <span class="shrink-0 text-slate-400" data-history-chevron aria-hidden="true">
+          <svg class="w-4 h-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.293l3.71-4.06a.75.75 0 111.08 1.04l-4.24 4.65a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+        </span>
+      </button>
+      <div
+        data-history-card-details
+        class="hidden border-t border-slate-100 px-2.5 pb-2.5 pt-2 space-y-2"
+      >
+        <p class="text-xs text-slate-500">Тип: <span class="text-slate-700">${escapeHtml(typeLabel)}</span></p>
+        <p class="text-xs text-slate-500">Счёт: <span class="text-slate-700">${accountLine}</span></p>
+        <p class="text-xs text-slate-500">Автор: <span class="text-slate-700">${escapeHtml(authorLabel)}</span> · ${escapeHtml(statusLabel)}</p>
+        ${commentText
+          ? `<p class="text-sm text-slate-700 break-words whitespace-normal" data-history-card-comment>${commentText}</p>`
+          : '<p class="text-xs text-slate-400">Без комментария</p>'}
+        ${pendingBadge}
+        ${actions ? `<div class="flex flex-wrap gap-1.5 pt-1">${actions}</div>` : ''}
+      </div>
     </article>
   `;
 }
@@ -341,6 +482,10 @@ function renderUncategorizedExpenseModal(state) {
             <label class="${UI.label}">Комментарий</label>
             <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
+          <div>
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" required value="${todayIso()}" class="${UI.field}">
+          </div>
           <div class="flex gap-2 pt-2">
             <button type="button" data-action="close-modal" data-modal="uncategorized-expense" class="${UI.btnCancelBlock}">Отмена</button>
             <button type="submit" class="${UI.btnPrimaryBlock}">Сохранить</button>
@@ -353,15 +498,23 @@ function renderUncategorizedExpenseModal(state) {
 
 export function renderHistory(state, container) {
   const filter = getHistoryFilter(container);
-  const transactions = filterHistoryTransactions(getUserTransactions(state), filter);
+  const categoryFilter = getHistoryCategoryFilter(container);
+  const searchQuery = getHistorySearchQuery(container);
+  const allTransactions = getUserTransactions(state);
+  const transactions = applyHistoryViewFilters(state, allTransactions, {
+    statusFilter: filter,
+    categoryId: categoryFilter,
+    searchQuery
+  });
 
-  const emptyHistory = '<p class="py-10 text-center text-slate-500 text-sm">Операций пока нет</p>';
+  const emptyLabel = renderHistoryEmptyMessage(state, { categoryId: categoryFilter, searchQuery }, transactions.length > 0);
+  const emptyHistory = `<p class="py-10 text-center text-slate-500 text-sm">${escapeHtml(emptyLabel ?? 'Операций пока нет')}</p>`;
 
   const rows = transactions.length
     ? transactions.map((tx) => renderTransactionRow(state, tx)).join('')
     : `
       <tr>
-        <td colspan="7" class="py-10 text-center text-slate-500 text-sm">Операций пока нет</td>
+        <td colspan="7" class="py-10 text-center text-slate-500 text-sm">${escapeHtml(emptyLabel ?? 'Операций пока нет')}</td>
       </tr>
     `;
 
@@ -373,18 +526,32 @@ export function renderHistory(state, container) {
     <div class="${UI.panel} ${UI.panelPadding}">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 class="${UI.panelTitle}">История</h2>
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="text-xs text-slate-500">Фильтр</label>
-          <select data-history-filter-select class="${UI.field} text-sm py-1.5 min-w-[10rem]">
+        <div class="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
+          <label class="text-xs text-slate-500 shrink-0">Фильтр</label>
+          <select data-history-filter-select class="${UI.field} text-sm py-1.5 min-w-0 w-[7.5rem] sm:w-[9rem] max-w-[45vw]">
             <option value="all" ${filter === 'all' ? 'selected' : ''}>Все</option>
             <option value="active" ${filter === 'active' ? 'selected' : ''}>Активные</option>
             <option value="cancelled" ${filter === 'cancelled' ? 'selected' : ''}>Отменённые</option>
             <option value="uncategorized" ${filter === 'uncategorized' ? 'selected' : ''}>Без категории</option>
           </select>
-          <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm">Расход без категории</button>
+          <label class="text-xs text-slate-500 shrink-0">Категория</label>
+          <select data-history-category-filter-select class="${UI.field} text-sm py-1.5 min-w-0 w-[8rem] sm:w-[10rem] max-w-[50vw]" title="${categoryFilter ? escapeHtml(findCategoryName(state, categoryFilter)) : 'Все категории'}">
+            ${renderHistoryCategoryFilterOptions(state, categoryFilter)}
+          </select>
+          <label class="sr-only" for="history-search-input">Поиск</label>
+          <input
+            id="history-search-input"
+            type="search"
+            data-history-search-input
+            value="${escapeHtml(searchQuery)}"
+            placeholder="Поиск"
+            class="${UI.field} text-sm py-1.5 min-w-0 w-[6.5rem] sm:w-[9rem] max-w-[40vw]"
+            autocomplete="off"
+          />
+          <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm shrink-0">Расход без категории</button>
         </div>
       </div>
-      <div class="md:hidden min-w-0 space-y-3" data-history-cards-root>
+      <div class="md:hidden min-w-0 space-y-1" data-history-cards-root>
         ${cards}
       </div>
       <div class="hidden md:block min-w-0 w-full -mx-2 px-2" data-history-table-root>
@@ -430,7 +597,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
   if (container.dataset.historyHandlersBound === 'true') return;
   container.dataset.historyHandlersBound = 'true';
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
@@ -440,13 +607,28 @@ export function initHistoryHandlers(state, container, onUpdate) {
       return;
     }
 
+    if (target.closest('[data-action="toggle-history-card"]')) {
+      const toggle = target.closest('[data-action="toggle-history-card"]');
+      const card = toggle?.closest('[data-history-card]');
+      if (!card) return;
+      const expanded = card.dataset.historyExpanded === 'true';
+      const nextExpanded = !expanded;
+      card.dataset.historyExpanded = nextExpanded ? 'true' : 'false';
+      toggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+      const details = card.querySelector('[data-history-card-details]');
+      details?.classList.toggle('hidden', !nextExpanded);
+      const chevron = card.querySelector('[data-history-chevron] svg');
+      chevron?.classList.toggle('rotate-180', nextExpanded);
+      return;
+    }
+
     if (target.closest('[data-action="cancel-transaction"]')) {
       const btn = target.closest('[data-action="cancel-transaction"]');
-      if (!confirm('Отменить операцию? Деньги будут возвращены на место.')) return;
+      if (!(await notifyConfirm('Отменить операцию? Деньги будут возвращены на место.'))) return;
 
       const result = undoTransaction(state, btn.dataset.transactionId);
       if (!result.ok) {
-        alert(result.error);
+        notifyError(result.error);
         return;
       }
       refresh(state, container, onUpdate);
@@ -477,69 +659,108 @@ export function initHistoryHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-uncategorized-expense"]')) {
       openModal('uncategorized-expense', {
-        pinnedFields: { amount: '', comment: '', accountId: '' }
+        pinnedFields: { amount: '', comment: '', accountId: '', date: todayIso() }
       });
     }
   });
 
   container.addEventListener('change', (event) => {
-    const select = event.target.closest('[data-history-filter-select]');
-    if (!select) return;
-    container.dataset.historyFilter = select.value;
-    refresh(state, container, onUpdate);
+    const statusSelect = event.target.closest('[data-history-filter-select]');
+    if (statusSelect) {
+      container.dataset.historyFilter = statusSelect.value;
+      refresh(state, container, onUpdate);
+      return;
+    }
+    const categorySelect = event.target.closest('[data-history-category-filter-select]');
+    if (categorySelect) {
+      container.dataset.historyCategoryFilter = categorySelect.value;
+      refresh(state, container, onUpdate);
+    }
+  });
+
+  let searchDebounceId;
+  container.addEventListener('input', (event) => {
+    const searchInput = event.target.closest('[data-history-search-input]');
+    if (!searchInput) return;
+    clearTimeout(searchDebounceId);
+    searchDebounceId = setTimeout(() => {
+      container.dataset.historySearch = searchInput.value;
+      refresh(state, container, onUpdate);
+    }, 200);
   });
 
   document.addEventListener('submit', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
-    const form = event.target.closest('[data-form="edit-transaction"]');
-    if (!form) return;
-
-    await runGuardedModalSubmit('edit-transaction', form, async () => {
-      const result = updateTransactionMeta(state, form.transactionId.value, {
-        comment: form.comment.value,
-        date: form.date.value
-      });
-      if (!result.ok) {
-        alert(result.error);
-        return false;
-      }
-      refresh(state, container, onUpdate);
-      return true;
-    });
-
-    const reassignForm = event.target.closest('[data-form="reassign-expense"]');
-    if (reassignForm) {
-      await runGuardedModalSubmit('reassign-expense', reassignForm, async () => {
-        const result = reassignExpense(
-          state,
-          reassignForm.transactionId.value,
-          reassignForm.categoryId.value,
-          state.profile
-        );
+    const editForm = event.target.closest('[data-form="edit-transaction"]');
+    if (editForm) {
+      await runGuardedModalSubmit('edit-transaction', editForm, async () => {
+        const metaDate = normalizeTransactionIsoDate(editForm.date.value);
+        if (!metaDate) {
+          notifyError('Укажите корректную дату');
+          return false;
+        }
+        const result = updateTransactionMeta(state, editForm.transactionId.value, {
+          comment: editForm.comment.value,
+          date: metaDate
+        });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);
         return true;
       });
+      return;
+    }
+
+    const reassignForm = event.target.closest('[data-form="reassign-expense"]');
+    if (reassignForm) {
+      const tx = findTransaction(state, reassignForm.transactionId.value);
+      const targetCategoryId = reassignForm.categoryId.value;
+      const expenseDate = tx?.date || todayIso();
+      const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
+        state,
+        targetCategoryId,
+        tx?.amount,
+        expenseDate
+      );
+      if (!limitStep.proceed) {
+        return;
+      }
+      await runGuardedModalSubmit('reassign-expense', reassignForm, async () => {
+        const result = reassignExpense(
+          state,
+          reassignForm.transactionId.value,
+          targetCategoryId,
+          state.profile,
+          { monthlyLimitAcknowledged: limitStep.monthlyLimitAcknowledged }
+        );
+        if (!result.ok) {
+          await showJfError(result.error);
+          return false;
+        }
+        refresh(state, container, onUpdate);
+        return true;
+      });
+      return;
     }
 
     const uncategorizedForm = event.target.closest('[data-form="uncategorized-expense"]');
     if (uncategorizedForm) {
       await runGuardedModalSubmit('uncategorized-expense', uncategorizedForm, async () => {
+        const expenseDate = normalizeTransactionIsoDate(uncategorizedForm.date?.value) || todayIso();
         const result = createUncategorizedExpense(
           state,
           uncategorizedForm.amount.value,
           uncategorizedForm.accountId.value,
           uncategorizedForm.comment.value,
-          todayIso(),
+          expenseDate,
           state.profile
         );
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);

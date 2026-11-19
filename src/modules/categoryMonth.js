@@ -100,6 +100,45 @@ export function syncCategorySpentCacheAfterCategoryMove(state, fromCategoryId, t
   if (toCategoryId) syncCategorySpentCacheForMonth(state, toCategoryId, currentYm);
 }
 
+export const CATEGORY_RESERVE_INSUFFICIENT_ERROR = 'Недостаточно денег в резерве категории';
+
+/** true, если сумма расхода выводит месячные траты категории за предел лимита (лимит — ориентир, не блокировка). */
+export function isCategoryMonthlyLimitExceeded(category, spentInMonth, rubAmount) {
+  const limit = category?.limit ?? 0;
+  if (limit <= 0) return false;
+  const amount = Number(rubAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return false;
+  return spentInMonth + amount > limit;
+}
+
+/**
+ * Предпросмотр расхода: превышение месячного лимита и достаточность резерва (без мутаций state).
+ */
+export function assessCategoryMonthlyExpense(state, categoryId, rubAmount, expenseDate) {
+  const category = findCategory(state, categoryId);
+  const amount = Number(rubAmount);
+  const invalidAmount = !Number.isFinite(amount) || amount <= 0;
+  if (!category || isMiscCategory(category) || invalidAmount) {
+    return {
+      exceedsMonthlyLimit: false,
+      sufficientReserve: false,
+      reserved: category?.reserved ?? 0,
+      rubAmount: invalidAmount ? 0 : amount
+    };
+  }
+
+  const reserved = Math.max(0, category.reserved ?? 0);
+  const yearMonth = getCurrentYearMonth(expenseDate);
+  const spentInMonth = getCategorySpentInMonth(state, categoryId, yearMonth);
+
+  return {
+    exceedsMonthlyLimit: isCategoryMonthlyLimitExceeded(category, spentInMonth, amount),
+    sufficientReserve: amount <= reserved,
+    reserved,
+    rubAmount: amount
+  };
+}
+
 /** Доступно к трате из резерва с учётом месячного лимита. */
 export function getCategorySpendAvailability(category, reserved, spentInMonth) {
   const limit = category?.limit ?? 0;

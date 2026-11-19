@@ -23,6 +23,7 @@ import {
 } from './obligationPaidUntil.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi, findAppModal, queryAllInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { notifyConfirm, notifyError } from './jfNotifyModal.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -147,19 +148,19 @@ function normalizeObligation(obligation) {
 function reserveFunds(state, obligationId, amount) {
   const value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) {
-    alert('Сумма должна быть больше 0');
+    notifyError('Сумма должна быть больше 0');
     return false;
   }
 
   const obligation = findObligation(state, obligationId);
   if (!obligation) {
-    alert('Обязательство не найдено');
+    notifyError('Обязательство не найдено');
     return false;
   }
 
   const freeBalance = calculateFreeBalance(state);
   if (value > freeBalance) {
-    alert('Недостаточно средств');
+    notifyError('Недостаточно средств');
     return false;
   }
 
@@ -173,7 +174,7 @@ function reserveFunds(state, obligationId, amount) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -183,13 +184,13 @@ function reserveFunds(state, obligationId, amount) {
 function unreserveFunds(state, obligationId, amount) {
   const obligation = findObligation(state, obligationId);
   if (!obligation) {
-    alert('Обязательство не найдено');
+    notifyError('Обязательство не найдено');
     return false;
   }
 
   const value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) {
-    alert('Сумма возврата должна быть больше 0');
+    notifyError('Сумма возврата должна быть больше 0');
     return false;
   }
 
@@ -203,7 +204,7 @@ function unreserveFunds(state, obligationId, amount) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -250,11 +251,11 @@ function executeObligationMutation({
 
 function createObligation(state, data) {
   if (!data.name || !String(data.name).trim()) {
-    alert('Введите название обязательства');
+    notifyError('Введите название обязательства');
     return false;
   }
   if (!data.paidUntil) {
-    alert('Укажите срок оплаты');
+    notifyError('Укажите срок оплаты');
     return false;
   }
 
@@ -274,16 +275,16 @@ function createObligation(state, data) {
 function updateObligation(state, obligationId, data) {
   const obligation = findObligation(state, obligationId);
   if (!obligation) {
-    alert('Обязательство не найдено');
+    notifyError('Обязательство не найдено');
     return false;
   }
 
   if (!data.name || !String(data.name).trim()) {
-    alert('Введите название обязательства');
+    notifyError('Введите название обязательства');
     return false;
   }
   if (!data.paidUntil) {
-    alert('Укажите срок оплаты');
+    notifyError('Укажите срок оплаты');
     return false;
   }
 
@@ -304,7 +305,7 @@ function updateObligation(state, obligationId, data) {
 function deleteObligation(state, obligationId) {
   const obligation = findObligation(state, obligationId);
   if (!obligation) {
-    alert('Обязательство не найдено');
+    notifyError('Обязательство не найдено');
     return false;
   }
 
@@ -553,7 +554,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
   }
   container.dataset.obligationsHandlersBound = 'true';
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const closeBtn = event.target.closest('[data-action="close-modal"]');
     if (closeBtn) {
@@ -576,7 +577,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
       const obligationId = event.target.closest('[data-action]').dataset.obligationId;
       const obligation = findObligation(state, obligationId);
       if (!obligation) {
-        alert('Обязательство не найдено');
+        notifyError('Обязательство не найдено');
         return;
       }
 
@@ -593,7 +594,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
       const obligationId = event.target.closest('[data-action]').dataset.obligationId;
       const obligation = normalizeObligation(findObligation(state, obligationId) ?? {});
       if (!obligation.id) {
-        alert('Обязательство не найдено');
+        notifyError('Обязательство не найдено');
         return;
       }
 
@@ -647,7 +648,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
 
     if (action === 'delete-obligation') {
       const obligationId = event.target.closest('[data-action]').dataset.obligationId;
-      if (!confirm('Удалить обязательство?')) {
+      if (!(await notifyConfirm('Удалить обязательство?'))) {
         return;
       }
       if (deleteObligation(state, obligationId)) {
@@ -693,7 +694,7 @@ export function initObligationsHandlers(state, container, onStateChange) {
           state.profile
         );
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         return true;

@@ -16,6 +16,7 @@ import {
 } from './transactions.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { notifyConfirm, notifyError } from './jfNotifyModal.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -259,7 +260,7 @@ function registerSavingMutationStrategies() {
       const { state, entityId, payload } = result;
       const saving = findSaving(state, entityId);
       if (!saving) {
-        alert('Копилка не найдена');
+        notifyError('Копилка не найдена');
         return false;
       }
       const { changes } = payload;
@@ -305,7 +306,7 @@ function executeSavingMutation({
 
 function createSaving(state, name, targetAmount, deadlineType, deadlineDate, savingType) {
   if (!name || !String(name).trim()) {
-    alert('Введите название копилки');
+    notifyError('Введите название копилки');
     return false;
   }
 
@@ -336,18 +337,18 @@ function createSaving(state, name, targetAmount, deadlineType, deadlineDate, sav
 function updateSaving(state, savingId, name, targetAmount, deadlineType, deadlineDate, savingType) {
   const saving = findSaving(state, savingId);
   if (!saving) {
-    alert('Копилка не найдена');
+    notifyError('Копилка не найдена');
     return false;
   }
 
   if (!name || !String(name).trim()) {
-    alert('Введите название копилки');
+    notifyError('Введите название копилки');
     return false;
   }
 
   const accumulated = getSavingAccumulated(saving);
   if (targetAmount != null && targetAmount > 0 && accumulated > targetAmount) {
-    alert('Целевая сумма не может быть меньше уже накопленного');
+    notifyError('Целевая сумма не может быть меньше уже накопленного');
     return false;
   }
 
@@ -401,7 +402,7 @@ function updateSaving(state, savingId, name, targetAmount, deadlineType, deadlin
 function deleteSaving(state, savingId) {
   const saving = findSaving(state, savingId);
   if (!saving) {
-    alert('Копилка не найдена');
+    notifyError('Копилка не найдена');
     return false;
   }
 
@@ -741,7 +742,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
     toggleDeadlineDateField(container, select.dataset.deadlineType, select.value);
   });
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
@@ -822,7 +823,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
       const message = accumulated > 0
         ? `Удалить копилку? ${formatMoney(accumulated)} вернутся в общий баланс.`
         : 'Удалить копилку?';
-      if (confirm(message) && deleteSaving(state, btn.dataset.savingId)) {
+      if ((await notifyConfirm(message)) && deleteSaving(state, btn.dataset.savingId)) {
         refresh(state, container, onUpdate);
       }
     }
@@ -836,7 +837,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
     if (addForm) {
       const deadline = parseDeadlineFromForm(addForm);
       if (!deadline.ok) {
-        alert(deadline.error);
+        notifyError(deadline.error);
         return;
       }
       const targetAmount = parseOptionalTarget(addForm.targetAmount.value);
@@ -859,7 +860,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
     if (editForm) {
       const deadline = parseDeadlineFromForm(editForm);
       if (!deadline.ok) {
-        alert(deadline.error);
+        notifyError(deadline.error);
         return;
       }
       const targetAmount = parseOptionalTarget(editForm.targetAmount.value);
@@ -891,7 +892,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
           author: state.profile
         });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);
@@ -912,7 +913,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
           author: state.profile
         });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);
@@ -934,7 +935,7 @@ export function initSavingsHandlers(state, container, onUpdate) {
           state.profile
         );
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         return true;

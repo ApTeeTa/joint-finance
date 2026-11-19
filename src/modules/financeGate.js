@@ -57,9 +57,9 @@ function trackRedistribution(_kind, _result) {
   /* family mode — analytics removed */
 }
 
-export function createExpense(state, categoryId, amount, accountId, comment, date, author) {
+export function createExpense(state, categoryId, amount, accountId, comment, date, author, options = {}) {
   return runProtected(FINANCE_ENTRY_POINTS.EXPENSE, () =>
-    recordExpense(state, categoryId, amount, accountId, comment, date, author)
+    recordExpense(state, categoryId, amount, accountId, comment, date, author, options)
   );
 }
 
@@ -69,9 +69,9 @@ export function createUncategorizedExpense(state, amount, accountId, comment, da
   );
 }
 
-export function reassignExpense(state, transactionId, newCategoryId, author) {
+export function reassignExpense(state, transactionId, newCategoryId, author, options = {}) {
   return runProtected(FINANCE_ENTRY_POINTS.EXPENSE, () =>
-    reassignExpenseCategory(state, transactionId, newCategoryId, author)
+    reassignExpenseCategory(state, transactionId, newCategoryId, author, options)
   );
 }
 

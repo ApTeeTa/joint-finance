@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: подтверждение превышения лимита</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Подтверждение месячного лимита (до операции)</h1>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import { createExpense, reassignExpense, createUncategorizedExpense } from '../src/modules/financeGate.js';
+    import { withGateContext } from '../src/modules/financeGateHelpers.js';
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+    import {
+      assessCategoryMonthlyExpense,
+      CATEGORY_RESERVE_INSUFFICIENT_ERROR,
+      getCategorySpentInMonth
+    } from '../src/modules/categoryMonth.js';
+    import {
+      CATEGORY_LIMIT_CONFIRM_TITLE,
+      resolveCategoryMonthlyLimitBeforeExpense
+    } from '../src/modules/categoryLimitConfirmModal.js';
+    import { runFinanceGate } from '../src/modules/financeGateHelpers.js';
+    import { todayIso, TRANSACTION_STATUS } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+    const EXPENSE_DATE = todayIso();
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+    function snapshotFinance(state) {
+      return {
+        reserved: state.categories[0].reserved,
+        balance: state.accounts[0].balance,
+        txCount: state.transactions.length
+      };
+    }
+
+    function baseState(overrides = {}) {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 1_000_000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 100_000, reserved: 50_000, spent: 0 }],
+        obligations: [],
+        savings: [],
+        debts: [],
+        transactions: [],
+        ...overrides
+      };
+    }
+
+    function seedSpent(state, amount) {
+      state.transactions.push({
+        id: `tx-spent-${amount}`,
+        type: 'expense',
+        status: TRANSACTION_STATUS.ACTIVE,
+        categoryId: 'food',
+        accountId: 'acc',
+        amount,
+        date: EXPENSE_DATE,
+        author: 'husband'
+      });
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('1. Лимит не превышен — assess без диалога', () => {
+      const state = baseState();
+      const a = assessCategoryMonthlyExpense(state, 'food', 10_000, EXPENSE_DATE);
+      assert(!a.exceedsMonthlyLimit, 'no exceed');
+      assert(a.sufficientReserve, 'reserve ok');
+    });
+
+    await run('2. Превышение лимита, резерв ОК, acknowledged — один расход, без warnings', () => {
+      const state = baseState();
+      seedSpent(state, 95_000);
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = createExpense(state, 'food', 10_000, 'acc', '', EXPENSE_DATE, 'husband', {
+          monthlyLimitAcknowledged: true
+        });
+        assert(r.ok, r.error);
+        assert(!r.warnings?.length, 'no post warnings');
+        assert(state.transactions.filter((t) => t.type === 'expense').length === 2, 'one new tx');
+      });
+    });
+
+    await run('3. После acknowledged gate OVERSPEND не срабатывает', () => {
+      const state = baseState();
+      seedSpent(state, 95_000);
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const d = runFinanceGate('createExpense', 10_000, state, {
+          categoryId: 'food',
+          accountId: 'acc',
+          monthlyLimitAcknowledged: true
+        });
+        assert(d.decision === 'ALLOW', d.decision);
+      });
+    });
+
+    await run('4. Превышение лимита, резерв недостаточен — только текст про резерв', () => {
+      const state = baseState({ categories: [{ id: 'food', name: 'Еда', limit: 100_000, reserved: 5_000, spent: 0 }] });
+      seedSpent(state, 95_000);
+      let r;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        r = createExpense(state, 'food', 10_000, 'acc', '', EXPENSE_DATE, 'husband', {
+          monthlyLimitAcknowledged: true
+        });
+      });
+      assert(!r.ok, 'blocked');
+      assert(r.error === CATEGORY_RESERVE_INSUFFICIENT_ERROR, r.error);
+    });
+
+    await run('5. Модальное «Нет» — состояние не меняется', async () => {
+      const state = baseState();
+      seedSpent(state, 95_000);
+      const before = snapshotFinance(state);
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-no"]')?.click();
+      }, 0);
+      const step = await resolveCategoryMonthlyLimitBeforeExpense(state, 'food', 10_000, EXPENSE_DATE);
+      assert(!step.proceed, 'canceled');
+      const after = snapshotFinance(state);
+      assert(JSON.stringify(before) === JSON.stringify(after), 'unchanged');
+    });
+
+    await run('6. Модальное «Да» — proceed и acknowledged', async () => {
+      const state = baseState();
+      seedSpent(state, 95_000);
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-yes"]')?.click();
+      }, 0);
+      const step = await resolveCategoryMonthlyLimitBeforeExpense(state, 'food', 10_000, EXPENSE_DATE);
+      assert(step.proceed, 'proceed');
+      assert(step.monthlyLimitAcknowledged, 'acknowledged');
+    });
+
+    await run('7. Переназначение: лимит превышен, резерв ОК', () => {
+      const state = baseState();
+      seedSpent(state, 95_000);
+      let txId;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const u = createUncategorizedExpense(state, 10_000, 'acc', '', EXPENSE_DATE, 'husband');
+        txId = u.transaction.id;
+      });
+      const bal = state.accounts[0].balance;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = reassignExpense(state, txId, 'food', 'husband', { monthlyLimitAcknowledged: true });
+        assert(r.ok, r.error);
+        assert(!r.warnings?.length, 'no warnings');
+        assert(state.accounts[0].balance === bal, 'no second debit');
+        assert(state.categories[0].reserved === 40_000, 'reserve applied');
+      });
+    });
+
+    await run('8. Переназначение: нехватка резерва', () => {
+      const state = baseState({ categories: [{ id: 'food', name: 'Еда', limit: 100_000, reserved: 5_000, spent: 0 }] });
+      let txId;
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const u = createUncategorizedExpense(state, 10_000, 'acc', '', EXPENSE_DATE, 'husband');
+        txId = u.transaction.id;
+      });
+      withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => {
+        const r = reassignExpense(state, txId, 'food', 'husband', { monthlyLimitAcknowledged: true });
+        assert(!r.ok, 'block');
+        assert(r.error === CATEGORY_RESERVE_INSUFFICIENT_ERROR, r.error);
+      });
+    });
+
+    await run('9. Текст confirm совпадает с ТЗ', () => {
+      assert(
+        CATEGORY_LIMIT_CONFIRM_TITLE === 'Лимит категории превышен. Провести операцию?',
+        CATEGORY_LIMIT_CONFIRM_TITLE
+      );
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');
+    window.__QA_RESULT__ = { failed: fail, passed: fail === 0 };
+  </script>
+</body>
+</html>

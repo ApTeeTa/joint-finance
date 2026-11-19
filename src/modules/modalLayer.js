@@ -266,10 +266,10 @@ export function closeModal(modalName) {
 /**
  * Backdrop / «Отмена» — confirm draft discard; blocked while submitting.
  */
-export function requestCloseModal(modalName) {
+export async function requestCloseModal(modalName) {
   if (!modalName) return false;
   if (isModalSubmitting(modalName)) return false;
-  if (!confirmDiscardDraft(modalName)) return false;
+  if (!(await confirmDiscardDraft(modalName))) return false;
   clearDraft(modalName);
   closeModal(modalName);
   return true;
@@ -304,7 +304,7 @@ export function initModalDismissHandlers() {
     if (closeBtn?.dataset?.modal) {
       event.preventDefault();
       event.stopPropagation();
-      requestCloseModal(closeBtn.dataset.modal);
+      void requestCloseModal(closeBtn.dataset.modal);
       return;
     }
 
@@ -319,7 +319,7 @@ export function initModalDismissHandlers() {
 
     const modalName = modal.dataset.modal;
     if (modalName) {
-      requestCloseModal(modalName);
+      void requestCloseModal(modalName);
     }
   }, true);
 }
