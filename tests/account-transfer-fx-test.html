@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Account transfer FX</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <div id="modal-root"></div>
+  <div id="tab-content"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import { renderAccounts, initAccountsHandlers } from '../src/modules/accounts.js';
+    import { relocateModals, findAppForm, findInAppUi, openModal } from '../src/modules/modalLayer.js';
+    import { transferAccount, undoTransaction } from '../src/modules/financeGate.js';
+    import { checkFinancialInvariants } from '../src/modules/financeCoreInvariants.js';
+    import { withGateContext } from '../src/modules/financeGateHelpers.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = line;
+      out.appendChild(d);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    function run(name, fn) {
+      try {
+        fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [
+          { id: 'rub', name: 'Рублёвый', currency: 'RUB', balance: 500000, owner: 'husband' },
+          { id: 'usd', name: 'Долларовый', currency: 'USD', balance: 5000, owner: 'husband' }
+        ],
+        categories: [],
+        savings: [],
+        transactions: [],
+        obligations: [],
+        debts: []
+      };
+    }
+
+    withGateContext({ allow: true }, () => {});
+
+    run('debit: 1000 USD → 92 000 RUB на получателе', () => {
+      const state = baseState();
+      const usdBefore = state.accounts[1].balance;
+      const rubBefore = state.accounts[0].balance;
+      const r = transferAccount(state, {
+        sourceAccountId: 'usd',
+        destAccountId: 'rub',
+        sourceAmount: 1000,
+        creditAmount: 92000,
+        sourceCurrency: 'USD',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: 'test',
+        date: '2025-06-01',
+        author: 'husband'
+      });
+      assert(r.ok, r.error);
+      assert(state.accounts[1].balance === usdBefore - 1000, 'usd debit');
+      assert(state.accounts[0].balance === rubBefore + 92000, 'rub credit');
+      assert(r.transaction.exchangeRate === 92, 'rate snapshot');
+      assert(checkFinancialInvariants(state).ok, 'invariants');
+    });
+
+    run('credit: зачислить 1000 RUB — списать ~10,87 USD', () => {
+      const state = baseState();
+      state.accounts[0].balance = 1000;
+      state.accounts[1].balance = 100;
+      const sourceAmount = Math.round((1000 / 92) * 100) / 100;
+      const r = transferAccount(state, {
+        sourceAccountId: 'usd',
+        destAccountId: 'rub',
+        sourceAmount,
+        creditAmount: 1000,
+        sourceCurrency: 'USD',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: 'credit mode',
+        date: '2025-06-01',
+        author: 'husband'
+      });
+      assert(r.ok, r.error);
+      assert(state.accounts[0].balance === 1000, 'rub +1000');
+      assert(Math.abs(state.accounts[1].balance - (100 - sourceAmount)) < 0.02, `usd debit ${sourceAmount}`);
+    });
+
+    run('отмена перевода восстанавливает оба счёта', () => {
+      const state = baseState();
+      const rub0 = state.accounts[0].balance;
+      const usd0 = state.accounts[1].balance;
+      const r = transferAccount(state, {
+        sourceAccountId: 'usd',
+        destAccountId: 'rub',
+        sourceAmount: 10,
+        creditAmount: 920,
+        sourceCurrency: 'USD',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: '',
+        date: '2025-06-01',
+        author: 'husband'
+      });
+      assert(r.ok, r.error);
+      const undo = undoTransaction(state, r.transaction.id);
+      assert(undo.ok, undo.error);
+      assert(state.accounts[0].balance === rub0, 'rub restored');
+      assert(state.accounts[1].balance === usd0, 'usd restored');
+    });
+
+    run('недостаточно средств — отказ без изменения балансов', () => {
+      const state = baseState();
+      state.accounts[1].balance = 5;
+      const rub0 = state.accounts[0].balance;
+      const usd0 = state.accounts[1].balance;
+      const r = transferAccount(state, {
+        sourceAccountId: 'usd',
+        destAccountId: 'rub',
+        sourceAmount: 1000,
+        creditAmount: 92000,
+        sourceCurrency: 'USD',
+        destCurrency: 'RUB',
+        exchangeRate: 92,
+        comment: '',
+        date: '2025-06-01',
+        author: 'husband'
+      });
+      assert(!r.ok, 'must fail');
+      assert(state.accounts[0].balance === rub0 && state.accounts[1].balance === usd0, 'balances unchanged');
+    });
+
+    const host = document.getElementById('tab-content');
+    const state = baseState();
+
+    run('UI: open transfer без pinnedFields — source и режим FX', () => {
+      host.innerHTML = '';
+      document.getElementById('modal-root').innerHTML = '';
+      renderAccounts(state, host);
+      relocateModals(host);
+      initAccountsHandlers(state, host, () => {});
+
+      const btn = host.querySelector('[data-action="open-transfer"][data-account-id="rub"]')
+        ?? host.querySelector('[data-action="open-transfer"]');
+      assert(btn, 'transfer button');
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      const form = findAppForm('transfer', host);
+      assert(form, 'form');
+      assert(form.sourceAccountId.value === 'rub', `source=${form.sourceAccountId.value}`);
+
+      form.destAccountId.value = 'usd';
+      form.destAccountId.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const modeBlock = findInAppUi('[data-transfer-input-mode]', host);
+      assert(modeBlock && !modeBlock.classList.contains('hidden'), 'FX mode block visible');
+
+      form.amount.value = '1000';
+      form.amount.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const preview = findInAppUi('[data-transfer-preview]', host);
+      assert(preview && !preview.classList.contains('hidden'), 'preview visible');
+      assert(/Будет списано:/i.test(preview.textContent), preview.textContent);
+      assert(/10[,.]87/.test(preview.textContent) || /10\.86/.test(preview.textContent), preview.textContent);
+    });
+
+    run('UI: openModal(transfer) без pinnedFields после populate', () => {
+      openModal('transfer');
+      const form = findAppForm('transfer', host);
+      assert(form?.sourceAccountId?.value === 'rub', 'source preserved after open');
+    });
+
+    log(fail === 0 ? 'SUMMARY: ALL PASSED' : `SUMMARY: ${fail} failed`, fail ? 'fail' : 'pass');
+  </script>
+</body>
+</html>

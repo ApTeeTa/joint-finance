@@ -1273,17 +1273,8 @@ export function initAccountsHandlers(state, container, onUpdate, onReset) {
 
     if (target.closest('[data-action="open-transfer"]')) {
       const btn = target.closest('[data-action="open-transfer"]');
+      openModal('transfer');
       populateTransferForm(state, container, btn.dataset.accountId);
-      const form = findAppForm('transfer', container);
-      openModal('transfer', {
-        pinnedFields: form ? {
-          sourceAccountId: form.sourceAccountId?.value ?? btn.dataset.accountId ?? '',
-          destAccountId: form.destAccountId?.value ?? '',
-          amount: '',
-          comment: '',
-          date: todayIso()
-        } : undefined
-      });
       return;
     }
 

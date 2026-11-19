@@ -308,7 +308,7 @@ export function initModalDismissHandlers() {
       return;
     }
 
-    const modal = event.target.closest('[data-modal]');
+    const modal = event.target.closest(MODAL_OVERLAY_SELECTOR);
     if (!modal || modal.classList.contains('hidden')) {
       return;
     }

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>История: адаптивная разметка</title>
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body class="p-4">
+  <h1>History responsive layout</h1>
+  <pre id="out"></pre>
+  <div id="host"></div>
+  <script type="module">
+    import { renderHistory } from '../src/modules/history.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+    function log(t, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = t;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+    function run(name, fn) {
+      try { fn(); log(`PASS  ${name}`, 'pass'); }
+      catch (e) { fail++; log(`FAIL  ${name}: ${e.message}`, 'fail'); }
+    }
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [
+        { id: 'rub', name: 'Основной', currency: 'RUB', balance: 10000, owner: 'husband' },
+        { id: 'usd', name: 'Долларовый', currency: 'USD', balance: 100, owner: 'husband' }
+      ],
+      categories: [{ id: 'fuel', name: 'Бензин', limit: 0, reserved: 0, spent: 0 }],
+      transactions: [
+        {
+          id: 't1',
+          type: 'expense',
+          status: 'active',
+          amount: 1200,
+          date: '2025-11-12',
+          accountId: 'rub',
+          categoryId: 'fuel',
+          author: 'husband',
+          comment: 'Заправка автомобиля — длинный комментарий для проверки переноса строк'
+        },
+        {
+          id: 't2',
+          type: 'account_transfer',
+          status: 'active',
+          amount: 800,
+          sourceAmount: 800,
+          destAmount: 73600,
+          sourceCurrency: 'USD',
+          destCurrency: 'RUB',
+          sourceAccountId: 'usd',
+          destAccountId: 'rub',
+          date: '2025-11-10',
+          author: 'husband',
+          comment: 'Перевод'
+        }
+      ],
+      savings: [],
+      obligations: [],
+      debts: []
+    };
+
+    const host = document.getElementById('host');
+    renderHistory(state, host);
+
+    run('мобильные карточки (md:hidden)', () => {
+      const root = host.querySelector('[data-history-cards-root]');
+      assert(root, 'cards root');
+      assert(root.classList.contains('md:hidden'), 'hidden on md+');
+      const cards = root.querySelectorAll('[data-history-card]');
+      assert(cards.length === 2, `cards=${cards.length}`);
+      assert(root.querySelector('[data-action="cancel-transaction"]'), 'cancel on card');
+      const commentEl = root.querySelector('[data-history-card] .break-words');
+      assert(commentEl?.textContent.includes('Заправка'), 'full comment');
+    });
+
+    run('десктопная таблица без min-w-[720px]', () => {
+      const root = host.querySelector('[data-history-table-root]');
+      assert(root, 'table root');
+      assert(root.classList.contains('hidden'), 'table hidden until md');
+      assert(root.classList.contains('md:block') || root.className.includes('md:block'), 'md:block');
+      const table = root.querySelector('table.history-table');
+      assert(table, 'table');
+      assert(!table.className.includes('min-w-[720px]'), 'no forced 720px width');
+      assert(table.classList.contains('table-fixed'), 'table-fixed');
+    });
+
+    run('нет overflow-x-auto обёртки истории', () => {
+      assert(!host.querySelector('.overflow-x-auto'), 'no horizontal scroll wrapper');
+    });
+
+    run('карточка: тип, сумма, счёт, отмена', () => {
+      const card = host.querySelector('[data-history-card]');
+      assert(/Расход|expense/i.test(card.textContent) || card.textContent.includes('Расход'), card.textContent);
+      assert(card.textContent.includes('1'), 'amount present');
+      assert(card.textContent.includes('Основной'), 'account');
+    });
+
+    log(fail === 0 ? 'SUMMARY: ALL PASSED' : `SUMMARY: ${fail} failed`, fail ? 'fail' : 'pass');
+  </script>
+</body>
+</html>
