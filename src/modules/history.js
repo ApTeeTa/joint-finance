@@ -19,6 +19,7 @@ import {
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
+import { notifyConfirm, notifyError } from './jfNotifyModal.js';
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -432,7 +433,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
   if (container.dataset.historyHandlersBound === 'true') return;
   container.dataset.historyHandlersBound = 'true';
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
@@ -444,11 +445,11 @@ export function initHistoryHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="cancel-transaction"]')) {
       const btn = target.closest('[data-action="cancel-transaction"]');
-      if (!confirm('Отменить операцию? Деньги будут возвращены на место.')) return;
+      if (!(await notifyConfirm('Отменить операцию? Деньги будут возвращены на место.'))) return;
 
       const result = undoTransaction(state, btn.dataset.transactionId);
       if (!result.ok) {
-        alert(result.error);
+        notifyError(result.error);
         return;
       }
       refresh(state, container, onUpdate);
@@ -503,7 +504,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
           date: editForm.date.value
         });
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);
@@ -535,7 +536,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
           { monthlyLimitAcknowledged: limitStep.monthlyLimitAcknowledged }
         );
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);
@@ -556,7 +557,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
           state.profile
         );
         if (!result.ok) {
-          alert(result.error);
+          notifyError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);

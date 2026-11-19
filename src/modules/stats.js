@@ -1,4 +1,5 @@
 import { UI } from './uiTheme.js';
+import { notifyError } from './jfNotifyModal.js';
 import {
   getFinancialSummary,
   getExpensesByCategory,
@@ -371,7 +372,7 @@ export function initStatsHandlers(state, container, onStateChange) {
     if (!name) return;
     const result = renameIncomeCategory(state, categoryId, name);
     if (!result.ok) {
-      alert(result.error);
+      notifyError(result.error);
       return;
     }
     onStateChange();
@@ -385,7 +386,7 @@ export function initStatsHandlers(state, container, onStateChange) {
     event.preventDefault();
     const result = addIncomeCategory(state, form.name.value);
     if (!result.ok) {
-      alert(result.error);
+      notifyError(result.error);
       return;
     }
     form.reset();

@@ -1,4 +1,5 @@
 import { MODAL_OPEN_OVERLAY_SELECTOR } from './uiRulesEngine.js';
+import { notifyConfirm } from './jfNotifyModal.js';
 
 /**
  * Local modal form drafts (device-only). No secrets/passphrases/tokens.
@@ -148,9 +149,9 @@ export function restoreDraftIntoForm(form, modalName, options = {}) {
   });
 }
 
-export function confirmDiscardDraft(modalName) {
+export async function confirmDiscardDraft(modalName) {
   if (!hasDraft(modalName)) return true;
-  return confirm('Отменить заполнение? Черновик будет удалён.');
+  return notifyConfirm('Отменить заполнение? Черновик будет удалён.');
 }
 
 let draftSystemBound = false;

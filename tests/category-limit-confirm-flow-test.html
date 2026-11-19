@@ -23,7 +23,7 @@
       getCategorySpentInMonth
     } from '../src/modules/categoryMonth.js';
     import {
-      confirmCategoryLimitExceeded,
+      CATEGORY_LIMIT_CONFIRM_TITLE,
       resolveCategoryMonthlyLimitBeforeExpense
     } from '../src/modules/categoryLimitConfirmModal.js';
     import { runFinanceGate } from '../src/modules/financeGateHelpers.js';
@@ -137,9 +137,9 @@
       const state = baseState();
       seedSpent(state, 95_000);
       const before = snapshotFinance(state);
-      queueMicrotask(() => {
-        document.querySelector('[data-action="category-limit-confirm-no"]')?.click();
-      });
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-no"]')?.click();
+      }, 0);
       const step = await resolveCategoryMonthlyLimitBeforeExpense(state, 'food', 10_000, EXPENSE_DATE);
       assert(!step.proceed, 'canceled');
       const after = snapshotFinance(state);
@@ -149,9 +149,9 @@
     await run('6. Модальное «Да» — proceed и acknowledged', async () => {
       const state = baseState();
       seedSpent(state, 95_000);
-      queueMicrotask(() => {
-        document.querySelector('[data-action="category-limit-confirm-yes"]')?.click();
-      });
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-yes"]')?.click();
+      }, 0);
       const step = await resolveCategoryMonthlyLimitBeforeExpense(state, 'food', 10_000, EXPENSE_DATE);
       assert(step.proceed, 'proceed');
       assert(step.monthlyLimitAcknowledged, 'acknowledged');
@@ -189,10 +189,11 @@
       });
     });
 
-  await run('9. Заголовок модального окна', () => {
-      const modal = document.querySelector('[data-modal="category-limit-confirm"]');
-      assert(modal, 'modal exists');
-      assert(modal.textContent.includes('Лимит категории превышен. Провести операцию?'), 'title');
+    await run('9. Текст confirm совпадает с ТЗ', () => {
+      assert(
+        CATEGORY_LIMIT_CONFIRM_TITLE === 'Лимит категории превышен. Провести операцию?',
+        CATEGORY_LIMIT_CONFIRM_TITLE
+      );
     });
 
     log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');

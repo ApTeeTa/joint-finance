@@ -14,6 +14,7 @@
  * Architectural guard (dev-only): architectureGuard.js
  */
 import { isExperiment } from '../config/environmentConfig.js';
+import { notifyError } from './jfNotifyModal.js';
 import {
   validateMutationStrategy,
   guardUnregisteredMutationStrategy,
@@ -143,7 +144,7 @@ export function executeMutation({
         ok: false
       });
       if (dispatchResult?.error) {
-        alert(dispatchResult.error);
+        notifyError(dispatchResult.error);
       }
       return false;
     }

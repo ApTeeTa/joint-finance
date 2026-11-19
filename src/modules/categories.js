@@ -25,6 +25,7 @@ import { getCategorySpentInMonth, getCurrentYearMonth } from './categoryMonth.js
 import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { notifyConfirm, notifyError } from './jfNotifyModal.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -166,18 +167,18 @@ function executeCategoryMutation({
 function createCategory(state, name, limit) {
   const nameError = validateCategoryName(name);
   if (nameError) {
-    alert(nameError);
+    notifyError(nameError);
     return false;
   }
 
   const limitError = validateLimit(limit);
   if (limitError) {
-    alert(limitError);
+    notifyError(limitError);
     return false;
   }
 
   if (String(name).trim() === MISC_CATEGORY_NAME) {
-    alert('Название «Прочее» зарезервировано для системной категории');
+    notifyError('Название «Прочее» зарезервировано для системной категории');
     return false;
   }
 
@@ -198,24 +199,24 @@ function createCategory(state, name, limit) {
 function updateCategory(state, categoryId, name, limit) {
   const nameError = validateCategoryName(name);
   if (nameError) {
-    alert(nameError);
+    notifyError(nameError);
     return false;
   }
 
   const limitError = validateLimit(limit);
   if (limitError) {
-    alert(limitError);
+    notifyError(limitError);
     return false;
   }
 
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Системную категорию нельзя редактировать');
+    notifyError('Системную категорию нельзя редактировать');
     return false;
   }
 
@@ -237,12 +238,12 @@ function updateCategory(state, categoryId, name, limit) {
 function deleteCategory(state, categoryId) {
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Системную категорию «Прочее» нельзя удалить');
+    notifyError('Системную категорию «Прочее» нельзя удалить');
     return false;
   }
 
@@ -265,18 +266,18 @@ function deleteCategory(state, categoryId) {
 function reserveFunds(state, categoryId, amount) {
   const amountError = validatePositiveAmount(amount, 'Сумма');
   if (amountError) {
-    alert(amountError);
+    notifyError(amountError);
     return false;
   }
 
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Для системной категории пополнение недоступно');
+    notifyError('Для системной категории пополнение недоступно');
     return false;
   }
 
@@ -284,7 +285,7 @@ function reserveFunds(state, categoryId, amount) {
   const freeBalance = getFreeBalance(state);
 
   if (value > freeBalance) {
-    alert('Недостаточно средств для пополнения категории.');
+    notifyError('Недостаточно средств для пополнения категории.');
     return false;
   }
 
@@ -298,7 +299,7 @@ function reserveFunds(state, categoryId, amount) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -308,18 +309,18 @@ function reserveFunds(state, categoryId, amount) {
 function unreserveFunds(state, categoryId, amount) {
   const amountError = validatePositiveAmount(amount, 'Сумма возврата');
   if (amountError) {
-    alert(amountError);
+    notifyError(amountError);
     return false;
   }
 
   const category = findCategory(state, categoryId);
   if (!category) {
-    alert('Категория не найдена');
+    notifyError('Категория не найдена');
     return false;
   }
 
   if (isMiscCategory(category)) {
-    alert('Для системной категории возврат недоступен');
+    notifyError('Для системной категории возврат недоступен');
     return false;
   }
 
@@ -333,7 +334,7 @@ function unreserveFunds(state, categoryId, amount) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -371,7 +372,7 @@ function fillToLimit(state, categoryId) {
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -381,12 +382,12 @@ function fillToLimit(state, categoryId) {
 function addExpense(state, categoryId, amount, accountId, comment, options = {}) {
   const amountError = validatePositiveAmount(amount, 'Сумма расхода');
   if (amountError) {
-    alert(amountError);
+    notifyError(amountError);
     return false;
   }
 
   if (!accountId) {
-    alert('Выберите счет');
+    notifyError('Выберите счет');
     return false;
   }
 
@@ -402,7 +403,7 @@ function addExpense(state, categoryId, amount, accountId, comment, options = {})
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -708,7 +709,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
   if (container.dataset.categoriesHandlersBound === 'true') return;
   container.dataset.categoriesHandlersBound = 'true';
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
@@ -808,7 +809,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
       const category = findCategory(state, btn.dataset.categoryId);
       if (category && isMiscCategory(category)) return;
       closeAllOverflowMenus();
-      if (confirm('Вы уверены? Средства из категории вернутся в общий баланс.')) {
+      if (await notifyConfirm('Вы уверены? Средства из категории вернутся в общий баланс.')) {
         if (deleteCategory(state, btn.dataset.categoryId)) {
           refresh(state, container, onUpdate);
         }

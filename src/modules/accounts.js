@@ -20,6 +20,7 @@ import {
 import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { notifyConfirm, notifyError } from './jfNotifyModal.js';
 import { renderIncomeCategoryOptions } from './incomeCategories.js';
 import { isExperimentDeployment } from '../config/environmentConfig.js';
 import {
@@ -109,7 +110,7 @@ function registerAccountMutationStrategies() {
         );
         if (!depositResult.ok) {
           state.accounts.pop();
-          alert(depositResult.error);
+          notifyError(depositResult.error);
           return false;
         }
       }
@@ -126,7 +127,7 @@ function registerAccountMutationStrategies() {
       const target = findAccount(state, entityId);
 
       if (!target) {
-        alert('Счет не найден');
+        notifyError('Счет не найден');
         return false;
       }
 
@@ -220,19 +221,19 @@ function validateCurrency(currency) {
 function createAccount(state, name, currency, initialBalance, comment) {
   const nameError = validateAccountName(name);
   if (nameError) {
-    alert(nameError);
+    notifyError(nameError);
     return false;
   }
 
   const currencyError = validateCurrency(currency);
   if (currencyError) {
-    alert(currencyError);
+    notifyError(currencyError);
     return false;
   }
 
   const balanceError = validateBalance(initialBalance);
   if (balanceError) {
-    alert(balanceError);
+    notifyError(balanceError);
     return false;
   }
 
@@ -267,19 +268,19 @@ function createAccount(state, name, currency, initialBalance, comment) {
 function updateAccount(state, accountId, name, balance) {
   const nameError = validateAccountName(name);
   if (nameError) {
-    alert(nameError);
+    notifyError(nameError);
     return false;
   }
 
   const balanceError = validateBalance(balance);
   if (balanceError) {
-    alert(balanceError);
+    notifyError(balanceError);
     return false;
   }
 
   const account = findAccount(state, accountId);
   if (!account) {
-    alert('Счет не найден');
+    notifyError('Счет не найден');
     return false;
   }
 
@@ -323,7 +324,7 @@ function deleteAccount(state, accountId) {
 
   const account = findAccount(state, accountId);
   if (!account) {
-    alert('Счет не найден');
+    notifyError('Счет не найден');
     return false;
   }
 
@@ -346,7 +347,7 @@ function deleteAccount(state, accountId) {
 function depositToAccount(state, accountId, amount, comment, date, incomeCategoryId = null) {
   const amountError = validateDepositAmount(amount);
   if (amountError) {
-    alert(amountError);
+    notifyError(amountError);
     return false;
   }
 
@@ -361,7 +362,7 @@ function depositToAccount(state, accountId, amount, comment, date, incomeCategor
   );
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -430,7 +431,7 @@ function isCrossCurrencyTransfer(sourceAccount, destAccount) {
 
 function transferBetweenAccounts(state, sourceAccountId, destAccountId, inputAmount, inputMode = 'debit') {
   if (sourceAccountId === destAccountId) {
-    alert('Нельзя перевести на тот же счет');
+    notifyError('Нельзя перевести на тот же счет');
     return false;
   }
 
@@ -438,7 +439,7 @@ function transferBetweenAccounts(state, sourceAccountId, destAccountId, inputAmo
   const destAccount = findAccount(state, destAccountId);
 
   if (!sourceAccount || !destAccount) {
-    alert('Счет не найден');
+    notifyError('Счет не найден');
     return false;
   }
 
@@ -455,13 +456,13 @@ function transferBetweenAccounts(state, sourceAccountId, destAccountId, inputAmo
   );
 
   if (!Number.isFinite(sourceAmount) || sourceAmount <= 0) {
-    alert('Сумма перевода должна быть больше 0');
+    notifyError('Сумма перевода должна быть больше 0');
     return false;
   }
 
   const amountError = validateTransferAmount(sourceAmount, sourceAccount);
   if (amountError) {
-    alert(amountError);
+    notifyError(amountError);
     return false;
   }
 
@@ -485,7 +486,7 @@ function transferBetweenAccounts(state, sourceAccountId, destAccountId, inputAmo
   });
 
   if (!result.ok) {
-    alert(result.error);
+    notifyError(result.error);
     return false;
   }
 
@@ -1245,20 +1246,20 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
   if (container.dataset.accountsHandlersBound === 'true') return;
   container.dataset.accountsHandlersBound = 'true';
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', async (event) => {
     if (!isWithinAppUi(event.target, container)) return;
     const target = event.target;
 
     if (target.closest('[data-action="reset-demo-data"]')) {
       if (typeof onResetDemo === 'function') {
-        onResetDemo();
+        void onResetDemo();
       }
       return;
     }
 
     if (target.closest('[data-action="reset-all-data"]')) {
       if (typeof onReset === 'function') {
-        onReset();
+        void onReset();
       }
       return;
     }
@@ -1325,7 +1326,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
 
     if (target.closest('[data-action="delete-account"]')) {
       const btn = target.closest('[data-action="delete-account"]');
-      if (confirm('Вы уверены?')) {
+      if (await notifyConfirm('Вы уверены?')) {
         if (deleteAccount(state, btn.dataset.accountId)) {
           refresh(state, container, onUpdate);
         }
@@ -1346,7 +1347,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
     if (input) {
       const error = validateExchangeRate(input.value);
       if (error) {
-        alert(error);
+        notifyError(error);
         input.value = getExchangeRate(state);
         return;
       }
@@ -1362,7 +1363,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
       });
 
       if (!result.ok) {
-        alert(result.error);
+        notifyError(result.error);
         input.value = getExchangeRate(state);
         return;
       }
@@ -1420,7 +1421,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
       const date = topUpForm.date.value;
       const incomeCategoryId = topUpForm.incomeCategoryId?.value || null;
       if (!accountId) {
-        alert('Выберите счёт для зачисления дохода');
+        notifyError('Выберите счёт для зачисления дохода');
         return;
       }
       const ok = await runGuardedModalSubmit('topup', topUpForm, async () =>
@@ -1438,7 +1439,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
       const inputMode = getTransferInputMode(transferForm);
 
       if (!destAccountId) {
-        alert('Выберите счет-получатель');
+        notifyError('Выберите счет-получатель');
         return;
       }
 
