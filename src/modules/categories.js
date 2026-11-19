@@ -13,6 +13,7 @@ import {
 } from './mutationContract.js';
 import {
   todayIso,
+  normalizeTransactionIsoDate,
   getCategoryTransactions,
   sumMiscCategoryActiveSavingSpend,
   sumMiscCategoryActiveJournalExpenses,
@@ -379,7 +380,7 @@ function fillToLimit(state, categoryId) {
   return true;
 }
 
-async function addExpense(state, categoryId, amount, accountId, comment, options = {}) {
+async function addExpense(state, categoryId, amount, accountId, comment, operationDate, options = {}) {
   const amountError = validatePositiveAmount(amount, 'Сумма расхода');
   if (amountError) {
     await showJfError(amountError);
@@ -391,13 +392,14 @@ async function addExpense(state, categoryId, amount, accountId, comment, options
     return false;
   }
 
+  const expenseDate = normalizeTransactionIsoDate(operationDate) || todayIso();
   const result = createExpense(
     state,
     categoryId,
     amount,
     accountId,
     comment,
-    todayIso(),
+    expenseDate,
     state.profile,
     { monthlyLimitAcknowledged: options.monthlyLimitAcknowledged === true }
   );
@@ -646,6 +648,10 @@ function renderExpenseModal(state) {
             <label class="${UI.label}">Комментарий</label>
             <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
           </div>
+          <div>
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" required value="${todayIso()}" class="${UI.field}">
+          </div>
           <p class="text-xs text-slate-400">Автор: ${getProfileLabel(state.profile)}</p>
           <div class="flex gap-2 pt-2">
             <button type="button" data-action="close-modal" data-modal="expense" class="${UI.btnCancelBlock}">Отмена</button>
@@ -776,7 +782,8 @@ export function initCategoriesHandlers(state, container, onUpdate) {
         pinnedFields: {
           categoryId: btn.dataset.categoryId,
           amount: '',
-          comment: ''
+          comment: '',
+          date: todayIso()
         }
       });
       return;
@@ -870,7 +877,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     const expenseForm = event.target.closest('[data-form="expense"]');
     if (expenseForm) {
       const categoryId = expenseForm.categoryId.value;
-      const expenseDate = todayIso();
+      const expenseDate = normalizeTransactionIsoDate(expenseForm.date?.value) || todayIso();
       const amount = expenseForm.amount.value;
       const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
         state,
@@ -888,6 +895,7 @@ export function initCategoriesHandlers(state, container, onUpdate) {
           amount,
           expenseForm.accountId.value,
           expenseForm.comment.value,
+          expenseDate,
           { monthlyLimitAcknowledged: limitStep.monthlyLimitAcknowledged }
         );
         if (ok) {

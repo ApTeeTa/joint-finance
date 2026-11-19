@@ -15,7 +15,8 @@ import {
   getSavingAccumulated,
   renderAccountSelectOptions,
   TYPE_LABELS,
-  todayIso
+  todayIso,
+  normalizeTransactionIsoDate
 } from './transactions.js';
 import { calculateOwnerBalance } from './financeEngine.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm, findInAppUi } from './modalLayer.js';
@@ -1418,7 +1419,7 @@ export function initAccountsHandlers(state, container, onUpdate, onReset, onRese
       const accountId = topUpForm.accountId.value;
       const amount = topUpForm.amount.value;
       const comment = topUpForm.comment.value;
-      const date = topUpForm.date.value;
+      const date = normalizeTransactionIsoDate(topUpForm.date.value) || todayIso();
       const incomeCategoryId = topUpForm.incomeCategoryId?.value || null;
       if (!accountId) {
         notifyError('Выберите счёт для зачисления дохода');

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Дата операций: создание и редактирование</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Transaction operation date</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { todayIsoApp, formatTransactionDateLabel, getAppCalendarIsoDate } from '../src/modules/appCalendar.js';
+    import {
+      recordExpense,
+      recordAccountDeposit,
+      updateTransactionMeta,
+      syncLinkedTransactionDates,
+      getUserTransactions,
+      TRANSACTION_TYPES,
+      TRANSACTION_STATUS,
+      todayIso
+    } from '../src/modules/transactions.js';
+    import { getCategorySpentInMonth } from '../src/modules/categoryMonth.js';
+    import { calculateFreeBalance } from '../src/modules/financeEngine.js';
+    import { withGateContext } from '../src/modules/financeGateHelpers.js';
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+    function log(t, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = t;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+    function run(name, fn) {
+      try { fn(); log(`PASS  ${name}`, 'pass'); }
+      catch (e) { fail++; log(`FAIL  ${name}: ${e.message}`, 'fail'); }
+    }
+
+    function baseState() {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'rub', name: 'Основной', currency: 'RUB', balance: 50000, owner: 'husband' }],
+        categories: [
+          { id: 'food', name: 'Еда', limit: 0, reserved: 10000, spent: 0 }
+        ],
+        incomeCategories: [],
+        transactions: [],
+        savings: [],
+        obligations: [],
+        debts: []
+      };
+    }
+
+    function expense(state, ...args) {
+      return withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, () => recordExpense(state, ...args));
+    }
+    function deposit(state, ...args) {
+      return withGateContext(FINANCE_ENTRY_POINTS.ACCOUNT, () => recordAccountDeposit(state, ...args));
+    }
+
+    run('1. Новый расход по умолчанию — сегодня (Asia/Dubai)', () => {
+      const state = baseState();
+      const refToday = todayIsoApp();
+      const r = expense(state, 'food', 100, 'rub', 'тест', undefined, 'husband');
+      assert(r.ok, r.error);
+      assert(r.transaction.date === refToday, `date=${r.transaction.date}`);
+    });
+
+    run('2. Новый расход с выбранной датой', () => {
+      const state = baseState();
+      const r = expense(state, 'food', 200, 'rub', 'прошлое', '2024-03-10', 'husband');
+      assert(r.ok, r.error);
+      assert(r.transaction.date === '2024-03-10', r.transaction.date);
+    });
+
+    run('3. Новый доход по умолчанию — сегодня', () => {
+      const state = baseState();
+      const refToday = todayIsoApp();
+      const r = deposit(state, 'rub', 1000, 'доход', undefined, 'husband');
+      assert(r.ok, r.error);
+      assert(r.transaction.date === refToday, r.transaction.date);
+    });
+
+    run('4. Новый доход с выбранной датой', () => {
+      const state = baseState();
+      const r = deposit(state, 'rub', 500, 'зп', '2023-12-20', 'husband');
+      assert(r.ok, r.error);
+      assert(r.transaction.date === '2023-12-20', r.transaction.date);
+    });
+
+    run('5. Смена даты расхода без новой операции', () => {
+      const state = baseState();
+      const before = expense(state, 'food', 300, 'rub', 'x', '2025-10-01', 'husband');
+      const countBefore = state.transactions.length;
+      const createdAt = before.transaction.createdAt;
+      const r = updateTransactionMeta(state, before.transaction.id, { date: '2025-11-12' });
+      assert(r.ok, r.error);
+      assert(state.transactions.length === countBefore, 'no extra tx');
+      assert(r.transaction.date === '2025-11-12', 'new date');
+      assert(r.transaction.createdAt === createdAt, 'audit preserved');
+    });
+
+    run('6. Смена даты дохода без новой операции', () => {
+      const state = baseState();
+      const dep = deposit(state, 'rub', 700, 'c', '2025-09-01', 'husband');
+      const r = updateTransactionMeta(state, dep.transaction.id, { date: '2025-10-05' });
+      assert(r.ok, r.error);
+      assert(r.transaction.date === '2025-10-05', r.transaction.date);
+    });
+
+    run('7. createdAt не меняется при смене даты', () => {
+      const state = baseState();
+      const tx = expense(state, 'food', 50, 'rub', 'a', '2025-08-01', 'husband').transaction;
+      const stamp = tx.createdAt;
+      updateTransactionMeta(state, tx.id, { date: '2025-08-15' });
+      assert(findTx(state, tx.id).createdAt === stamp, 'createdAt');
+    });
+
+    run('8. Перенос в другой месяц меняет статистику категории', () => {
+      const state = baseState();
+      const tx = expense(state, 'food', 1000, 'rub', 'm', '2025-10-05', 'husband').transaction;
+      assert(getCategorySpentInMonth(state, 'food', '2025-10') === 1000, 'oct');
+      updateTransactionMeta(state, tx.id, { date: '2025-11-05' });
+      assert(getCategorySpentInMonth(state, 'food', '2025-10') === 0, 'left oct');
+      assert(getCategorySpentInMonth(state, 'food', '2025-11') === 1000, 'nov');
+    });
+
+    run('9. Смена даты не меняет баланс, резерв и свободные средства', () => {
+      const state = baseState();
+      const bal0 = state.accounts[0].balance;
+      const res0 = state.categories[0].reserved;
+      const free0 = calculateFreeBalance(state);
+      const tx = expense(state, 'food', 400, 'rub', 'b', '2025-10-10', 'husband').transaction;
+      const bal1 = state.accounts[0].balance;
+      const res1 = state.categories[0].reserved;
+      const free1 = calculateFreeBalance(state);
+      assert(bal1 === bal0 - 400, 'expense deducted once');
+      updateTransactionMeta(state, tx.id, { date: '2024-01-01' });
+      assert(state.accounts[0].balance === bal1, 'balance after meta');
+      assert(state.categories[0].reserved === res1, 'reserve after meta');
+      assert(calculateFreeBalance(state) === free1, 'free after meta');
+      assert(calculateFreeBalance(state) === free0 - 400, 'expected free');
+    });
+
+    run('10. Прошлая дата при создании не требует исторического баланса', () => {
+      const state = baseState();
+      state.accounts[0].balance = 500;
+      const r = expense(state, 'food', 400, 'rub', 'past', '2020-01-01', 'husband');
+      assert(r.ok, r.error || 'should succeed with current balance');
+      assert(r.transaction.date === '2020-01-01', 'past date stored');
+    });
+
+    run('11. Связанные части журнала получают одну дату', () => {
+      const state = baseState();
+      const groupId = 'grp-test';
+      state.transactions.push(
+        {
+          id: 'main',
+          type: TRANSACTION_TYPES.EXPENSE,
+          status: TRANSACTION_STATUS.ACTIVE,
+          amount: 10,
+          date: '2025-06-01',
+          categoryId: 'food',
+          accountId: 'rub',
+          groupId,
+          linkedTransactionId: 'svc',
+          createdAt: '2025-06-01T10:00:00.000Z',
+          author: 'husband'
+        },
+        {
+          id: 'svc',
+          type: 'saving_delete',
+          status: TRANSACTION_STATUS.ACTIVE,
+          amount: 0,
+          date: '2025-06-01',
+          groupId,
+          linkedTransactionId: 'main',
+          service: true,
+          createdAt: '2025-06-01T10:00:00.000Z',
+          author: 'husband'
+        }
+      );
+      updateTransactionMeta(state, 'main', { date: '2025-07-15' });
+      assert(findTx(state, 'svc').date === '2025-07-15', 'linked date');
+    });
+
+    run('12. Отмена редактирования не меняет дату', () => {
+      const state = baseState();
+      const tx = expense(state, 'food', 10, 'rub', 'c', '2025-05-05', 'husband').transaction;
+      const before = tx.date;
+      // симуляция «закрыли форму без submit» — updateTransactionMeta не вызывался
+      assert(findTx(state, tx.id).date === before, 'unchanged');
+    });
+
+    run('13. Повторное редактирование сохраняет актуальную дату', () => {
+      const state = baseState();
+      const tx = expense(state, 'food', 10, 'rub', 'd', '2025-04-01', 'husband').transaction;
+      updateTransactionMeta(state, tx.id, { date: '2025-04-20' });
+      updateTransactionMeta(state, tx.id, { date: '2025-04-25', comment: 'x' });
+      const current = findTx(state, tx.id);
+      assert(current.date === '2025-04-25', current.date);
+      updateTransactionMeta(state, tx.id, { comment: 'y' });
+      assert(findTx(state, tx.id).date === '2025-04-25', 'date kept on comment-only edit');
+    });
+
+    run('порядок истории по дате операции', () => {
+      const state = baseState();
+      expense(state, 'food', 1, 'rub', 'old', '2025-01-01', 'husband');
+      expense(state, 'food', 1, 'rub', 'new', '2025-12-01', 'husband');
+      const list = getUserTransactions(state);
+      assert(list[0].date === '2025-12-01', 'newest date first');
+    });
+
+    run('TZ: YYYY-MM-DD в UI без сдвига дня', () => {
+      assert(formatTransactionDateLabel('2025-01-31') === '31.01.2025', 'label');
+      const edge = new Date(Date.UTC(2025, 0, 31, 19, 59, 0));
+      assert(getAppCalendarIsoDate(edge) === '2025-01-31', 'dubai calendar');
+    });
+
+    function findTx(state, id) {
+      return state.transactions.find((item) => item.id === id);
+    }
+
+    log(fail === 0 ? 'SUMMARY: ALL PASSED' : `SUMMARY: ${fail} failed`, fail ? 'fail' : 'pass');
+  </script>
+</body>
+</html>

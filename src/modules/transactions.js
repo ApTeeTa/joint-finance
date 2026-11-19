@@ -121,7 +121,13 @@ import {
   syncCategorySpentForTransactionMonths,
   syncCategorySpentCacheAfterCategoryMove
 } from './categoryMonth.js';
-import { todayIsoApp } from './appCalendar.js';
+import {
+  todayIsoApp,
+  normalizeTransactionIsoDate,
+  formatTransactionDateLabel
+} from './appCalendar.js';
+
+export { normalizeTransactionIsoDate, formatTransactionDateLabel };
 
 function guardFinanceEntry(operation) {
   const guard = requireFinanceEntryPoint(operation);
@@ -253,9 +259,14 @@ export function findTransaction(state, transactionId) {
 }
 
 function sortByNewest(transactions) {
-  return [...transactions].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  return [...transactions].sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA);
+    }
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 }
 
 export function getAllTransactions(state) {
@@ -433,6 +444,8 @@ export function recordAccountDeposit(
     return { ok: false, error: 'Сумма пополнения должна быть больше 0' };
   }
 
+  const operationDate = normalizeTransactionIsoDate(date) || todayIso();
+
   account.balance = (account.balance ?? 0) + value;
   const currency = account.currency ?? 'RUB';
 
@@ -448,7 +461,7 @@ export function recordAccountDeposit(
     accountId,
     currency,
     comment,
-    date,
+    date: operationDate,
     author,
     incomeCategoryId: incomeCategoryId || undefined,
     incomeCategoryName
@@ -701,7 +714,7 @@ export function recordExpense(state, categoryId, amount, accountId, comment, dat
     return { ok: false, error: 'Сумма расхода должна быть больше 0' };
   }
 
-  const expenseDate = date || todayIso();
+  const expenseDate = normalizeTransactionIsoDate(date) || todayIso();
   const yearMonth = getCurrentYearMonth(expenseDate);
   const pendingUncategorized = userCategoryPending
     || (isMiscCategory(category) && !categoryId);
@@ -2713,25 +2726,70 @@ export function cancelTransaction(state, transactionId) {
   return { ok: true, transaction: tx };
 }
 
+const META_EDITABLE_TRANSACTION_TYPES = new Set([
+  TRANSACTION_TYPES.EXPENSE,
+  TRANSACTION_TYPES.ACCOUNT_DEPOSIT
+]);
+
+/** Синхронизировать дату связанных записей журнала (groupId / linked*), без финансовых мутаций. */
+export function syncLinkedTransactionDates(state, anchorTx, newDate) {
+  if (!anchorTx || !newDate) return [];
+  const updated = [];
+  for (const other of state.transactions ?? []) {
+    if (other.id === anchorTx.id) continue;
+    if (other.status !== TRANSACTION_STATUS.ACTIVE) continue;
+    const explicitGroup = anchorTx.groupId
+      && other.groupId === anchorTx.groupId
+      && (anchorTx.linkedTransactionId
+        || other.linkedTransactionId
+        || anchorTx.linkedDeleteTransactionId
+        || other.linkedDeleteTransactionId);
+    const linkedPair = anchorTx.linkedTransactionId === other.id
+      || other.linkedTransactionId === anchorTx.id
+      || anchorTx.linkedDeleteTransactionId === other.id
+      || other.linkedDeleteTransactionId === anchorTx.id;
+    if (!explicitGroup && !linkedPair) continue;
+    other.date = newDate;
+    updated.push(other.id);
+  }
+  return updated;
+}
+
 export function updateTransactionMeta(state, transactionId, { comment, date }) {
   const tx = findTransaction(state, transactionId);
   if (!tx) return { ok: false, error: 'Транзакция не найдена' };
+  if (!META_EDITABLE_TRANSACTION_TYPES.has(tx.type)) {
+    return { ok: false, error: 'Можно изменить дату только у расхода или дохода' };
+  }
+  if (tx.status !== TRANSACTION_STATUS.ACTIVE) {
+    return { ok: false, error: 'Можно редактировать только активные операции' };
+  }
 
   const prevDate = tx.date;
+  const auditCreatedAt = tx.createdAt;
 
   if (comment !== undefined) {
     tx.comment = String(comment ?? '').trim();
   }
-  if (date !== undefined && date) {
-    tx.date = date;
+  if (date !== undefined) {
+    const normalized = normalizeTransactionIsoDate(date);
+    if (!normalized) {
+      return { ok: false, error: 'Укажите корректную дату' };
+    }
+    if (prevDate !== normalized) {
+      tx.date = normalized;
+      syncLinkedTransactionDates(state, tx, normalized);
+    }
+  }
+
+  if (tx.createdAt !== auditCreatedAt) {
+    tx.createdAt = auditCreatedAt;
   }
 
   if (
     date !== undefined
-    && date
-    && prevDate !== date
+    && prevDate !== tx.date
     && tx.type === TRANSACTION_TYPES.EXPENSE
-    && tx.status === TRANSACTION_STATUS.ACTIVE
     && tx.categoryId
     && !tx.userCategoryPending
   ) {

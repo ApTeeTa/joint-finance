@@ -8,6 +8,8 @@ import {
   TRANSACTION_STATUS,
   TRANSACTION_TYPES,
   todayIso,
+  normalizeTransactionIsoDate,
+  formatTransactionDateLabel,
   renderAccountSelectOptions,
   isMiscCategory,
   findTransaction
@@ -89,7 +91,10 @@ function canManageTransaction(state, tx) {
 }
 
 function canEditTransaction(tx) {
-  return tx.status === TRANSACTION_STATUS.ACTIVE && !tx.service;
+  if (tx.status !== TRANSACTION_STATUS.ACTIVE || tx.service) {
+    return false;
+  }
+  return tx.type === TRANSACTION_TYPES.EXPENSE || tx.type === TRANSACTION_TYPES.ACCOUNT_DEPOSIT;
 }
 
 function findAccountById(state, accountId) {
@@ -305,7 +310,7 @@ function renderCategoryOptions(state) {
 }
 
 function renderTransactionRow(state, tx) {
-  const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
+  const dateLabel = formatTransactionDateLabel(tx.date);
   const typeLabel = getTransactionTypeLabel(tx);
   const authorLabel = AUTHOR_LABELS[tx.author] ?? tx.author;
   const isCancelled = tx.status === TRANSACTION_STATUS.CANCELLED;
@@ -334,7 +339,7 @@ function renderTransactionRow(state, tx) {
 }
 
 function renderTransactionCard(state, tx) {
-  const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—';
+  const dateLabel = formatTransactionDateLabel(tx.date).replace(/\.\d{4}$/, '');
   const typeLabel = getTransactionTypeLabel(tx);
   const authorLabel = AUTHOR_LABELS[tx.author] ?? tx.author ?? '—';
   const isCancelled = tx.status === TRANSACTION_STATUS.CANCELLED;
@@ -476,6 +481,10 @@ function renderUncategorizedExpenseModal(state) {
           <div>
             <label class="${UI.label}">Комментарий</label>
             <input type="text" name="comment" maxlength="200" class="${UI.field}" placeholder="Необязательно">
+          </div>
+          <div>
+            <label class="${UI.label}">Дата</label>
+            <input type="date" name="date" required value="${todayIso()}" class="${UI.field}">
           </div>
           <div class="flex gap-2 pt-2">
             <button type="button" data-action="close-modal" data-modal="uncategorized-expense" class="${UI.btnCancelBlock}">Отмена</button>
@@ -650,7 +659,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
 
     if (target.closest('[data-action="open-uncategorized-expense"]')) {
       openModal('uncategorized-expense', {
-        pinnedFields: { amount: '', comment: '', accountId: '' }
+        pinnedFields: { amount: '', comment: '', accountId: '', date: todayIso() }
       });
     }
   });
@@ -687,9 +696,14 @@ export function initHistoryHandlers(state, container, onUpdate) {
     const editForm = event.target.closest('[data-form="edit-transaction"]');
     if (editForm) {
       await runGuardedModalSubmit('edit-transaction', editForm, async () => {
+        const metaDate = normalizeTransactionIsoDate(editForm.date.value);
+        if (!metaDate) {
+          notifyError('Укажите корректную дату');
+          return false;
+        }
         const result = updateTransactionMeta(state, editForm.transactionId.value, {
           comment: editForm.comment.value,
-          date: editForm.date.value
+          date: metaDate
         });
         if (!result.ok) {
           notifyError(result.error);
@@ -736,12 +750,13 @@ export function initHistoryHandlers(state, container, onUpdate) {
     const uncategorizedForm = event.target.closest('[data-form="uncategorized-expense"]');
     if (uncategorizedForm) {
       await runGuardedModalSubmit('uncategorized-expense', uncategorizedForm, async () => {
+        const expenseDate = normalizeTransactionIsoDate(uncategorizedForm.date?.value) || todayIso();
         const result = createUncategorizedExpense(
           state,
           uncategorizedForm.amount.value,
           uncategorizedForm.accountId.value,
           uncategorizedForm.comment.value,
-          todayIso(),
+          expenseDate,
           state.profile
         );
         if (!result.ok) {
