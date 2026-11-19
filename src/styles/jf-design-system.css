@@ -530,7 +530,7 @@ body.app-body {
 }
 
 /* —— Modal motion —— */
-[data-modal]:not(.hidden) {
+div[data-modal].fixed.inset-0:not(.hidden) {
   animation: jf-modal-in var(--jf-motion) ease;
 }
 
@@ -543,7 +543,7 @@ body.app-body {
   }
 }
 
-[data-modal]:not(.hidden) .jf-modal-panel {
+div[data-modal].fixed.inset-0:not(.hidden) .jf-modal-panel {
   animation: jf-panel-in 220ms ease;
 }
 
@@ -559,8 +559,8 @@ body.app-body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-modal]:not(.hidden),
-  [data-modal]:not(.hidden) .jf-modal-panel {
+  div[data-modal].fixed.inset-0:not(.hidden),
+  div[data-modal].fixed.inset-0:not(.hidden) .jf-modal-panel {
     animation: none;
   }
 }

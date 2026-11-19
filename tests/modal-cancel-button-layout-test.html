@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Modal cancel button layout</title>
+  <link rel="stylesheet" href="../src/styles/jf-design-system.css">
+  <style>
+    .pass { color: green; }
+    .fail { color: red; }
+    /* Mirror index.html MODAL_OVERLAY_RULE (overlay shell only). */
+    div[data-modal].fixed.inset-0:not(.hidden) {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 100 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      padding: 1rem;
+      pointer-events: auto !important;
+    }
+    div[data-modal].fixed.inset-0:not(.hidden) > * {
+      flex: 0 0 auto;
+      width: 100%;
+      max-width: 28rem;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Cancel button must not become viewport overlay</h1>
+  <pre id="out"></pre>
+  <div id="modal-root"></div>
+  <script type="module">
+    import { renderAccounts, initAccountsHandlers } from '../src/modules/accounts.js';
+    import { relocateModals, openModal, findAppForm } from '../src/modules/modalLayer.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+
+    function log(t, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = t;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+    function run(name, fn) {
+      try { fn(); log(`PASS  ${name}`, 'pass'); }
+      catch (e) { fail += 1; log(`FAIL  ${name}: ${e.message}`, 'fail'); }
+    }
+
+    const host = document.createElement('div');
+    host.id = 'tab-content';
+    document.body.appendChild(host);
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [
+        { id: 'rub', name: 'RUB', currency: 'RUB', balance: 10000, owner: 'husband' },
+        { id: 'usd', name: 'USD', currency: 'USD', balance: 100, owner: 'husband' }
+      ],
+      categories: [], savings: [], transactions: [], obligations: [], debts: []
+    };
+
+    renderAccounts(state, host);
+    relocateModals(host);
+    initAccountsHandlers(state, host, () => {});
+
+    run('open transfer — cancel кнопка не position:fixed на весь экран', () => {
+      openModal('transfer');
+      const cancel = document.querySelector('[data-action="close-modal"][data-modal="transfer"]');
+      assert(cancel, 'cancel button');
+      const pos = getComputedStyle(cancel).position;
+      assert(pos !== 'fixed', `cancel position=${pos}`);
+      assert(pos === 'static' || pos === 'relative', `cancel position=${pos}`);
+      const inset = getComputedStyle(cancel).inset;
+      assert(inset === 'auto' || inset === '', `inset=${inset}`);
+    });
+
+    run('форма перевода кликабельна — select получателя', () => {
+      const form = findAppForm('transfer', host);
+      assert(form, 'form');
+      form.sourceAccountId.value = 'rub';
+      assert(form.destAccountId.options.length > 1, 'dest options');
+      form.destAccountId.value = 'usd';
+      assert(form.destAccountId.value === 'usd', 'dest selected');
+    });
+
+    run('overlay shell остаётся fixed inset-0', () => {
+      const shell = document.querySelector('div[data-modal="transfer"].fixed.inset-0:not(.hidden)');
+      assert(shell, 'overlay');
+      assert(getComputedStyle(shell).position === 'fixed', 'overlay fixed');
+    });
+
+    log(fail === 0 ? 'ALL PASSED' : `SUMMARY: ${fail} failed`, fail ? 'fail' : 'pass');
+  </script>
+</body>
+</html>

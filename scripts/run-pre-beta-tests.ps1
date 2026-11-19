@@ -21,6 +21,7 @@ $tests = @(
   'tests/modal-draft-store-test.html',
   'tests/modal-background-lifecycle-test.html',
   'tests/modal-open-overlay-registry-test.html',
+  'tests/modal-cancel-button-layout-test.html',
   'tests/modal-session-legacy-sanitize-test.html',
   'tests/modal-draft-input-no-false-prompt-test.html',
   'tests/production-accounts-ui-test.html',

@@ -351,14 +351,15 @@
       }
     }
 
-    [data-modal] {
+    /* Overlay shells only — not [data-modal] on «Отмена» buttons (MODAL_OVERLAY_SELECTOR). */
+    div[data-modal].fixed.inset-0 {
       display: none !important;
       pointer-events: none !important;
       visibility: hidden !important;
     }
 
     /* MODAL_OVERLAY_RULE: full-viewport dim — header included */
-    [data-modal]:not(.hidden) {
+    div[data-modal].fixed.inset-0:not(.hidden) {
       position: fixed !important;
       inset: 0 !important;
       z-index: 100 !important;
@@ -376,14 +377,14 @@
       visibility: visible !important;
     }
 
-    [data-modal].hidden {
+    div[data-modal].fixed.inset-0.hidden {
       display: none !important;
       pointer-events: none !important;
       visibility: hidden !important;
     }
 
-    [data-modal]:not(.hidden)::before,
-    [data-modal]:not(.hidden)::after {
+    div[data-modal].fixed.inset-0:not(.hidden)::before,
+    div[data-modal].fixed.inset-0:not(.hidden)::after {
       content: '';
       flex: 1 1 0;
       width: 100%;
@@ -391,18 +392,18 @@
       pointer-events: none;
     }
 
-    [data-modal]:not(.hidden) > * {
+    div[data-modal].fixed.inset-0:not(.hidden) > * {
       flex: 0 0 auto;
       width: 100%;
       max-width: 28rem;
       pointer-events: auto;
     }
 
-    [data-modal] .jf-modal-panel[data-submitting="true"] {
+    div[data-modal].fixed.inset-0 .jf-modal-panel[data-submitting="true"] {
       position: relative;
     }
 
-    [data-modal] .jf-modal-panel[data-submitting="true"]::after {
+    div[data-modal].fixed.inset-0 .jf-modal-panel[data-submitting="true"]::after {
       content: 'Сохранение…';
       position: absolute;
       bottom: 0.75rem;
