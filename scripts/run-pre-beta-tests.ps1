@@ -20,9 +20,20 @@ $tests = @(
   'tests/analytics-read-model-test.html',
   'tests/modal-draft-store-test.html',
   'tests/modal-background-lifecycle-test.html',
+  'tests/modal-open-overlay-registry-test.html',
+  'tests/modal-session-legacy-sanitize-test.html',
+  'tests/modal-draft-input-no-false-prompt-test.html',
+  'tests/production-accounts-ui-test.html',
   'tests/saving-spend-amount-validity-test.html',
+  'tests/saving-spend-partial-test.html',
+  'tests/obligation-payment-reserve-test.html',
+  'tests/obligation-stability-fix-test.html',
+  'tests/obligation-edit-date-ui-test.html',
   'tests/audit-regression-test.html',
-  'tests/app-calendar-test.html'
+  'tests/app-calendar-test.html',
+  'tests/misc-category-display-test.html',
+  'tests/history-scroll-touch-markup-test.html',
+  'tests/experiment-environment-test.html'
 )
 
 $server = Start-Process powershell -ArgumentList @(

@@ -301,7 +301,7 @@ export function renderHistory(state, container) {
           <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm">Расход без категории</button>
         </div>
       </div>
-      <div class="overflow-x-auto -mx-2 px-2 touch-pan-x">
+      <div class="overflow-x-auto -mx-2 px-2">
         <table class="w-full min-w-[720px] history-table">
           <thead>
             <tr class="text-left text-xs font-medium text-slate-400 uppercase tracking-wide">

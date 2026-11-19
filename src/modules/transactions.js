@@ -297,15 +297,48 @@ export function getAccountTransactions(state, accountId, limit = 3) {
 }
 
 export function getCategoryTransactions(state, categoryId, limit = 3) {
+  const category = findCategory(state, categoryId);
+  const includeSavingSpend = category && isMiscCategory(category);
   return getAllTransactions(state)
     .filter((tx) => {
       if (tx.status !== TRANSACTION_STATUS.ACTIVE) return false;
       if (tx.categoryId !== categoryId) return false;
-      return tx.type === TRANSACTION_TYPES.RESERVE
+      if (tx.type === TRANSACTION_TYPES.RESERVE
         || tx.type === TRANSACTION_TYPES.CATEGORY_UNRESERVE
-        || tx.type === TRANSACTION_TYPES.EXPENSE;
+        || tx.type === TRANSACTION_TYPES.EXPENSE) {
+        return true;
+      }
+      return includeSavingSpend && tx.type === TRANSACTION_TYPES.SAVING_SPEND;
     })
     .slice(0, limit);
+}
+
+/** Сумма активных saving_spend по категории (для отображения «Прочее»). */
+export function sumMiscCategoryActiveSavingSpend(state, categoryId) {
+  if (!categoryId) return 0;
+  let sum = 0;
+  for (const tx of state.transactions ?? []) {
+    if (tx.status !== TRANSACTION_STATUS.ACTIVE) continue;
+    if (tx.categoryId !== categoryId) continue;
+    if (tx.type !== TRANSACTION_TYPES.SAVING_SPEND) continue;
+    const amount = Number(tx.amount);
+    if (Number.isFinite(amount)) sum += amount;
+  }
+  return sum;
+}
+
+/** Сумма активных expense по категории (журнал; без saving_spend). */
+export function sumMiscCategoryActiveJournalExpenses(state, categoryId) {
+  if (!categoryId) return 0;
+  let sum = 0;
+  for (const tx of state.transactions ?? []) {
+    if (tx.status !== TRANSACTION_STATUS.ACTIVE) continue;
+    if (tx.categoryId !== categoryId) continue;
+    if (tx.type !== TRANSACTION_TYPES.EXPENSE) continue;
+    const amount = Number(tx.amount);
+    if (Number.isFinite(amount)) sum += amount;
+  }
+  return sum;
 }
 
 function addTransaction(state, data) {
@@ -1721,7 +1754,11 @@ export function recordSavingSpend(state, savingId, accountId, amount, comment, d
     createdAt: saving.createdAt
   };
 
-  saving.accumulated = 0;
+  if (savingType === 'single_use') {
+    saving.accumulated = 0;
+  } else {
+    saving.accumulated = Math.max(0, reserveBefore - purchaseAmount);
+  }
   account.balance = accountBalance - accountDebitAmount;
   category.spent = (category.spent ?? 0) + purchaseAmount;
 

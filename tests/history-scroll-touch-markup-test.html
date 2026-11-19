@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>История: touch-action разметка</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>History scroll touch markup</h1>
+  <p class="text-slate-500 text-sm">Реальный вертикальный свайп на устройстве этим тестом не эмулируется — только разметка и CSS-контракт.</p>
+  <pre id="out"></pre>
+  <script type="module">
+    import { renderHistory } from '../src/modules/history.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    function run(name, fn) {
+      try {
+        fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'a', name: 'RUB', currency: 'RUB', balance: 10000, owner: 'husband' }],
+      categories: [{ id: 'c', name: 'Еда', limit: 50000, reserved: 0, spent: 0 }],
+      transactions: [
+        {
+          id: 't1',
+          type: 'expense',
+          status: 'active',
+          amount: 100,
+          date: '2025-06-01',
+          accountId: 'a',
+          categoryId: 'c',
+          author: 'husband',
+          comment: 'тест'
+        }
+      ],
+      savings: [],
+      obligations: [],
+      debts: []
+    };
+
+    renderHistory(state, host);
+
+    run('обёртка таблицы — overflow-x-auto для горизонтального скролла', () => {
+      const wrap = host.querySelector('.overflow-x-auto');
+      assert(wrap, 'overflow-x-auto wrapper missing');
+      assert(wrap.querySelector('table.history-table'), 'history table missing');
+      assert(wrap.querySelector('table')?.classList.contains('min-w-[720px]'), 'min width for horizontal overflow');
+    });
+
+    run('нет touch-pan-x (блокирует вертикальную прокрутку страницы)', () => {
+      const wrap = host.querySelector('.overflow-x-auto');
+      assert(wrap, 'wrapper');
+      assert(!wrap.classList.contains('touch-pan-x'), 'touch-pan-x must not be on history wrapper');
+    });
+
+    run('глобальный стиль .overflow-x-auto допускает pan-x и pan-y', () => {
+      const probe = document.createElement('div');
+      probe.className = 'overflow-x-auto';
+      document.body.appendChild(probe);
+      const ta = getComputedStyle(probe).touchAction;
+      probe.remove();
+      assert(
+        ta.includes('pan-x') && (ta.includes('pan-y') || ta === 'auto' || ta === 'manipulation'),
+        `expected pan-x + pan-y on .overflow-x-auto, got touch-action=${ta}`
+      );
+    });
+
+    log(fail === 0 ? 'SUMMARY: ALL PASSED' : `SUMMARY: ${fail} failed`, fail ? 'fail' : 'pass');
+  </script>
+</body>
+</html>

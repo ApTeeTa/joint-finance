@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>UI: редактирование даты обязательства</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Obligation edit — paidUntil (DOM)</h1>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import { renderObligations, initObligationsHandlers } from '../src/modules/obligations.js';
+    import {
+      relocateModals,
+      getOpenModalNames,
+      initModalDismissHandlers
+    } from '../src/modules/modalLayer.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    initModalDismissHandlers();
+
+    const container = document.createElement('div');
+    container.id = 'tab-content';
+    document.body.appendChild(container);
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 200000, owner: 'husband' }],
+      obligations: [{
+        id: 'obl',
+        name: 'Интернет',
+        accountId: 'acc',
+        reserveAmount: 12000,
+        targetAmount: 3000,
+        paidUntil: '2026-06-01',
+        status: 'active',
+        payments: [{
+          amount: 3000,
+          paidUntil: '2026-06-01',
+          date: '2026-05-01',
+          accountId: 'acc'
+        }],
+        createdAt: new Date().toISOString()
+      }],
+      transactions: [],
+      categories: [],
+      savings: [],
+      debts: []
+    };
+
+    renderObligations(state, container);
+    relocateModals(container);
+    initObligationsHandlers(state, container, () => {});
+
+    await run('сохранение новой даты — без лишних модалок, резерв и платежи без изменений', async () => {
+      const reserveBefore = state.obligations[0].reserveAmount;
+      const paymentsBefore = state.obligations[0].payments.length;
+      const paymentsSnapshot = JSON.stringify(state.obligations[0].payments);
+
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.dataset.action = 'open-edit-obligation';
+      trigger.dataset.obligationId = 'obl';
+      container.appendChild(trigger);
+      trigger.click();
+
+      assert(getOpenModalNames().length === 1, 'one edit modal');
+      assert(getOpenModalNames()[0] === 'edit-obligation', 'edit-obligation open');
+
+      const form = document.querySelector('[data-form="edit-obligation"]');
+      assert(form, 'form in DOM');
+      form.paidUntil.value = '2027-03-15';
+
+      const submitPromise = new Promise((resolve) => {
+        form.addEventListener('submit', () => {
+          setTimeout(resolve, 50);
+        }, { once: true });
+      });
+      form.requestSubmit();
+      await submitPromise;
+      await new Promise((r) => setTimeout(r, 50));
+
+      assert(getOpenModalNames().length === 0, `modals after save: ${getOpenModalNames().join(', ')}`);
+      assert(state.obligations[0].paidUntil === '2027-03-15', 'date updated');
+      assert(state.obligations[0].reserveAmount === reserveBefore, 'reserve unchanged');
+      assert(state.obligations[0].payments.length === paymentsBefore, 'payments count');
+      assert(JSON.stringify(state.obligations[0].payments) === paymentsSnapshot, 'payments payload');
+    });
+
+    log(`\nSUMMARY: ${fail === 0 ? 'ALL PASSED' : `${fail} failed`}`, fail === 0 ? 'pass' : 'fail');
+  </script>
+</body>
+</html>

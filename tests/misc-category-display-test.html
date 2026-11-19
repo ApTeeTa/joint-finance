@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: отображение «Прочее»</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>«Прочее» — журнал и список операций</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      getCategoryTransactions,
+      sumMiscCategoryActiveSavingSpend,
+      sumMiscCategoryActiveJournalExpenses,
+      recordUncategorizedExpense,
+      cancelTransaction,
+      TRANSACTION_STATUS,
+      todayIso,
+      isMiscCategory
+    } from '../src/modules/transactions.js';
+    import { getCategorySpentInMonth, getCurrentYearMonth } from '../src/modules/categoryMonth.js';
+    import { getExpensesByCategory } from '../src/modules/analyticsReadModel.js';
+    import { spendSaving, undoTransaction } from '../src/modules/financeGate.js';
+    import { withGateContext } from '../src/modules/financeGateHelpers.js';
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+    function baseState(overrides = {}) {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 500000, owner: 'husband' }],
+        categories: [
+          { id: 'misc', name: 'Прочее', limit: 0, reserved: 0, spent: 0, isMisc: true },
+          { id: 'food', name: 'Еда', limit: 100000, reserved: 50000, spent: 0 }
+        ],
+        savings: [{
+          id: 's1',
+          name: 'Авто',
+          accumulated: 100000,
+          targetAmount: 200000,
+          savingType: 'recurring',
+          createdAt: new Date().toISOString()
+        }],
+        transactions: [],
+        obligations: [],
+        debts: [],
+        ...overrides
+      };
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    const runInGate = (fn) => withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, fn);
+
+    await run('активная saving_spend в getCategoryTransactions для «Прочее»', () => {
+      const state = baseState();
+      const misc = state.categories.find((c) => isMiscCategory(c));
+      runInGate(() => {
+        const r = spendSaving(state, 's1', 'acc', 40000, 'шины', todayIso(), 'husband');
+        assert(r.ok, r.error);
+      });
+      const list = getCategoryTransactions(state, misc.id, 10);
+      assert(list.some((tx) => tx.type === 'saving_spend'), 'saving_spend in list');
+      assert(list.every((tx) => tx.status === TRANSACTION_STATUS.ACTIVE), 'only active');
+    });
+
+    await run('отменённая трата копилки не в активном списке', () => {
+      const state = baseState();
+      const misc = state.categories.find((c) => isMiscCategory(c));
+      let txId;
+      runInGate(() => {
+        const r = spendSaving(state, 's1', 'acc', 30000, '', todayIso(), 'husband');
+        assert(r.ok, r.error);
+        txId = r.transaction.id;
+      });
+      runInGate(() => {
+        const undo = undoTransaction(state, txId);
+        assert(undo.ok, undo.error);
+      });
+      const list = getCategoryTransactions(state, misc.id, 10);
+      assert(!list.some((tx) => tx.id === txId), 'cancelled hidden');
+    });
+
+    await run('суммы журнала раздельны, без двойного учёта', () => {
+      const state = baseState();
+      const misc = state.categories.find((c) => isMiscCategory(c));
+      runInGate(() => {
+        spendSaving(state, 's1', 'acc', 25000, '', todayIso(), 'husband');
+        recordUncategorizedExpense(state, 15000, 'acc', 'рынок', todayIso(), 'husband');
+      });
+      const piggy = sumMiscCategoryActiveSavingSpend(state, misc.id);
+      const journal = sumMiscCategoryActiveJournalExpenses(state, misc.id);
+      assert(piggy === 25000, `piggy ${piggy}`);
+      assert(journal === 15000, `journal ${journal}`);
+      assert(piggy + journal === 40000, 'no overlap types');
+      assert(misc.spent >= 25000, 'legacy misc.spent still tracks piggy (model unchanged)');
+    });
+
+    await run('месячный spent «Еда» и аналитика без saving_spend', () => {
+      const state = baseState();
+      const misc = state.categories.find((c) => isMiscCategory(c));
+      const ym = getCurrentYearMonth();
+      runInGate(() => {
+        spendSaving(state, 's1', 'acc', 60000, '', todayIso(), 'husband');
+      });
+      const foodSpent = getCategorySpentInMonth(state, 'food', ym);
+      assert(foodSpent === 0, 'food monthly untouched');
+      const top = getExpensesByCategory(state, 20);
+      const miscRow = top.find((r) => r.categoryId === misc.id);
+      assert(!miscRow, 'analytics has no saving_spend bucket as expense');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`);
+    if (fail === 0) log('ALL PASSED', 'pass');
+  </script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Production UI: вкладка счетов</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Accounts production UI guards</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { renderAccounts } from '../src/modules/accounts.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    function run(name, fn) {
+      try {
+        fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    const host = document.createElement('div');
+    host.id = 'tab-content';
+    document.body.appendChild(host);
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'a', name: 'Основной', currency: 'RUB', balance: 1000, owner: 'husband' }],
+      categories: [],
+      savings: [],
+      transactions: [],
+      obligations: [],
+      debts: []
+    };
+
+    renderAccounts(state, host);
+
+    run('нет кнопки сброса всех данных', () => {
+      assert(!host.querySelector('[data-action="reset-all-data"]'), 'reset-all-data must be absent');
+      assert(!/Сбросить все данные/i.test(host.innerHTML), 'reset label absent');
+    });
+
+    if (fail === 0) log('ALL PASSED', 'pass');
+    else log(`FAILURES: ${fail}`, 'fail');
+  </script>
+</body>
+</html>

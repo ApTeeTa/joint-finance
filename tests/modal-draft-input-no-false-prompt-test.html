@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Черновик: ввод без ложного закрытия</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Draft — typing does not close modal</h1>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      relocateModals,
+      openModal,
+      getOpenModalNames
+    } from '../src/modules/modalLayer.js';
+    import { initModalDraftSystem, hasDraft } from '../src/modules/modalDraftStore.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    function run(name, fn) {
+      try {
+        fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    initModalDraftSystem();
+    const tab = document.createElement('div');
+    tab.id = 'tab-content';
+    document.body.appendChild(tab);
+    tab.innerHTML = `
+      <div data-modal="spend-saving" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35">
+        <form data-form="spend-saving">
+          <input name="amount" type="number" value="">
+          <input name="comment" type="text" value="">
+        </form>
+        <button type="button" data-action="close-modal" data-modal="spend-saving">Отмена</button>
+      </div>
+    `;
+    relocateModals(tab);
+    openModal('spend-saving');
+
+    run('still single open modal after input events', async () => {
+      const form = document.querySelector('[data-form="spend-saving"]');
+      form.amount.value = '100';
+      form.amount.dispatchEvent(new Event('input', { bubbles: true }));
+      form.amount.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      const open = getOpenModalNames();
+      assert(open.length === 1 && open[0] === 'spend-saving', `unexpected open set: ${open.join(', ')}`);
+      assert(hasDraft('spend-saving'), 'draft saved after input');
+    });
+
+    if (fail === 0) log('ALL PASSED', 'pass');
+    else log(`FAILURES: ${fail}`, 'fail');
+  </script>
+</body>
+</html>

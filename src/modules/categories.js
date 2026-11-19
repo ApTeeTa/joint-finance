@@ -14,6 +14,8 @@ import {
 import {
   todayIso,
   getCategoryTransactions,
+  sumMiscCategoryActiveSavingSpend,
+  sumMiscCategoryActiveJournalExpenses,
   renderAccountSelectOptions,
   TYPE_LABELS,
   isMiscCategory,
@@ -434,10 +436,11 @@ function renderExpenses(state, category) {
     const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
     const typeLabel = getTransactionTypeLabel(tx);
     const isExpense = tx.type === 'expense';
+    const isSavingSpend = tx.type === 'saving_spend';
     const isUnreserve = tx.type === 'category_unreserve';
-    const amountClass = isExpense ? 'text-red-600' : (isUnreserve ? 'text-slate-600' : 'text-amber-700');
-    const amountPrefix = (isExpense || isUnreserve) ? '−' : '+';
-    const accountLabel = isExpense
+    const amountClass = (isExpense || isSavingSpend) ? 'text-red-600' : (isUnreserve ? 'text-slate-600' : 'text-amber-700');
+    const amountPrefix = (isExpense || isSavingSpend || isUnreserve) ? '−' : '+';
+    const accountLabel = (isExpense || isSavingSpend)
       ? `<span class="block text-slate-400 truncate">${escapeHtml(getAccountLabel(state, tx.accountId))}</span>`
       : '';
 
@@ -500,7 +503,8 @@ function renderCategoryCard(state, category) {
 }
 
 function renderMiscCategoryCard(state, category) {
-  const spent = category.spent ?? 0;
+  const savingSpend = sumMiscCategoryActiveSavingSpend(state, category.id);
+  const journalExpense = sumMiscCategoryActiveJournalExpenses(state, category.id);
 
   const displayContext = getModuleDisplayContext(DISPLAY_MODULE_KEYS.CATEGORIES, {
     entityType: ENTITY_TYPES.CATEGORY
@@ -515,9 +519,12 @@ function renderMiscCategoryCard(state, category) {
     dataValue: category.id,
     itemClass: 'bg-slate-50/50',
     title: escapeHtml(category.name),
-    meta: 'Системная категория',
+    meta: 'Системная категория · суммы по журналу (копилки и расходы раздельно)',
     currency: 'RUB',
-    rawValues: { spent: createRawMoney(spent) },
+    rawValues: {
+      savingSpend: createRawMoney(savingSpend),
+      journalExpense: createRawMoney(journalExpense)
+    },
     flags: { isMiscCategory: true },
     viewMode: displayContext.viewMode,
     displayRules,

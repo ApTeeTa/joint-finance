@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Session: legacy jf-session-open-modals</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Legacy sessionStorage modal list</h1>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import {
+      relocateModals,
+      closeModal,
+      getOpenModalNames,
+      restoreOpenModalsFromSession,
+      filterRestorableSessionModalNames
+    } from '../src/modules/modalLayer.js';
+
+    const out = document.getElementById('out');
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+
+    function assert(c, m) {
+      if (!c) throw new Error(m);
+    }
+
+    function run(name, fn) {
+      try {
+        fn();
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    const tab = document.createElement('div');
+    tab.id = 'tab-content';
+    document.body.appendChild(tab);
+
+    const modalNames = [
+      'spend-saving',
+      'deposit-saving',
+      'withdraw-saving',
+      'edit-saving',
+      'add-saving',
+      'reserve-obligation',
+      'pay-obligation',
+      'ghost-modal'
+    ];
+
+    tab.innerHTML = modalNames
+      .filter((n) => n !== 'ghost-modal')
+      .map((name) => `
+        <div data-modal="${name}" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35">
+          <form data-form="${name}"><input name="x" value=""></form>
+          <button type="button" data-action="close-modal" data-modal="${name}">Отмена</button>
+        </div>
+      `).join('');
+    relocateModals(tab);
+
+    run('filter drops unknown overlays and dedupes legacy flood', () => {
+      const legacy = [
+        'spend-saving',
+        'deposit-saving',
+        'withdraw-saving',
+        'edit-saving',
+        'spend-saving',
+        'ghost-modal',
+        'pay-obligation'
+      ];
+      const filtered = filterRestorableSessionModalNames(legacy);
+      assert(filtered.length === 1, `expected 1, got ${filtered.length}: ${filtered.join(', ')}`);
+      assert(filtered[0] === 'pay-obligation', 'last unique valid wins');
+      assert(!filtered.includes('ghost-modal'), 'unknown name removed');
+    });
+
+    run('restore opens at most one modal and rewrites session', () => {
+      sessionStorage.setItem('jf-session-open-modals', JSON.stringify([
+        'spend-saving',
+        'deposit-saving',
+        'withdraw-saving',
+        'edit-saving',
+        'add-saving',
+        'reserve-obligation',
+        'pay-obligation',
+        'ghost-modal'
+      ]));
+      modalNames.filter((n) => n !== 'ghost-modal').forEach((n) => closeModal(n));
+      assert(getOpenModalNames().length === 0, 'start closed');
+      restoreOpenModalsFromSession();
+      const open = getOpenModalNames();
+      assert(open.length === 1, `one open modal, got: ${open.join(', ')}`);
+      const stored = JSON.parse(sessionStorage.getItem('jf-session-open-modals') || '[]');
+      assert(stored.length === 1, 'session sanitized to single name');
+      assert(stored[0] === open[0], 'stored matches open overlay');
+      closeModal(open[0]);
+      sessionStorage.removeItem('jf-session-open-modals');
+    });
+
+    run('all-invalid legacy list clears session without opening modals', () => {
+      sessionStorage.setItem('jf-session-open-modals', JSON.stringify(['ghost-modal', '', 42]));
+      restoreOpenModalsFromSession();
+      assert(getOpenModalNames().length === 0, 'nothing opened');
+      assert(sessionStorage.getItem('jf-session-open-modals') === null, 'session cleared');
+    });
+
+    if (fail === 0) log('ALL PASSED', 'pass');
+    else log(`FAILURES: ${fail}`, 'fail');
+  </script>
+</body>
+</html>
