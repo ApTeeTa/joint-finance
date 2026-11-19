@@ -114,7 +114,8 @@ import {
 } from './obligationPaidUntil.js';
 import {
   getCategorySpentInMonth,
-  getCategorySpendAvailability,
+  CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING,
+  isCategoryMonthlyLimitExceeded,
   getCurrentYearMonth,
   syncCategorySpentCacheForMonth,
   syncCategorySpentCachesForMonth,
@@ -706,14 +707,14 @@ export function recordExpense(state, categoryId, amount, accountId, comment, dat
   const pendingUncategorized = userCategoryPending
     || (isMiscCategory(category) && !categoryId);
 
-  const gateBlock = rejectGateDecision(
-    runFinanceGate('createExpense', rubAmount, state, {
-      categoryId: pendingUncategorized ? null : resolvedCategoryId,
-      accountId,
-      userCategoryPending: pendingUncategorized
-    })
-  );
+  const gateDecision = runFinanceGate('createExpense', rubAmount, state, {
+    categoryId: pendingUncategorized ? null : resolvedCategoryId,
+    accountId,
+    userCategoryPending: pendingUncategorized
+  });
+  const gateBlock = rejectGateDecision(gateDecision);
   if (gateBlock) return gateBlock;
+  const expenseWarnings = [...(gateDecision.warnings ?? [])];
 
   const reserved = category.reserved ?? 0;
   const accountCurrency = account.currency ?? 'RUB';
@@ -725,12 +726,12 @@ export function recordExpense(state, categoryId, amount, accountId, comment, dat
 
   if (!pendingUncategorized) {
     const spentInMonth = getCategorySpentInMonth(state, category.id, yearMonth);
-    const spendCap = getCategorySpendAvailability(category, reserved, spentInMonth);
-    if (rubAmount > spendCap) {
-      if (rubAmount > reserved) {
-        return { ok: false, error: 'Недостаточно средств в резерве категории. Сначала зарезервируйте деньги.' };
-      }
-      return { ok: false, error: 'Превышен месячный лимит категории для этой операции.' };
+    if (rubAmount > reserved) {
+      return { ok: false, error: 'Недостаточно средств в резерве категории. Сначала зарезервируйте деньги.' };
+    }
+    if (isCategoryMonthlyLimitExceeded(category, spentInMonth, rubAmount)
+      && !expenseWarnings.includes(CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING)) {
+      expenseWarnings.push(CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING);
     }
     category.reserved = reserved - rubAmount;
   }
@@ -766,6 +767,9 @@ export function recordExpense(state, categoryId, amount, accountId, comment, dat
 
   enforceFinancialInvariants(state, { operation: 'recordExpense', categoryId: category.id });
 
+  if (expenseWarnings.length) {
+    return { ok: true, transaction: tx, warnings: expenseWarnings };
+  }
   return { ok: true, transaction: tx };
 }
 
@@ -800,13 +804,14 @@ export function reassignExpenseCategory(state, transactionId, newCategoryId, aut
   const yearMonth = getCurrentYearMonth(expenseDate);
   const reserved = target.reserved ?? 0;
   const spentInMonth = getCategorySpentInMonth(state, target.id, yearMonth);
-  const spendCap = getCategorySpendAvailability(target, reserved, spentInMonth);
 
-  if (rubAmount > spendCap) {
-    if (rubAmount > reserved) {
-      return { ok: false, error: 'В категории недостаточно резерва для переноса расхода.' };
-    }
-    return { ok: false, error: 'Перенос превысит месячный лимит категории.' };
+  if (rubAmount > reserved) {
+    return { ok: false, error: 'В категории недостаточно резерва для переноса расхода.' };
+  }
+
+  const reassignWarnings = [];
+  if (isCategoryMonthlyLimitExceeded(target, spentInMonth, rubAmount)) {
+    reassignWarnings.push(CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING);
   }
 
   const prevCategoryId = tx.categoryId;
@@ -820,6 +825,9 @@ export function reassignExpenseCategory(state, transactionId, newCategoryId, aut
 
   enforceFinancialInvariants(state, { operation: 'reassignExpenseCategory', transactionId });
 
+  if (reassignWarnings.length) {
+    return { ok: true, transaction: tx, warnings: reassignWarnings };
+  }
   return { ok: true, transaction: tx };
 }
 

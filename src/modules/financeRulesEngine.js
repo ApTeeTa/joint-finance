@@ -63,7 +63,7 @@ function checkOverspend(context) {
   if (rubAmount > limit || spent + rubAmount > limit) {
     return {
       decision: 'WARN',
-      reason: 'Расход превышает лимит категории',
+      reason: 'Превышен планируемый месячный бюджет категории. Операцию можно провести при достаточном резерве.',
       ruleTriggered: 'OVERSPEND'
     };
   }

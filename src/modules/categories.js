@@ -413,6 +413,10 @@ function addExpense(state, categoryId, amount, accountId, comment) {
     return false;
   }
 
+  if (result.warnings?.length) {
+    alert(result.warnings.join('\n'));
+  }
+
   return true;
 }
 

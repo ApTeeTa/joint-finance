@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тесты: месячный лимит категории vs резерв</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Месячный лимит — предупреждение, резерв — блокировка</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    import { createExpense } from '../src/modules/financeGate.js';
+    import { withGateContext } from '../src/modules/financeGateHelpers.js';
+    import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
+    import {
+      CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING,
+      getCategorySpentInMonth
+    } from '../src/modules/categoryMonth.js';
+    import { todayIso } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const div = document.createElement('div');
+      div.className = cls;
+      div.textContent = line;
+      out.appendChild(div);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+
+  const EXPENSE_DATE = todayIso();
+
+    function baseState(overrides = {}) {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'acc', name: 'A', currency: 'RUB', balance: 1_000_000, owner: 'husband' }],
+        categories: [{ id: 'food', name: 'Еда', limit: 100_000, reserved: 50_000, spent: 0 }],
+        obligations: [],
+        savings: [],
+        debts: [],
+        transactions: [],
+        ...overrides
+      };
+    }
+
+    function seedSpent(state, amount) {
+      state.transactions.push({
+        id: `tx-spent-${amount}`,
+        type: 'expense',
+        status: 'active',
+        categoryId: 'food',
+        accountId: 'acc',
+        amount,
+        date: EXPENSE_DATE,
+        author: 'husband'
+      });
+    }
+
+    function runInGate(fn) {
+      return withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, fn);
+    }
+
+    function expense(state, amount) {
+      let result;
+      runInGate(() => {
+        result = createExpense(state, 'food', amount, 'acc', '', EXPENSE_DATE, 'husband');
+      });
+      return result;
+    }
+
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass += 1;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail += 1;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    await run('1. В пределах лимита, резерв достаточен — без предупреждения', () => {
+      const state = baseState();
+      const r = expense(state, 10_000);
+      assert(r.ok, r.error);
+      assert(!r.warnings?.length, 'no warnings');
+      assert(state.categories[0].reserved === 40_000, `reserve=${state.categories[0].reserved}`);
+      assert(state.accounts[0].balance === 990_000, 'account debited');
+    });
+
+    await run('2. Превышение лимита, резерв достаточен — ok + предупреждение', () => {
+      const state = baseState();
+      seedSpent(state, 95_000);
+      const r = expense(state, 10_000);
+      assert(r.ok, r.error);
+      assert(r.warnings?.includes(CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING), 'limit warning');
+      assert(state.categories[0].reserved === 40_000, `reserve=${state.categories[0].reserved}`);
+      assert(getCategorySpentInMonth(state, 'food', EXPENSE_DATE.slice(0, 7)) === 105_000, 'spent total');
+    });
+
+    await run('3. В пределах лимита, резерв недостаточен — блокировка', () => {
+      const state = baseState({ categories: [{ id: 'food', name: 'Еда', limit: 100_000, reserved: 5_000, spent: 0 }] });
+      const r = expense(state, 10_000);
+      assert(!r.ok, 'must block');
+      assert(/резерв/i.test(r.error ?? ''), r.error);
+      assert(state.categories[0].reserved === 5_000, 'reserve unchanged');
+    });
+
+    await run('4. Превышение лимита и нехватка резерва — блокировка по резерву', () => {
+      const state = baseState({ categories: [{ id: 'food', name: 'Еда', limit: 100_000, reserved: 5_000, spent: 0 }] });
+      seedSpent(state, 95_000);
+      const r = expense(state, 10_000);
+      assert(!r.ok, 'must block');
+      assert(/резерв/i.test(r.error ?? ''), r.error);
+    });
+
+    await run('5. Расход ровно на остаток месячного лимита — без предупреждения', () => {
+      const state = baseState();
+      seedSpent(state, 80_000);
+      const r = expense(state, 20_000);
+      assert(r.ok, r.error);
+      assert(!r.warnings?.length, 'exactly at limit — no warning');
+    });
+
+    await run('6. Расход ровно на весь резерв — ok', () => {
+      const state = baseState({ categories: [{ id: 'food', name: 'Еда', limit: 200_000, reserved: 15_000, spent: 0 }] });
+      const r = expense(state, 15_000);
+      assert(r.ok, r.error);
+      assert(state.categories[0].reserved === 0, 'reserve exhausted');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');
+    window.__QA_RESULT__ = { failed: fail, passed: fail === 0 };
+  </script>
+</body>
+</html>

@@ -34,6 +34,7 @@ $tests = @(
   'tests/audit-regression-test.html',
   'tests/app-calendar-test.html',
   'tests/misc-category-display-test.html',
+  'tests/category-monthly-limit-expense-test.html',
   'tests/history-scroll-touch-markup-test.html',
   'tests/history-responsive-layout-test.html',
   'tests/experiment-environment-test.html'

@@ -100,6 +100,18 @@ export function syncCategorySpentCacheAfterCategoryMove(state, fromCategoryId, t
   if (toCategoryId) syncCategorySpentCacheForMonth(state, toCategoryId, currentYm);
 }
 
+export const CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING =
+  'Превышен планируемый месячный бюджет категории. Операция проведена из доступного резерва.';
+
+/** true, если сумма расхода выводит месячные траты категории за предел лимита (лимит — ориентир, не блокировка). */
+export function isCategoryMonthlyLimitExceeded(category, spentInMonth, rubAmount) {
+  const limit = category?.limit ?? 0;
+  if (limit <= 0) return false;
+  const amount = Number(rubAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return false;
+  return spentInMonth + amount > limit;
+}
+
 /** Доступно к трате из резерва с учётом месячного лимита. */
 export function getCategorySpendAvailability(category, reserved, spentInMonth) {
   const limit = category?.limit ?? 0;
