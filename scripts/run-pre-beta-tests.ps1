@@ -39,6 +39,7 @@ $tests = @(
   'tests/jf-notify-modal-test.html',
   'tests/history-scroll-touch-markup-test.html',
   'tests/history-responsive-layout-test.html',
+  'tests/history-compact-mobile-test.html',
   'tests/experiment-environment-test.html'
 )
 

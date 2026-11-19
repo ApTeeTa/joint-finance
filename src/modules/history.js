@@ -6,6 +6,7 @@ import {
   TYPE_LABELS,
   AUTHOR_LABELS,
   TRANSACTION_STATUS,
+  TRANSACTION_TYPES,
   todayIso,
   renderAccountSelectOptions,
   isMiscCategory,
@@ -108,6 +109,26 @@ function getTransactionAccountLine(state, tx) {
 
   const account = findAccountById(state, tx.accountId ?? tx.sourceAccountId);
   return account?.name ?? '—';
+}
+
+function truncateHistoryPreview(text, maxLen = 28) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) return '';
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen)}…`;
+}
+
+function getHistoryAmountToneClass(tx, isCancelled) {
+  if (isCancelled) return 'text-slate-400';
+  if (tx.type === TRANSACTION_TYPES.EXPENSE || tx.type === TRANSACTION_TYPES.SAVING_SPEND) {
+    return 'text-red-600';
+  }
+  if (tx.type === TRANSACTION_TYPES.ACCOUNT_DEPOSIT
+    || tx.type === TRANSACTION_TYPES.SAVING_DEPOSIT
+    || tx.type === TRANSACTION_TYPES.CATEGORY_UNRESERVE) {
+    return 'text-emerald-600';
+  }
+  return 'text-slate-900';
 }
 
 function getTransactionCategoryLine(state, tx) {
@@ -225,37 +246,61 @@ function renderTransactionRow(state, tx) {
 }
 
 function renderTransactionCard(state, tx) {
-  const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU') : '—';
+  const dateLabel = tx.date ? new Date(tx.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—';
   const typeLabel = getTransactionTypeLabel(tx);
+  const authorLabel = AUTHOR_LABELS[tx.author] ?? tx.author ?? '—';
   const isCancelled = tx.status === TRANSACTION_STATUS.CANCELLED;
-  const statusClass = isCancelled ? 'text-slate-400 line-through' : 'text-slate-900';
+  const statusLabel = isCancelled ? 'Отменено' : 'Активна';
+  const amountTone = getHistoryAmountToneClass(tx, isCancelled);
+  const amountClass = isCancelled ? `${amountTone} line-through` : amountTone;
   const amount = formatTransactionAmount(tx);
   const categoryLine = getTransactionCategoryLine(state, tx);
+  const headline = escapeHtml(categoryLine || typeLabel);
   const accountLine = escapeHtml(getTransactionAccountLine(state, tx));
-  const metaParts = [dateLabel];
-  if (categoryLine) {
-    metaParts.push(escapeHtml(categoryLine));
-  }
-  const metaLine = metaParts.join(' · ');
+  const commentPreview = truncateHistoryPreview(tx.comment);
   const commentText = tx.comment ? escapeHtml(tx.comment) : '';
   const pendingBadge = tx.userCategoryPending
-    ? '<span class="inline-block mt-1 text-[10px] font-semibold uppercase text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Без категории</span>'
+    ? '<span class="inline-block text-[10px] font-semibold uppercase text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Без категории</span>'
     : '';
   const actions = renderTransactionActions(state, tx);
 
   return `
     <article
-      class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${isCancelled ? 'opacity-80' : ''}"
+      class="rounded-lg border border-slate-200/90 bg-white shadow-sm ${isCancelled ? 'opacity-80' : ''}"
       data-transaction-id="${tx.id}"
       data-history-card
+      data-history-expanded="false"
     >
-      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">${typeLabel}</p>
-      <p class="mt-1 text-xl font-semibold ${statusClass}">${amount}</p>
-      <p class="mt-2 text-sm text-slate-600">${metaLine}</p>
-      <p class="mt-1 text-sm text-slate-500">${accountLine}</p>
-      ${commentText ? `<p class="mt-2 text-sm text-slate-700 break-words whitespace-normal">${commentText}</p>` : ''}
-      ${pendingBadge}
-      ${actions ? `<div class="mt-3 flex flex-wrap gap-2">${actions}</div>` : ''}
+      <button
+        type="button"
+        data-action="toggle-history-card"
+        class="w-full text-left px-2.5 py-2 flex items-center gap-2 min-w-0 touch-manipulation"
+        aria-expanded="false"
+        data-history-card-summary
+      >
+        <span class="text-[11px] tabular-nums text-slate-500 shrink-0 w-[2.75rem]">${dateLabel}</span>
+        <span class="text-xs text-slate-700 truncate min-w-0 flex-1">${headline}</span>
+        <span class="text-sm font-semibold tabular-nums shrink-0 ${amountClass}">${amount}</span>
+        ${commentPreview
+          ? `<span class="text-[11px] text-slate-400 truncate max-w-[4.75rem] sm:max-w-[6.5rem] min-w-0">${escapeHtml(commentPreview)}</span>`
+          : ''}
+        <span class="shrink-0 text-slate-400" data-history-chevron aria-hidden="true">
+          <svg class="w-4 h-4 transition-transform duration-150" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.293l3.71-4.06a.75.75 0 111.08 1.04l-4.24 4.65a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+        </span>
+      </button>
+      <div
+        data-history-card-details
+        class="hidden border-t border-slate-100 px-2.5 pb-2.5 pt-2 space-y-2"
+      >
+        <p class="text-xs text-slate-500">Тип: <span class="text-slate-700">${escapeHtml(typeLabel)}</span></p>
+        <p class="text-xs text-slate-500">Счёт: <span class="text-slate-700">${accountLine}</span></p>
+        <p class="text-xs text-slate-500">Автор: <span class="text-slate-700">${escapeHtml(authorLabel)}</span> · ${escapeHtml(statusLabel)}</p>
+        ${commentText
+          ? `<p class="text-sm text-slate-700 break-words whitespace-normal" data-history-card-comment>${commentText}</p>`
+          : '<p class="text-xs text-slate-400">Без комментария</p>'}
+        ${pendingBadge}
+        ${actions ? `<div class="flex flex-wrap gap-1.5 pt-1">${actions}</div>` : ''}
+      </div>
     </article>
   `;
 }
@@ -387,7 +432,7 @@ export function renderHistory(state, container) {
           <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm">Расход без категории</button>
         </div>
       </div>
-      <div class="md:hidden min-w-0 space-y-3" data-history-cards-root>
+      <div class="md:hidden min-w-0 space-y-1" data-history-cards-root>
         ${cards}
       </div>
       <div class="hidden md:block min-w-0 w-full -mx-2 px-2" data-history-table-root>
@@ -440,6 +485,21 @@ export function initHistoryHandlers(state, container, onUpdate) {
     if (target.closest('[data-action="close-modal"]')) {
       const btn = target.closest('[data-action="close-modal"]');
       closeModal(btn.dataset.modal);
+      return;
+    }
+
+    if (target.closest('[data-action="toggle-history-card"]')) {
+      const toggle = target.closest('[data-action="toggle-history-card"]');
+      const card = toggle?.closest('[data-history-card]');
+      if (!card) return;
+      const expanded = card.dataset.historyExpanded === 'true';
+      const nextExpanded = !expanded;
+      card.dataset.historyExpanded = nextExpanded ? 'true' : 'false';
+      toggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+      const details = card.querySelector('[data-history-card-details]');
+      details?.classList.toggle('hidden', !nextExpanded);
+      const chevron = card.querySelector('[data-history-chevron] svg');
+      chevron?.classList.toggle('rotate-180', nextExpanded);
       return;
     }
 

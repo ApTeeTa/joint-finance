@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>История: компактные мобильные карточки</title>
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body class="p-4 max-w-md">
+  <h1>Compact mobile history</h1>
+  <pre id="out"></pre>
+  <div id="host"></div>
+  <script type="module">
+    import { renderHistory, initHistoryHandlers } from '../src/modules/history.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = line;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+    function run(name, fn) {
+      try { fn(); pass++; log(`PASS  ${name}`, 'pass'); }
+      catch (e) { fail++; log(`FAIL  ${name}: ${e.message}`, 'fail'); }
+    }
+
+    const state = {
+      profile: 'husband',
+      exchangeRate: 92,
+      accounts: [{ id: 'rub', name: 'Основной', currency: 'RUB', balance: 10000, owner: 'husband' }],
+      categories: [{ id: 'fuel', name: 'Бензин', limit: 0, reserved: 0, spent: 0 }],
+      transactions: [{
+        id: 't1',
+        type: 'expense',
+        status: 'active',
+        amount: 1200,
+        date: '2025-11-12',
+        accountId: 'rub',
+        categoryId: 'fuel',
+        author: 'husband',
+        comment: 'Заправка автомобиля — длинный комментарий для проверки переноса строк'
+      }],
+      savings: [],
+      obligations: [],
+      debts: []
+    };
+
+    const host = document.getElementById('host');
+    renderHistory(state, host);
+    initHistoryHandlers(state, host, () => {});
+
+    const card = host.querySelector('[data-history-card]');
+    const summary = card?.querySelector('[data-history-card-summary]');
+    const details = card?.querySelector('[data-history-card-details]');
+
+    run('компактная сводка и плотный список', () => {
+      assert(summary, 'summary');
+      assert(host.querySelector('[data-history-cards-root]')?.classList.contains('space-y-1'), 'dense list');
+      assert(summary.classList.contains('py-2'), 'compact vertical padding');
+    });
+
+    run('детали скрыты по умолчанию', () => {
+      assert(details?.classList.contains('hidden'), 'details hidden');
+      assert(card?.dataset.historyExpanded === 'false', 'expanded flag');
+    });
+
+    run('полный комментарий только в деталях', () => {
+      const full = details?.querySelector('[data-history-card-comment]');
+      assert(full?.textContent.includes('переноса'), 'full comment in details');
+      assert(!full?.textContent.includes('…'), 'details not truncated');
+      assert(!summary?.textContent.includes('переноса'), 'no tail of comment in summary');
+    });
+
+    run('раскрытая карточка: действия в блоке деталей', () => {
+      details?.classList.remove('hidden');
+      card.dataset.historyExpanded = 'true';
+      assert(details?.querySelector('[data-action]'), 'actions in details');
+      assert(details.textContent.includes('Изменить'), 'edit label in details');
+    });
+
+    run('toggle-history-card присутствует с aria-expanded', () => {
+      const toggleBtn = host.querySelector('[data-action="toggle-history-card"]');
+      assert(toggleBtn, 'toggle button');
+      assert(toggleBtn.getAttribute('aria-expanded') === 'false', 'aria collapsed');
+    });
+
+    run('desktop table без изменений компактного блока', () => {
+      const tableRoot = host.querySelector('[data-history-table-root]');
+      assert(tableRoot?.classList.contains('hidden'), 'table still md-only');
+      assert(host.querySelector('table.history-table'), 'table markup intact');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');
+    window.__QA_RESULT__ = { failed: fail, passed: fail === 0 };
+  </script>
+</body>
+</html>
