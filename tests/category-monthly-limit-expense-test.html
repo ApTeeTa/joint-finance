@@ -17,7 +17,7 @@
     import { withGateContext } from '../src/modules/financeGateHelpers.js';
     import { FINANCE_ENTRY_POINTS } from '../src/modules/financeEntryRegistry.js';
     import {
-      CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING,
+      CATEGORY_RESERVE_INSUFFICIENT_ERROR,
       getCategorySpentInMonth
     } from '../src/modules/categoryMonth.js';
     import { todayIso } from '../src/modules/transactions.js';
@@ -67,10 +67,10 @@
       return withGateContext(FINANCE_ENTRY_POINTS.EXPENSE, fn);
     }
 
-    function expense(state, amount) {
+    function expense(state, amount, options = {}) {
       let result;
       runInGate(() => {
-        result = createExpense(state, 'food', amount, 'acc', '', EXPENSE_DATE, 'husband');
+        result = createExpense(state, 'food', amount, 'acc', '', EXPENSE_DATE, 'husband', options);
       });
       return result;
     }
@@ -95,12 +95,12 @@
       assert(state.accounts[0].balance === 990_000, 'account debited');
     });
 
-    await run('2. Превышение лимита, резерв достаточен — ok + предупреждение', () => {
+    await run('2. Превышение лимита, резерв достаточен — ok после подтверждения, без warnings', () => {
       const state = baseState();
       seedSpent(state, 95_000);
-      const r = expense(state, 10_000);
+      const r = expense(state, 10_000, { monthlyLimitAcknowledged: true });
       assert(r.ok, r.error);
-      assert(r.warnings?.includes(CATEGORY_MONTHLY_LIMIT_EXCEEDED_WARNING), 'limit warning');
+      assert(!r.warnings?.length, 'no post warnings');
       assert(state.categories[0].reserved === 40_000, `reserve=${state.categories[0].reserved}`);
       assert(getCategorySpentInMonth(state, 'food', EXPENSE_DATE.slice(0, 7)) === 105_000, 'spent total');
     });
@@ -109,7 +109,7 @@
       const state = baseState({ categories: [{ id: 'food', name: 'Еда', limit: 100_000, reserved: 5_000, spent: 0 }] });
       const r = expense(state, 10_000);
       assert(!r.ok, 'must block');
-      assert(/резерв/i.test(r.error ?? ''), r.error);
+      assert(r.error === CATEGORY_RESERVE_INSUFFICIENT_ERROR, r.error);
       assert(state.categories[0].reserved === 5_000, 'reserve unchanged');
     });
 
@@ -118,7 +118,7 @@
       seedSpent(state, 95_000);
       const r = expense(state, 10_000);
       assert(!r.ok, 'must block');
-      assert(/резерв/i.test(r.error ?? ''), r.error);
+      assert(r.error === CATEGORY_RESERVE_INSUFFICIENT_ERROR, r.error);
     });
 
     await run('5. Расход ровно на остаток месячного лимита — без предупреждения', () => {

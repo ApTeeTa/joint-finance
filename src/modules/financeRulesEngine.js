@@ -39,7 +39,10 @@ function hasOverdueObligations(state) {
 }
 
 function checkOverspend(context) {
-  const { operation, amount, state, categoryId, userCategoryPending } = context;
+  const { operation, amount, state, categoryId, userCategoryPending, monthlyLimitAcknowledged } = context;
+  if (monthlyLimitAcknowledged === true) {
+    return null;
+  }
   if (operation !== 'createExpense' || !categoryId || userCategoryPending) {
     return null;
   }

@@ -22,6 +22,7 @@ import {
   MISC_CATEGORY_NAME
 } from './transactions.js';
 import { getCategorySpentInMonth, getCurrentYearMonth } from './categoryMonth.js';
+import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import {
@@ -95,15 +96,6 @@ function getLimitOverflow(category) {
 
 function isOverLimit(category) {
   return getLimitOverflow(category) > 0;
-}
-
-function showLimitWarning(category) {
-  const overflow = getLimitOverflow(category);
-  if (overflow > 0) {
-    alert(
-      `⚠ Вы превысили лимит категории на ${formatMoney(overflow)}. Рекомендуется увеличить лимит.`
-    );
-  }
 }
 
 function renderAccountOptions(state, selectedId = '') {
@@ -386,7 +378,7 @@ function fillToLimit(state, categoryId) {
   return true;
 }
 
-function addExpense(state, categoryId, amount, accountId, comment) {
+function addExpense(state, categoryId, amount, accountId, comment, options = {}) {
   const amountError = validatePositiveAmount(amount, 'Сумма расхода');
   if (amountError) {
     alert(amountError);
@@ -405,16 +397,13 @@ function addExpense(state, categoryId, amount, accountId, comment) {
     accountId,
     comment,
     todayIso(),
-    state.profile
+    state.profile,
+    { monthlyLimitAcknowledged: options.monthlyLimitAcknowledged === true }
   );
 
   if (!result.ok) {
     alert(result.error);
     return false;
-  }
-
-  if (result.warnings?.length) {
-    alert(result.warnings.join('\n'));
   }
 
   return true;
@@ -881,17 +870,27 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     if (expenseForm) {
       const categoryId = expenseForm.categoryId.value;
       await runGuardedModalSubmit('expense', expenseForm, async () => {
+        const expenseDate = todayIso();
+        const amount = expenseForm.amount.value;
+        const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
+          state,
+          categoryId,
+          amount,
+          expenseDate
+        );
+        if (!limitStep.proceed) {
+          return false;
+        }
         const ok = addExpense(
           state,
           categoryId,
-          expenseForm.amount.value,
+          amount,
           expenseForm.accountId.value,
-          expenseForm.comment.value
+          expenseForm.comment.value,
+          { monthlyLimitAcknowledged: limitStep.monthlyLimitAcknowledged }
         );
         if (ok) {
           refresh(state, container, onUpdate);
-          const category = findCategory(state, categoryId);
-          if (category && !isMiscCategory(category)) showLimitWarning(category);
         }
         return ok;
       });

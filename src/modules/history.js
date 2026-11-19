@@ -8,7 +8,8 @@ import {
   TRANSACTION_STATUS,
   todayIso,
   renderAccountSelectOptions,
-  isMiscCategory
+  isMiscCategory,
+  findTransaction
 } from './transactions.js';
 import {
   undoTransaction,
@@ -17,6 +18,7 @@ import {
 } from './financeGate.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
+import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -493,30 +495,44 @@ export function initHistoryHandlers(state, container, onUpdate) {
     if (!isWithinAppUi(event.target, container)) return;
     event.preventDefault();
 
-    const form = event.target.closest('[data-form="edit-transaction"]');
-    if (!form) return;
-
-    await runGuardedModalSubmit('edit-transaction', form, async () => {
-      const result = updateTransactionMeta(state, form.transactionId.value, {
-        comment: form.comment.value,
-        date: form.date.value
+    const editForm = event.target.closest('[data-form="edit-transaction"]');
+    if (editForm) {
+      await runGuardedModalSubmit('edit-transaction', editForm, async () => {
+        const result = updateTransactionMeta(state, editForm.transactionId.value, {
+          comment: editForm.comment.value,
+          date: editForm.date.value
+        });
+        if (!result.ok) {
+          alert(result.error);
+          return false;
+        }
+        refresh(state, container, onUpdate);
+        return true;
       });
-      if (!result.ok) {
-        alert(result.error);
-        return false;
-      }
-      refresh(state, container, onUpdate);
-      return true;
-    });
+      return;
+    }
 
     const reassignForm = event.target.closest('[data-form="reassign-expense"]');
     if (reassignForm) {
       await runGuardedModalSubmit('reassign-expense', reassignForm, async () => {
+        const tx = findTransaction(state, reassignForm.transactionId.value);
+        const targetCategoryId = reassignForm.categoryId.value;
+        const expenseDate = tx?.date || todayIso();
+        const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
+          state,
+          targetCategoryId,
+          tx?.amount,
+          expenseDate
+        );
+        if (!limitStep.proceed) {
+          return false;
+        }
         const result = reassignExpense(
           state,
           reassignForm.transactionId.value,
-          reassignForm.categoryId.value,
-          state.profile
+          targetCategoryId,
+          state.profile,
+          { monthlyLimitAcknowledged: limitStep.monthlyLimitAcknowledged }
         );
         if (!result.ok) {
           alert(result.error);
@@ -525,6 +541,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
         refresh(state, container, onUpdate);
         return true;
       });
+      return;
     }
 
     const uncategorizedForm = event.target.closest('[data-form="uncategorized-expense"]');
