@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>История: фильтр расходов по категории</title>
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body class="p-4">
+  <h1>History category expense filter</h1>
+  <pre id="out"></pre>
+  <div id="host"></div>
+  <script type="module">
+    import { renderHistory, applyHistoryViewFilters } from '../src/modules/history.js';
+    import { getUserTransactions, TRANSACTION_TYPES } from '../src/modules/transactions.js';
+
+    const out = document.getElementById('out');
+    const host = document.getElementById('host');
+    let fail = 0;
+    function log(t, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = t;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+    function run(name, fn) {
+      try { fn(); log(`PASS  ${name}`, 'pass'); }
+      catch (e) { fail++; log(`FAIL  ${name}: ${e.message}`, 'fail'); }
+    }
+
+    function buildState(categoryFoodName = 'Еда') {
+      return {
+        profile: 'husband',
+        exchangeRate: 92,
+        accounts: [{ id: 'rub', name: 'Основной', currency: 'RUB', balance: 10000, owner: 'husband' }],
+        categories: [
+          { id: 'food', name: categoryFoodName, limit: 0, reserved: 0, spent: 0 },
+          { id: 'misc', name: 'Прочее', limit: 0, reserved: 0, spent: 0, isSystem: true },
+          { id: 'empty-cat', name: 'Пустая категория с очень длинным названием для адаптива', limit: 0, reserved: 0, spent: 0 }
+        ],
+        transactions: [
+          {
+            id: 'e-food-1',
+            type: TRANSACTION_TYPES.EXPENSE,
+            status: 'active',
+            amount: 500,
+            date: '2025-11-18',
+            createdAt: '2025-11-18T12:00:00.000Z',
+            accountId: 'rub',
+            categoryId: 'food',
+            author: 'husband',
+            comment: 'Пицца вечером'
+          },
+          {
+            id: 'e-food-2',
+            type: TRANSACTION_TYPES.EXPENSE,
+            status: 'active',
+            amount: 300,
+            date: '2025-11-17',
+            createdAt: '2025-11-17T10:00:00.000Z',
+            accountId: 'rub',
+            categoryId: 'food',
+            author: 'husband',
+            comment: 'Кофе'
+          },
+          {
+            id: 'e-misc',
+            type: TRANSACTION_TYPES.EXPENSE,
+            status: 'active',
+            amount: 150,
+            date: '2025-11-16',
+            createdAt: '2025-11-16T09:00:00.000Z',
+            accountId: 'rub',
+            categoryId: 'misc',
+            author: 'husband',
+            comment: 'Мелочь'
+          },
+          {
+            id: 'income',
+            type: TRANSACTION_TYPES.ACCOUNT_DEPOSIT,
+            status: 'active',
+            amount: 20000,
+            date: '2025-11-15',
+            createdAt: '2025-11-15T08:00:00.000Z',
+            accountId: 'rub',
+            author: 'husband',
+            comment: 'Зарплата'
+          }
+        ],
+        savings: [],
+        obligations: [],
+        debts: []
+      };
+    }
+
+    const state = buildState();
+    const all = () => getUserTransactions(state);
+
+    run('1. По умолчанию видны все операции', () => {
+      const list = applyHistoryViewFilters(state, all(), { statusFilter: 'all', categoryId: '', searchQuery: '' });
+      assert(list.length === 4, `expected 4, got ${list.length}`);
+    });
+
+    run('2. Категория показывает только её расходы', () => {
+      const list = applyHistoryViewFilters(state, all(), { categoryId: 'food' });
+      assert(list.length === 2, `expected 2 food expenses`);
+      assert(list.every((tx) => tx.categoryId === 'food' && tx.type === TRANSACTION_TYPES.EXPENSE), 'only food expenses');
+    });
+
+    run('3. Расходы других категорий скрыты', () => {
+      const list = applyHistoryViewFilters(state, all(), { categoryId: 'food' });
+      assert(!list.some((tx) => tx.categoryId === 'misc'), 'misc hidden');
+    });
+
+    run('4. Доходы скрыты при фильтре категории', () => {
+      const list = applyHistoryViewFilters(state, all(), { categoryId: 'food' });
+      assert(!list.some((tx) => tx.type === TRANSACTION_TYPES.ACCOUNT_DEPOSIT), 'income hidden');
+    });
+
+    run('5. Сброс фильтра возвращает все операции', () => {
+      const filtered = applyHistoryViewFilters(state, all(), { categoryId: 'food' });
+      const reset = applyHistoryViewFilters(state, all(), { categoryId: '' });
+      assert(filtered.length === 2, 'filtered');
+      assert(reset.length === 4, 'reset all');
+    });
+
+    run('6. Поиск и сортировка вместе с фильтром категории', () => {
+      const list = applyHistoryViewFilters(state, all(), { categoryId: 'food', searchQuery: 'пицца' });
+      assert(list.length === 1, 'one match');
+      assert(list[0].id === 'e-food-1', 'pizza expense');
+      const ordered = applyHistoryViewFilters(state, all(), { categoryId: 'food' });
+      assert(ordered[0].id === 'e-food-1', 'newest first preserved');
+    });
+
+    run('7. Пустая категория — сообщение в UI', () => {
+      host.dataset.historyCategoryFilter = 'empty-cat';
+      renderHistory(state, host);
+      const msg = host.textContent;
+      assert(msg.includes('Пустая категория'), 'category name in empty message');
+      assert(msg.includes('не найдено'), 'empty wording');
+      delete host.dataset.historyCategoryFilter;
+    });
+
+    run('8. Переименование категории не ломает фильтр', () => {
+      const renamed = buildState('Продукты переименованы');
+      const list = applyHistoryViewFilters(renamed, getUserTransactions(renamed), { categoryId: 'food' });
+      assert(list.length === 2, 'still 2 by id');
+      renderHistory(renamed, host);
+      const option = host.querySelector('[data-history-category-filter-select] option[value="food"]');
+      assert(option?.textContent.includes('Продукты переименованы'), 'select shows new name');
+    });
+
+    run('9. «Прочее» фильтруется и отображается', () => {
+      const list = applyHistoryViewFilters(state, all(), { categoryId: 'misc' });
+      assert(list.length === 1 && list[0].id === 'e-misc', 'misc expense only');
+      host.dataset.historyCategoryFilter = 'misc';
+      renderHistory(state, host);
+      const cards = host.querySelectorAll('[data-history-card]');
+      const rows = host.querySelectorAll('[data-history-table-root] tbody tr');
+      const dataRows = [...rows].filter((tr) => !tr.querySelector('td[colspan]'));
+      assert(cards.length === 1 || dataRows.length === 1, 'single row/card in UI');
+      delete host.dataset.historyCategoryFilter;
+    });
+
+    run('10. Фильтр на мобильной и десктопной разметке', () => {
+      renderHistory(state, host);
+      const categorySelect = host.querySelector('[data-history-category-filter-select]');
+      const searchInput = host.querySelector('[data-history-search-input]');
+      assert(categorySelect, 'category select');
+      assert(searchInput, 'search input');
+      assert(host.querySelector('[data-history-cards-root]'), 'mobile cards root');
+      assert(host.querySelector('[data-history-table-root]'), 'desktop table root');
+      assert(!host.querySelector('.overflow-x-auto'), 'no horizontal scroll wrapper');
+      const toolbar = categorySelect.closest('.flex');
+      assert(toolbar?.className.includes('min-w-0'), 'toolbar min-w-0');
+    });
+
+    log(fail === 0 ? 'SUMMARY: ALL PASSED' : `SUMMARY: ${fail} failed`, fail ? 'fail' : 'pass');
+  </script>
+</body>
+</html>

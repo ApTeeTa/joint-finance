@@ -208,6 +208,94 @@ function filterHistoryTransactions(transactions, filter) {
   return transactions;
 }
 
+function getHistoryCategoryFilter(container) {
+  const value = container?.dataset?.historyCategoryFilter;
+  return typeof value === 'string' ? value : '';
+}
+
+function getHistorySearchQuery(container) {
+  const value = container?.dataset?.historySearch;
+  return typeof value === 'string' ? value : '';
+}
+
+function findCategoryName(state, categoryId) {
+  const category = (state.categories ?? []).find((item) => item.id === categoryId);
+  return category?.name ?? '';
+}
+
+/** Только активные расходы выбранной категории (доходы и прочие типы исключаются). */
+export function applyHistoryCategoryExpenseFilter(transactions, categoryId) {
+  if (!categoryId) {
+    return transactions;
+  }
+  return transactions.filter(
+    (tx) => tx.type === TRANSACTION_TYPES.EXPENSE && tx.categoryId === categoryId
+  );
+}
+
+export function applyHistorySearchFilter(transactions, state, searchQuery) {
+  const query = String(searchQuery ?? '').trim().toLowerCase();
+  if (!query) {
+    return transactions;
+  }
+  return transactions.filter((tx) => {
+    const categoryLine = getTransactionCategoryLine(state, tx);
+    const typeLabel = getTransactionTypeLabel(tx);
+    const haystack = [
+      tx.comment,
+      categoryLine,
+      typeLabel,
+      String(tx.amount ?? ''),
+      tx.date,
+      tx.accountId
+    ].join(' ').toLowerCase();
+    return haystack.includes(query);
+  });
+}
+
+export function applyHistoryViewFilters(state, transactions, options = {}) {
+  const statusFilter = options.statusFilter ?? HISTORY_FILTERS.ALL;
+  const categoryId = options.categoryId ?? '';
+  const searchQuery = options.searchQuery ?? '';
+
+  let list = filterHistoryTransactions(transactions, statusFilter);
+  list = applyHistoryCategoryExpenseFilter(list, categoryId);
+  list = applyHistorySearchFilter(list, state, searchQuery);
+  return list;
+}
+
+function renderHistoryCategoryFilterOptions(state, selectedId) {
+  const categories = (state.categories ?? []).filter((category) => Boolean(category?.id));
+  const options = categories.map((category) => {
+    const selected = category.id === selectedId ? 'selected' : '';
+    return `<option value="${escapeHtml(category.id)}" ${selected}>${escapeHtml(category.name)}</option>`;
+  });
+  return `<option value="" ${selectedId ? '' : 'selected'}>Все категории</option>${options.join('')}`;
+}
+
+function renderHistoryEmptyMessage(state, options, hasRows) {
+  if (hasRows) {
+    return null;
+  }
+  const total = getUserTransactions(state).length;
+  if (total === 0) {
+    return 'Операций пока нет';
+  }
+  const { categoryId, searchQuery } = options;
+  const search = String(searchQuery ?? '').trim();
+  if (categoryId) {
+    const name = findCategoryName(state, categoryId);
+    if (name) {
+      return `По категории «${name}» операций не найдено`;
+    }
+    return 'По выбранной категории операций не найдено';
+  }
+  if (search) {
+    return 'По заданным фильтрам операций не найдено';
+  }
+  return 'Операций не найдено';
+}
+
 function renderCategoryOptions(state) {
   const options = (state.categories ?? [])
     .filter((category) => !isMiscCategory(category))
@@ -401,15 +489,23 @@ function renderUncategorizedExpenseModal(state) {
 
 export function renderHistory(state, container) {
   const filter = getHistoryFilter(container);
-  const transactions = filterHistoryTransactions(getUserTransactions(state), filter);
+  const categoryFilter = getHistoryCategoryFilter(container);
+  const searchQuery = getHistorySearchQuery(container);
+  const allTransactions = getUserTransactions(state);
+  const transactions = applyHistoryViewFilters(state, allTransactions, {
+    statusFilter: filter,
+    categoryId: categoryFilter,
+    searchQuery
+  });
 
-  const emptyHistory = '<p class="py-10 text-center text-slate-500 text-sm">Операций пока нет</p>';
+  const emptyLabel = renderHistoryEmptyMessage(state, { categoryId: categoryFilter, searchQuery }, transactions.length > 0);
+  const emptyHistory = `<p class="py-10 text-center text-slate-500 text-sm">${escapeHtml(emptyLabel ?? 'Операций пока нет')}</p>`;
 
   const rows = transactions.length
     ? transactions.map((tx) => renderTransactionRow(state, tx)).join('')
     : `
       <tr>
-        <td colspan="7" class="py-10 text-center text-slate-500 text-sm">Операций пока нет</td>
+        <td colspan="7" class="py-10 text-center text-slate-500 text-sm">${escapeHtml(emptyLabel ?? 'Операций пока нет')}</td>
       </tr>
     `;
 
@@ -421,15 +517,29 @@ export function renderHistory(state, container) {
     <div class="${UI.panel} ${UI.panelPadding}">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 class="${UI.panelTitle}">История</h2>
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="text-xs text-slate-500">Фильтр</label>
-          <select data-history-filter-select class="${UI.field} text-sm py-1.5 min-w-[10rem]">
+        <div class="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
+          <label class="text-xs text-slate-500 shrink-0">Фильтр</label>
+          <select data-history-filter-select class="${UI.field} text-sm py-1.5 min-w-0 w-[7.5rem] sm:w-[9rem] max-w-[45vw]">
             <option value="all" ${filter === 'all' ? 'selected' : ''}>Все</option>
             <option value="active" ${filter === 'active' ? 'selected' : ''}>Активные</option>
             <option value="cancelled" ${filter === 'cancelled' ? 'selected' : ''}>Отменённые</option>
             <option value="uncategorized" ${filter === 'uncategorized' ? 'selected' : ''}>Без категории</option>
           </select>
-          <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm">Расход без категории</button>
+          <label class="text-xs text-slate-500 shrink-0">Категория</label>
+          <select data-history-category-filter-select class="${UI.field} text-sm py-1.5 min-w-0 w-[8rem] sm:w-[10rem] max-w-[50vw]" title="${categoryFilter ? escapeHtml(findCategoryName(state, categoryFilter)) : 'Все категории'}">
+            ${renderHistoryCategoryFilterOptions(state, categoryFilter)}
+          </select>
+          <label class="sr-only" for="history-search-input">Поиск</label>
+          <input
+            id="history-search-input"
+            type="search"
+            data-history-search-input
+            value="${escapeHtml(searchQuery)}"
+            placeholder="Поиск"
+            class="${UI.field} text-sm py-1.5 min-w-0 w-[6.5rem] sm:w-[9rem] max-w-[40vw]"
+            autocomplete="off"
+          />
+          <button type="button" data-action="open-uncategorized-expense" class="${UI.btnPrimary} text-sm shrink-0">Расход без категории</button>
         </div>
       </div>
       <div class="md:hidden min-w-0 space-y-1" data-history-cards-root>
@@ -546,10 +656,28 @@ export function initHistoryHandlers(state, container, onUpdate) {
   });
 
   container.addEventListener('change', (event) => {
-    const select = event.target.closest('[data-history-filter-select]');
-    if (!select) return;
-    container.dataset.historyFilter = select.value;
-    refresh(state, container, onUpdate);
+    const statusSelect = event.target.closest('[data-history-filter-select]');
+    if (statusSelect) {
+      container.dataset.historyFilter = statusSelect.value;
+      refresh(state, container, onUpdate);
+      return;
+    }
+    const categorySelect = event.target.closest('[data-history-category-filter-select]');
+    if (categorySelect) {
+      container.dataset.historyCategoryFilter = categorySelect.value;
+      refresh(state, container, onUpdate);
+    }
+  });
+
+  let searchDebounceId;
+  container.addEventListener('input', (event) => {
+    const searchInput = event.target.closest('[data-history-search-input]');
+    if (!searchInput) return;
+    clearTimeout(searchDebounceId);
+    searchDebounceId = setTimeout(() => {
+      container.dataset.historySearch = searchInput.value;
+      refresh(state, container, onUpdate);
+    }, 200);
   });
 
   document.addEventListener('submit', async (event) => {
