@@ -25,7 +25,7 @@ import { getCategorySpentInMonth, getCurrentYearMonth } from './categoryMonth.js
 import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
-import { notifyConfirm, notifyError } from './jfNotifyModal.js';
+import { notifyConfirm, notifyError, showJfError } from './jfNotifyModal.js';
 import {
   DISPLAY_MODULE_KEYS,
   renderDisplayModeList,
@@ -379,15 +379,15 @@ function fillToLimit(state, categoryId) {
   return true;
 }
 
-function addExpense(state, categoryId, amount, accountId, comment, options = {}) {
+async function addExpense(state, categoryId, amount, accountId, comment, options = {}) {
   const amountError = validatePositiveAmount(amount, 'Сумма расхода');
   if (amountError) {
-    notifyError(amountError);
+    await showJfError(amountError);
     return false;
   }
 
   if (!accountId) {
-    notifyError('Выберите счет');
+    await showJfError('Выберите счет');
     return false;
   }
 
@@ -403,7 +403,7 @@ function addExpense(state, categoryId, amount, accountId, comment, options = {})
   );
 
   if (!result.ok) {
-    notifyError(result.error);
+    await showJfError(result.error);
     return false;
   }
 
@@ -870,19 +870,19 @@ export function initCategoriesHandlers(state, container, onUpdate) {
     const expenseForm = event.target.closest('[data-form="expense"]');
     if (expenseForm) {
       const categoryId = expenseForm.categoryId.value;
+      const expenseDate = todayIso();
+      const amount = expenseForm.amount.value;
+      const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
+        state,
+        categoryId,
+        amount,
+        expenseDate
+      );
+      if (!limitStep.proceed) {
+        return;
+      }
       await runGuardedModalSubmit('expense', expenseForm, async () => {
-        const expenseDate = todayIso();
-        const amount = expenseForm.amount.value;
-        const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
-          state,
-          categoryId,
-          amount,
-          expenseDate
-        );
-        if (!limitStep.proceed) {
-          return false;
-        }
-        const ok = addExpense(
+        const ok = await addExpense(
           state,
           categoryId,
           amount,

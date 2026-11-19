@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Expense modal submit lifecycle</title>
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .pass { color: green; }
+    .fail { color: red; }
+    div[data-modal].fixed.inset-0:not(.hidden) {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 50 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 1rem;
+      background: rgba(15, 23, 42, 0.35);
+    }
+  </style>
+</head>
+<body class="p-4">
+  <h1>Форма расхода: не зависает на «Сохранение»</h1>
+  <div id="modal-root"></div>
+  <pre id="out"></pre>
+  <script type="module">
+    import { runGuardedModalSubmit, isModalSubmitting } from '../src/modules/modalFormSubmit.js';
+    import { showJfConfirm } from '../src/modules/jfNotifyModal.js';
+
+    const out = document.getElementById('out');
+    let pass = 0;
+    let fail = 0;
+
+    function log(line, cls = '') {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = line;
+      out.appendChild(d);
+    }
+    function assert(c, m) { if (!c) throw new Error(m); }
+    async function run(name, fn) {
+      try {
+        await fn();
+        pass++;
+        log(`PASS  ${name}`, 'pass');
+      } catch (e) {
+        fail++;
+        log(`FAIL  ${name}: ${e.message}`, 'fail');
+      }
+    }
+
+    function mountExpenseModal() {
+      const root = document.getElementById('modal-root');
+      root.innerHTML = `
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35" data-modal="expense">
+          <div class="jf-modal-panel bg-white rounded-2xl p-4 w-full max-w-sm" data-submitting="false">
+            <form data-form="expense">
+              <input type="hidden" name="categoryId" value="food">
+              <input name="amount" value="1000">
+              <input name="accountId" value="acc">
+              <button type="submit">Сохранить</button>
+              <button type="button" data-action="close-modal" data-modal="expense">Отмена</button>
+            </form>
+          </div>
+        </div>
+      `;
+      return root.querySelector('[data-form="expense"]');
+    }
+
+    await run('confirm до submit: runGuardedModalSubmit не держит submitting при отмене', async () => {
+      const form = mountExpenseModal();
+      setTimeout(() => {
+        document.querySelector('[data-action="jf-notify-action-no"]')?.click();
+      }, 0);
+      const confirmed = await showJfConfirm('Лимит категории превышен. Провести операцию?');
+      assert(!confirmed, 'user declined');
+      assert(!isModalSubmitting('expense'), 'expense not submitting before guard');
+      const ok = await runGuardedModalSubmit('expense', form, async () => true);
+      assert(ok, 'submit after confirm');
+      assert(!isModalSubmitting('expense'), 'cleared after success');
+    });
+
+    await run('submit failure снимает submitting', async () => {
+      const form = mountExpenseModal();
+      const panel = form.closest('.jf-modal-panel');
+      const ok = await runGuardedModalSubmit('expense', form, async () => false);
+      assert(!ok, 'failed task');
+      assert(!isModalSubmitting('expense'), 'not submitting after false');
+      assert(panel?.dataset.submitting !== 'true', 'panel not saving');
+    });
+
+    await run('await confirm внутри task завершился — submitting снят', async () => {
+      const form = mountExpenseModal();
+      const panel = form.closest('.jf-modal-panel');
+      const ok = await runGuardedModalSubmit('expense', form, async () => {
+        setTimeout(() => {
+          document.querySelector('[data-action="jf-notify-action-no"]')?.click();
+        }, 0);
+        const yes = await showJfConfirm('Тест?');
+        return yes;
+      });
+      assert(!ok, 'cancelled');
+      assert(!isModalSubmitting('expense'), 'submitting cleared after nested confirm');
+      assert(panel?.dataset.submitting !== 'true', 'no saving overlay');
+    });
+
+    log(`\nSUMMARY: ${pass}/${pass + fail} passed, ${fail} failed`, fail === 0 ? 'pass' : 'fail');
+    window.__QA_RESULT__ = { failed: fail, passed: fail === 0 };
+  </script>
+</body>
+</html>

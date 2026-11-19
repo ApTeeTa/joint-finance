@@ -20,7 +20,7 @@ import {
 import { openModal, closeModal, isWithinAppUi, findAppForm } from './modalLayer.js';
 import { runGuardedModalSubmit } from './modalFormSubmit.js';
 import { resolveCategoryMonthlyLimitBeforeExpense } from './categoryLimitConfirmModal.js';
-import { notifyConfirm, notifyError } from './jfNotifyModal.js';
+import { notifyConfirm, notifyError, showJfError } from './jfNotifyModal.js';
 function formatMoney(amount, currency = 'RUB') {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
@@ -575,19 +575,19 @@ export function initHistoryHandlers(state, container, onUpdate) {
 
     const reassignForm = event.target.closest('[data-form="reassign-expense"]');
     if (reassignForm) {
+      const tx = findTransaction(state, reassignForm.transactionId.value);
+      const targetCategoryId = reassignForm.categoryId.value;
+      const expenseDate = tx?.date || todayIso();
+      const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
+        state,
+        targetCategoryId,
+        tx?.amount,
+        expenseDate
+      );
+      if (!limitStep.proceed) {
+        return;
+      }
       await runGuardedModalSubmit('reassign-expense', reassignForm, async () => {
-        const tx = findTransaction(state, reassignForm.transactionId.value);
-        const targetCategoryId = reassignForm.categoryId.value;
-        const expenseDate = tx?.date || todayIso();
-        const limitStep = await resolveCategoryMonthlyLimitBeforeExpense(
-          state,
-          targetCategoryId,
-          tx?.amount,
-          expenseDate
-        );
-        if (!limitStep.proceed) {
-          return false;
-        }
         const result = reassignExpense(
           state,
           reassignForm.transactionId.value,
@@ -596,7 +596,7 @@ export function initHistoryHandlers(state, container, onUpdate) {
           { monthlyLimitAcknowledged: limitStep.monthlyLimitAcknowledged }
         );
         if (!result.ok) {
-          notifyError(result.error);
+          await showJfError(result.error);
           return false;
         }
         refresh(state, container, onUpdate);

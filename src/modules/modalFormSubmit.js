@@ -93,6 +93,9 @@ export async function runGuardedModalSubmit(modalName, form, task) {
       form.reset();
     }
     return ok;
+  } catch (error) {
+    console.error('[MODAL SUBMIT]', modalName, error);
+    return false;
   } finally {
     submittingModals.delete(modalName);
     setModalSubmittingUi(modalName, false);

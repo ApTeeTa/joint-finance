@@ -2,7 +2,7 @@ import {
   CATEGORY_RESERVE_INSUFFICIENT_ERROR,
   assessCategoryMonthlyExpense
 } from './categoryMonth.js';
-import { notifyError, showJfConfirm } from './jfNotifyModal.js';
+import { showJfConfirm, showJfError } from './jfNotifyModal.js';
 
 export const CATEGORY_LIMIT_CONFIRM_TITLE = 'Лимит категории превышен. Провести операцию?';
 
@@ -26,7 +26,7 @@ export async function resolveCategoryMonthlyLimitBeforeExpense(state, categoryId
   }
 
   if (!assessment.sufficientReserve) {
-    await notifyError(CATEGORY_RESERVE_INSUFFICIENT_ERROR);
+    await showJfError(CATEGORY_RESERVE_INSUFFICIENT_ERROR);
     return { proceed: false, monthlyLimitAcknowledged: true };
   }
 
